@@ -1,21 +1,27 @@
 package com.skybook.praveen.notificationservice.service;
 
 import com.skybook.praveen.common.event.EmailEvent;
-import lombok.extern.slf4j.Slf4j;
+import lombok.RequiredArgsConstructor;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
-@Slf4j
 @Service
+@RequiredArgsConstructor
 public class EmailService {
 
-    public void sendEmail(EmailEvent event) {
+    private final JavaMailSender mailSender;
 
-        log.info("=======================================");
-        log.info("SKYBOOK EMAIL");
-        log.info("To      : {}", event.getTo());
-        log.info("Subject : {}", event.getSubject());
-        log.info("Type    : {}", event.getType());
-        log.info("Body    : {}", event.getBody());
-        log.info("=======================================");
+    public void sendEmail(EmailEvent emailEvent) {
+
+        SimpleMailMessage message = new SimpleMailMessage();
+
+        message.setTo(emailEvent.getTo());
+        message.setSubject(emailEvent.getSubject());
+        message.setText(emailEvent.getBody());
+
+        mailSender.send(message);
+
+        System.out.println("✅ Email sent successfully to " + emailEvent.getTo());
     }
 }
