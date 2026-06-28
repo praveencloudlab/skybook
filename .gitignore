@@ -1,0 +1,44 @@
+# Java / Maven
+target/
+*.class
+*.jar
+*.war
+*.ear
+
+# IntelliJ
+.idea/
+*.iml
+out/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.*
+application-local.yml
+application-local.properties
+
+# Docker local
+docker-data/
+postgres-data/
+kafka-data/
+
+# Node / Frontend
+node_modules/
+.next/
+dist/
+build/
+
+# Secrets
+*.pem
+*.key
+*.crt
