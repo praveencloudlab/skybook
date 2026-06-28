@@ -20,8 +20,10 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    username: pravs.sr@gmail.com
-    password: cdip vbxn mtse fkme
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    #username: pravs.sr@gmail.com
+    #password: cdip vbxn mtse fkme
     properties:
       mail:
         smtp:
