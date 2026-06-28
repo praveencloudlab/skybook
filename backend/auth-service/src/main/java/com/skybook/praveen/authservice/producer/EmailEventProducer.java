@@ -12,7 +12,7 @@ public class EmailEventProducer {
 
     private final KafkaTemplate<String, EmailEvent> kafkaTemplate;
 
-    public void publish(EmailEvent event) {
+    public void sendEmailEvent(EmailEvent event) {
 
         kafkaTemplate.send(KafkaTopics.EMAIL_EVENTS, event);
 

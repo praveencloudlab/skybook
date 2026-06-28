@@ -11,5 +11,9 @@ public class EmailEvent {
     private String to;
     private String subject;
     private String body;
-    private String type;
+    private EmailType type;
+
+
 }
+
+

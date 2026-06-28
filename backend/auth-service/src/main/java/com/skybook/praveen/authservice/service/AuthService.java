@@ -1,0 +1,43 @@
+package com.skybook.praveen.authservice.service;
+
+import com.skybook.praveen.authservice.dto.RegisterRequest;
+import com.skybook.praveen.authservice.entity.User;
+import com.skybook.praveen.authservice.producer.EmailEventProducer;
+import com.skybook.praveen.authservice.repository.UserRepository;
+import com.skybook.praveen.common.event.EmailEvent;
+import com.skybook.praveen.common.event.EmailType;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+
+@Service
+@RequiredArgsConstructor
+public class AuthService {
+
+    private final UserRepository userRepository;
+    private final EmailEventProducer emailEventProducer;
+
+    public String register(RegisterRequest request) {
+
+        if (userRepository.existsByEmail(request.email())) {
+            throw new RuntimeException("Email already registered");
+        }
+
+        User user = new User();
+        user.setFullName(request.fullName());
+        user.setEmail(request.email());
+        user.setPassword(request.password());
+
+        User savedUser = userRepository.save(user);
+
+        EmailEvent emailEvent = EmailEvent.builder()
+                .to(savedUser.getEmail())
+                .subject("Welcome to SkyBook")
+                .body("Hi " + savedUser.getFullName() + ", welcome to SkyBook!")
+                .type(EmailType.REGISTRATION_SUCCESS)
+                .build();
+
+        emailEventProducer.sendEmailEvent(emailEvent);
+
+        return "User registered successfully";
+    }
+}
