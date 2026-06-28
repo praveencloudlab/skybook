@@ -7,6 +7,7 @@ import com.skybook.praveen.authservice.repository.UserRepository;
 import com.skybook.praveen.common.event.EmailEvent;
 import com.skybook.praveen.common.event.EmailType;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -15,6 +16,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final EmailEventProducer emailEventProducer;
+    private final PasswordEncoder passwordEncoder;
 
     public String register(RegisterRequest request) {
 
@@ -24,8 +26,9 @@ public class AuthService {
 
         User user = new User();
         user.setFullName(request.fullName());
+        user.setPassword(passwordEncoder.encode(request.password()));
+       // user.setPassword(request.password());
         user.setEmail(request.email());
-        user.setPassword(request.password());
 
         User savedUser = userRepository.save(user);
 
