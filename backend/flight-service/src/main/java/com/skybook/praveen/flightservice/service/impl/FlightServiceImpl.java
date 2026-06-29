@@ -31,6 +31,18 @@ public class FlightServiceImpl implements FlightService {
     }
 
     @Override
+    public List<FlightResponse> createFlights(List<CreateFlightRequest> requests) {
+        List<Flight> flights = requests.stream()
+                .map(FlightMapper::toEntity)
+                .toList();
+
+        List<Flight> savedFlights = flightRepository.saveAll(flights);
+
+        return savedFlights.stream()
+                .map(FlightMapper::toResponse)
+                .toList();
+    }
+    @Override
     public FlightResponse getFlightById(Long id) {
         Flight flight = flightRepository.findById(id)
                 .orElseThrow(() -> new FlightNotFoundException(id));

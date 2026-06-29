@@ -11,6 +11,7 @@ public interface FlightService {
     FlightResponse createFlight(CreateFlightRequest request);
 
     FlightResponse getFlightById(Long id);
+    List<FlightResponse> createFlights(List<CreateFlightRequest> requests);
 
     List<FlightResponse> searchFlights(
             String originAirportCode,
