@@ -22,6 +22,7 @@
         <module>auth-service</module>
         <module>notification-service</module>
         <module>skybook-common</module>
+        <module>flight-service</module>
     </modules>
 
     <dependencyManagement>
