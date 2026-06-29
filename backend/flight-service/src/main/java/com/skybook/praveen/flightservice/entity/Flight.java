@@ -1,0 +1,65 @@
+package com.skybook.praveen.flightservice.entity;
+
+import com.skybook.praveen.flightservice.enums.FlightStatus;
+import jakarta.persistence.*;
+import lombok.*;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "flights")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+public class Flight {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, unique = true, length = 10)
+    private String flightNumber;
+
+    @Column(nullable = false, length = 5)
+    private String airlineCode;
+
+    @Column(nullable = false, length = 3)
+    private String originAirportCode;
+
+    @Column(nullable = false, length = 3)
+    private String destinationAirportCode;
+
+    @Column(nullable = false)
+    private LocalDateTime departureTime;
+
+    @Column(nullable = false)
+    private LocalDateTime arrivalTime;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private FlightStatus status;
+
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
+
+    @PrePersist
+    public void prePersist() {
+        LocalDateTime now = LocalDateTime.now();
+        createdAt = now;
+        updatedAt = now;
+
+        if (status == null) {
+            status = FlightStatus.SCHEDULED;
+        }
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = LocalDateTime.now();
+    }
+}
