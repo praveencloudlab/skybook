@@ -6,12 +6,11 @@ spring:
     name: flight-service
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/skybook_flight
+    url: jdbc:postgresql://localhost:5432/skybook_auth
     username: postgres
     password: postgres
 
   jpa:
     hibernate:
       ddl-auto: update
-
     show-sql: true

@@ -3,6 +3,7 @@ package com.skybook.praveen.flightservice.service.impl;
 import com.skybook.praveen.flightservice.dto.request.CreateFlightRequest;
 import com.skybook.praveen.flightservice.dto.response.FlightResponse;
 import com.skybook.praveen.flightservice.entity.Flight;
+import com.skybook.praveen.flightservice.exception.FlightNotFoundException;
 import com.skybook.praveen.flightservice.mapper.FlightMapper;
 import com.skybook.praveen.flightservice.repository.FlightRepository;
 import com.skybook.praveen.flightservice.service.FlightService;
@@ -32,8 +33,7 @@ public class FlightServiceImpl implements FlightService {
     @Override
     public FlightResponse getFlightById(Long id) {
         Flight flight = flightRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Flight not found with id: " + id));
-
+                .orElseThrow(() -> new FlightNotFoundException(id));
         return FlightMapper.toResponse(flight);
     }
 
