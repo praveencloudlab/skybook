@@ -1,6 +1,7 @@
 package com.skybook.praveen.flightservice.mapper;
 
 import com.skybook.praveen.flightservice.dto.request.CreateFlightRequest;
+import com.skybook.praveen.flightservice.dto.request.UpdateFlightRequest;
 import com.skybook.praveen.flightservice.dto.response.FlightResponse;
 import com.skybook.praveen.flightservice.entity.Flight;
 import com.skybook.praveen.flightservice.enums.FlightStatus;
@@ -35,5 +36,16 @@ public final class FlightMapper {
                 flight.getCreatedAt(),
                 flight.getUpdatedAt()
         );
+    }
+
+    public static void updateEntity(
+            Flight flight,
+            UpdateFlightRequest request) {
+
+        flight.setAirlineCode(request.airlineCode().toUpperCase());
+        flight.setOriginAirportCode(request.originAirportCode().toUpperCase());
+        flight.setDestinationAirportCode(request.destinationAirportCode().toUpperCase());
+        flight.setDepartureTime(request.departureTime());
+        flight.setArrivalTime(request.arrivalTime());
     }
 }
