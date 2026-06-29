@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -23,6 +24,14 @@ public class FlightController {
     @ResponseStatus(HttpStatus.CREATED)
     public FlightResponse createFlight(@Valid @RequestBody CreateFlightRequest request) {
         return flightService.createFlight(request);
+    }
+
+    @PostMapping("/bulk")
+    public ResponseEntity<List<FlightResponse>> createFlights(
+            @RequestBody List<CreateFlightRequest> requests
+    ) {
+        List<FlightResponse> response = flightService.createFlights(requests);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping("/{id}")
