@@ -1,5 +1,6 @@
 package com.skybook.praveen.authservice.service;
 
+import com.skybook.praveen.authservice.dto.LoginRequest;
 import com.skybook.praveen.authservice.dto.RegisterRequest;
 import com.skybook.praveen.authservice.entity.User;
 import com.skybook.praveen.authservice.producer.EmailEventProducer;
@@ -42,5 +43,22 @@ public class AuthService {
         emailEventProducer.sendEmailEvent(emailEvent);
 
         return "User registered successfully";
+    }
+
+    public String login(LoginRequest request) {
+
+        User user = userRepository.findByEmail(request.email())
+                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+
+        boolean passwordMatches = passwordEncoder.matches(
+                request.password(),
+                user.getPassword()
+        );
+
+        if (!passwordMatches) {
+            throw new RuntimeException("Invalid email or password");
+        }
+
+        return "Login successful";
     }
 }

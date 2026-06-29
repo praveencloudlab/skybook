@@ -1,5 +1,6 @@
 package com.skybook.praveen.authservice.controller;
 
+import com.skybook.praveen.authservice.dto.LoginRequest;
 import com.skybook.praveen.authservice.dto.RegisterRequest;
 import com.skybook.praveen.authservice.service.AuthService;
 import lombok.RequiredArgsConstructor;
@@ -16,5 +17,10 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<String> register(@RequestBody RegisterRequest request) {
         return ResponseEntity.ok(authService.register(request));
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<String> login(@RequestBody LoginRequest request) {
+        return ResponseEntity.ok(authService.login(request));
     }
 }
