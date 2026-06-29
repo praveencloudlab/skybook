@@ -13,6 +13,9 @@ out/
 # VS Code
 .vscode/
 
+# Local secrets
+.env
+
 # Logs
 *.log
 logs/
