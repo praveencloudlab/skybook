@@ -14,6 +14,11 @@ public interface FlightRepository extends JpaRepository<Flight, Long> {
 
     boolean existsByFlightNumber(String flightNumber);
 
+    boolean existsByFlightNumberAndDepartureTime(
+            String flightNumber,
+            LocalDateTime departureTime
+    );
+
     List<Flight> findByStatus(FlightStatus status);
 
     List<Flight> findByDepartureTimeBetween(
@@ -26,5 +31,10 @@ public interface FlightRepository extends JpaRepository<Flight, Long> {
             String destinationAirportCode,
             LocalDateTime startDateTime,
             LocalDateTime endDateTime
+    );
+
+    List<Flight> findByScheduleIdAndDepartureTimeAfter(
+            Long scheduleId,
+            LocalDateTime departureTime
     );
 }

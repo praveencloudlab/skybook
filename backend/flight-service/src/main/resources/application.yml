@@ -6,7 +6,7 @@ spring:
     name: flight-service
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/skybook_auth
+    url: jdbc:postgresql://localhost:5432/skybook_flight
     username: postgres
     password: postgres
 
