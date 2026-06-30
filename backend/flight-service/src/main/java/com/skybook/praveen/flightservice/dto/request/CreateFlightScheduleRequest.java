@@ -4,6 +4,7 @@ import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 import java.time.DayOfWeek;
@@ -42,7 +43,11 @@ public record CreateFlightScheduleRequest(
         @FutureOrPresent(message = "Valid-from date cannot be in the past")
         LocalDate validFrom,
 
-        LocalDate validTo
+        LocalDate validTo,
+
+        /** Optional. Defaults to 30 if not supplied. */
+        @Positive(message = "generationDaysAhead must be positive")
+        Integer generationDaysAhead
 
 ) {
 }

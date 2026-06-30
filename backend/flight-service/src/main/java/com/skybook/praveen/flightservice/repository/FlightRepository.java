@@ -33,7 +33,9 @@ public interface FlightRepository extends JpaRepository<Flight, Long> {
             LocalDateTime endDateTime
     );
 
-    List<Flight> findByScheduleIdAndDepartureTimeAfter(
+    // Navigates the Flight -> FlightSchedule association (schedule.id),
+    // not a plain scalar column.
+    List<Flight> findBySchedule_IdAndDepartureTimeAfter(
             Long scheduleId,
             LocalDateTime departureTime
     );

@@ -15,22 +15,24 @@ public interface FlightScheduleService {
 
     List<FlightScheduleResponse> getAllSchedules();
 
-    FlightScheduleResponse pauseSchedule(Long id);
+    FlightScheduleResponse pauseSchedule(Long id, String reason, String remarks);
 
     FlightScheduleResponse resumeSchedule(Long id);
 
     /** Cancels the schedule and all of its not-yet-departed generated flights. */
-    FlightScheduleResponse cancelSchedule(Long id);
+    FlightScheduleResponse cancelSchedule(Long id, String reason, String remarks);
 
     FlightScheduleResponse extendSchedule(Long id, LocalDate newValidTo);
 
     /**
      * Generates concrete Flight instances for the given schedule, covering the
-     * next {@code horizonDays} days from wherever generation last left off.
-     * Idempotent - safe to call repeatedly, never creates duplicate flights.
+     * next N days from wherever generation last left off. If
+     * {@code horizonDaysOverride} is null, the schedule's own
+     * {@code generationDaysAhead} is used. Idempotent - safe to call
+     * repeatedly, never creates duplicate flights.
      */
-    List<FlightResponse> generateFlights(Long scheduleId, int horizonDays);
+    List<FlightResponse> generateFlights(Long scheduleId, Integer horizonDaysOverride);
 
-    /** Runs generateFlights for every ACTIVE schedule. Used by the scheduled job. */
-    void generateFlightsForAllActiveSchedules(int horizonDays);
+    /** Runs generateFlights for every ACTIVE schedule, each using its own generationDaysAhead. Used by the scheduled job. */
+    void generateFlightsForAllActiveSchedules();
 }

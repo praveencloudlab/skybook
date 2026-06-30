@@ -6,14 +6,13 @@ import lombok.*;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.HashSet;
 import java.util.Set;
 
 /**
- * A recurring flight template, e.g. "AA100 flies LAX -> JFK every Mon/Wed/Fri
- * at 08:00 between 2026-07-01 and 2026-12-31". Concrete {@link Flight}
+ * A recurring flight template, e.g. "BA178 flies LHR -> JFK every Mon/Wed/Fri
+ * at 10:15 between 2026-07-01 and 2026-09-30". Concrete {@link Flight}
  * instances are generated from this template on a rolling basis.
  */
 @Entity
@@ -23,11 +22,17 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class FlightSchedule {
+public class FlightSchedule extends Auditable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    // Immutable, system-assigned identifier for this schedule, distinct from
+    // the (re-used) airline flight number, e.g. "SCH-LHR-JFK-000001".
+    // Assigned once at creation time and never changed afterwards.
+    @Column(nullable = false, unique = true, updatable = false, length = 30)
+    private String scheduleCode;
 
     @Column(nullable = false, length = 10)
     private String flightNumber;
@@ -71,25 +76,31 @@ public class FlightSchedule {
     /** Calendar date up to which Flight instances have already been generated. */
     private LocalDate lastGeneratedDate;
 
-    @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
+    /**
+     * How many days ahead each generation run should cover for this schedule,
+     * unless a caller explicitly overrides it on a single /generate call.
+     * Defaults to 30 at creation time - different schedules (e.g. seasonal
+     * charter routes vs. long-running mainline routes) may want different
+     * horizons.
+     */
     @Column(nullable = false)
-    private LocalDateTime updatedAt;
+    @Builder.Default
+    private Integer generationDaysAhead = 30;
+
+    /** Why the schedule is currently PAUSED or CANCELLED, e.g. "Runway Maintenance". */
+    private String statusReason;
+
+    /** Free-text operator notes accompanying statusReason. */
+    @Column(length = 500)
+    private String statusRemarks;
 
     @PrePersist
     public void prePersist() {
-        LocalDateTime now = LocalDateTime.now();
-        createdAt = now;
-        updatedAt = now;
-
         if (status == null) {
             status = ScheduleStatus.ACTIVE;
         }
-    }
-
-    @PreUpdate
-    public void preUpdate() {
-        updatedAt = LocalDateTime.now();
+        if (generationDaysAhead == null) {
+            generationDaysAhead = 30;
+        }
     }
 }

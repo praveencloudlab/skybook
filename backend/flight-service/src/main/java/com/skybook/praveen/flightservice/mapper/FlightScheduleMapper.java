@@ -21,6 +21,7 @@ public final class FlightScheduleMapper {
                 .operatingDays(request.operatingDays())
                 .validFrom(request.validFrom())
                 .validTo(request.validTo())
+                .generationDaysAhead(request.generationDaysAhead() != null ? request.generationDaysAhead() : 30)
                 .status(ScheduleStatus.ACTIVE)
                 .build();
     }
@@ -28,6 +29,7 @@ public final class FlightScheduleMapper {
     public static FlightScheduleResponse toResponse(FlightSchedule schedule) {
         return new FlightScheduleResponse(
                 schedule.getId(),
+                schedule.getScheduleCode(),
                 schedule.getFlightNumber(),
                 schedule.getAirlineCode(),
                 schedule.getOriginAirportCode(),
@@ -39,6 +41,12 @@ public final class FlightScheduleMapper {
                 schedule.getValidTo(),
                 schedule.getStatus(),
                 schedule.getLastGeneratedDate(),
+                schedule.getGenerationDaysAhead(),
+                schedule.getStatusReason(),
+                schedule.getStatusRemarks(),
+                schedule.getCreatedBy(),
+                schedule.getUpdatedBy(),
+                schedule.getVersion(),
                 schedule.getCreatedAt(),
                 schedule.getUpdatedAt()
         );

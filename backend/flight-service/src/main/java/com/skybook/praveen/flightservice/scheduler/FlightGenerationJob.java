@@ -11,18 +11,16 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class FlightGenerationJob {
 
-    private static final int GENERATION_HORIZON_DAYS = 30;
-
     private final FlightScheduleService flightScheduleService;
 
     /**
      * Runs daily at 01:00 server time and rolls every ACTIVE schedule's
-     * generated-flight window forward by GENERATION_HORIZON_DAYS days.
+     * generated-flight window forward, each by its own generationDaysAhead.
      */
     @Scheduled(cron = "0 0 1 * * *")
     public void generateUpcomingFlights() {
         log.info("Running scheduled flight generation job");
-        flightScheduleService.generateFlightsForAllActiveSchedules(GENERATION_HORIZON_DAYS);
+        flightScheduleService.generateFlightsForAllActiveSchedules();
         log.info("Scheduled flight generation job complete");
     }
 }
