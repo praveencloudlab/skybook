@@ -10,6 +10,7 @@ import java.util.Set;
 
 public record FlightScheduleResponse(
         Long id,
+        String scheduleCode,
         String flightNumber,
         String airlineCode,
         String originAirportCode,
@@ -21,6 +22,12 @@ public record FlightScheduleResponse(
         LocalDate validTo,
         ScheduleStatus status,
         LocalDate lastGeneratedDate,
+        Integer generationDaysAhead,
+        String statusReason,
+        String statusRemarks,
+        String createdBy,
+        String updatedBy,
+        Long version,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

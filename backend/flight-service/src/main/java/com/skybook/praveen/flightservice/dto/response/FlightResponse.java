@@ -14,6 +14,9 @@ public record FlightResponse(
         LocalDateTime arrivalTime,
         FlightStatus status,
         Long scheduleId,
+        String createdBy,
+        String updatedBy,
+        Long version,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

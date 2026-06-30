@@ -32,6 +32,7 @@ public class FlightScheduleServiceImpl implements FlightScheduleService {
     private final FlightRepository flightRepository;
 
     @Override
+    @Transactional
     public FlightScheduleResponse createSchedule(CreateFlightScheduleRequest request) {
 
         if (request.originAirportCode().equalsIgnoreCase(request.destinationAirportCode())) {
@@ -44,7 +45,11 @@ public class FlightScheduleServiceImpl implements FlightScheduleService {
 
         FlightSchedule schedule = FlightScheduleMapper.toEntity(request);
 
+        // scheduleCode is immutable and derived from the generated id, so the
+        // entity has to exist (and have an id) before it can be assigned.
         FlightSchedule saved = flightScheduleRepository.save(schedule);
+        saved.setScheduleCode(buildScheduleCode(saved));
+        saved = flightScheduleRepository.save(saved);
 
         return FlightScheduleMapper.toResponse(saved);
     }
@@ -63,7 +68,7 @@ public class FlightScheduleServiceImpl implements FlightScheduleService {
     }
 
     @Override
-    public FlightScheduleResponse pauseSchedule(Long id) {
+    public FlightScheduleResponse pauseSchedule(Long id, String reason, String remarks) {
 
         FlightSchedule schedule = findScheduleOrThrow(id);
 
@@ -72,6 +77,8 @@ public class FlightScheduleServiceImpl implements FlightScheduleService {
         }
 
         schedule.setStatus(ScheduleStatus.PAUSED);
+        schedule.setStatusReason(reason);
+        schedule.setStatusRemarks(remarks);
 
         return FlightScheduleMapper.toResponse(flightScheduleRepository.save(schedule));
     }
@@ -86,21 +93,25 @@ public class FlightScheduleServiceImpl implements FlightScheduleService {
         }
 
         schedule.setStatus(ScheduleStatus.ACTIVE);
+        schedule.setStatusReason(null);
+        schedule.setStatusRemarks(null);
 
         return FlightScheduleMapper.toResponse(flightScheduleRepository.save(schedule));
     }
 
     @Override
     @Transactional
-    public FlightScheduleResponse cancelSchedule(Long id) {
+    public FlightScheduleResponse cancelSchedule(Long id, String reason, String remarks) {
 
         FlightSchedule schedule = findScheduleOrThrow(id);
 
         schedule.setStatus(ScheduleStatus.CANCELLED);
+        schedule.setStatusReason(reason);
+        schedule.setStatusRemarks(remarks);
         flightScheduleRepository.save(schedule);
 
         List<Flight> futureGeneratedFlights =
-                flightRepository.findByScheduleIdAndDepartureTimeAfter(id, LocalDateTime.now());
+                flightRepository.findBySchedule_IdAndDepartureTimeAfter(id, LocalDateTime.now());
 
         futureGeneratedFlights.forEach(flight -> {
             if (flight.getStatus() == FlightStatus.SCHEDULED || flight.getStatus() == FlightStatus.DELAYED) {
@@ -138,7 +149,7 @@ public class FlightScheduleServiceImpl implements FlightScheduleService {
 
     @Override
     @Transactional
-    public List<FlightResponse> generateFlights(Long scheduleId, int horizonDays) {
+    public List<FlightResponse> generateFlights(Long scheduleId, Integer horizonDaysOverride) {
 
         FlightSchedule schedule = findScheduleOrThrow(scheduleId);
 
@@ -146,6 +157,8 @@ public class FlightScheduleServiceImpl implements FlightScheduleService {
             log.info("Skipping generation for schedule {} - status is {}", scheduleId, schedule.getStatus());
             return List.of();
         }
+
+        int horizonDays = horizonDaysOverride != null ? horizonDaysOverride : schedule.getGenerationDaysAhead();
 
         LocalDate today = LocalDate.now();
 
@@ -196,7 +209,7 @@ public class FlightScheduleServiceImpl implements FlightScheduleService {
                             .departureTime(departureDateTime)
                             .arrivalTime(arrivalDateTime)
                             .status(FlightStatus.SCHEDULED)
-                            .scheduleId(schedule.getId())
+                            .schedule(schedule)
                             .build();
 
                     generated.add(flight);
@@ -224,12 +237,19 @@ public class FlightScheduleServiceImpl implements FlightScheduleService {
     }
 
     @Override
-    public void generateFlightsForAllActiveSchedules(int horizonDays) {
+    public void generateFlightsForAllActiveSchedules() {
 
         List<FlightSchedule> activeSchedules =
                 flightScheduleRepository.findByStatus(ScheduleStatus.ACTIVE);
 
-        activeSchedules.forEach(schedule -> generateFlights(schedule.getId(), horizonDays));
+        activeSchedules.forEach(schedule -> generateFlights(schedule.getId(), null));
+    }
+
+    private String buildScheduleCode(FlightSchedule schedule) {
+        return "SCH-%s-%s-%06d".formatted(
+                schedule.getOriginAirportCode(),
+                schedule.getDestinationAirportCode(),
+                schedule.getId());
     }
 
     private FlightSchedule findScheduleOrThrow(Long id) {

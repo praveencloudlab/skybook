@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
         name = "flights",
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_flight_number_departure_time",
-                columnNames = {"flightNumber", "departureTime"}
+                columnNames = {"flight_number", "departure_time"}
         )
 )
 @Getter
@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class Flight {
+public class Flight extends Auditable {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -52,28 +52,17 @@ public class Flight {
 
     // Set when this Flight instance was generated from a FlightSchedule.
     // Null for flights created manually via the Flight Management APIs.
-    @Column(name = "schedule_id")
-    private Long scheduleId;
-
-    @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    @Column(nullable = false)
-    private LocalDateTime updatedAt;
+    // Lazy + a real association (rather than a bare Long id) so callers that
+    // need schedule details can navigate to it directly instead of doing a
+    // second lookup by id.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "schedule_id")
+    private FlightSchedule schedule;
 
     @PrePersist
     public void prePersist() {
-        LocalDateTime now = LocalDateTime.now();
-        createdAt = now;
-        updatedAt = now;
-
         if (status == null) {
             status = FlightStatus.SCHEDULED;
         }
-    }
-
-    @PreUpdate
-    public void preUpdate() {
-        updatedAt = LocalDateTime.now();
     }
 }
