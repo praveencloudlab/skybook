@@ -13,6 +13,7 @@ public record FlightResponse(
         LocalDateTime departureTime,
         LocalDateTime arrivalTime,
         FlightStatus status,
+        Long scheduleId,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

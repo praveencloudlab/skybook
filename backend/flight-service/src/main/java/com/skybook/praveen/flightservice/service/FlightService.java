@@ -89,23 +89,9 @@ public interface FlightService {
             Long id
     );
 
-    // =====================================================
-    // Schedule Management (Phase 2)
-    // =====================================================
-
-    void createSchedule();
-
-    void updateSchedule();
-
-    void pauseSchedule();
-
-    void resumeSchedule();
-
-    void extendSchedule();
-
-    void cancelSchedule();
-
-    void generateFlights();
+    // Recurring flight schedule management (FlightSchedule entity,
+    // generation, pause/resume/cancel/extend) lives in FlightScheduleService,
+    // not here - a schedule is a different lifecycle from a single flight.
 
     // =====================================================
     // Validation

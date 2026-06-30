@@ -33,6 +33,7 @@ public final class FlightMapper {
                 flight.getDepartureTime(),
                 flight.getArrivalTime(),
                 flight.getStatus(),
+                flight.getScheduleId(),
                 flight.getCreatedAt(),
                 flight.getUpdatedAt()
         );

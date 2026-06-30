@@ -112,12 +112,15 @@ public class FlightServiceImpl implements FlightService {
 
     private void validateFlightCreation(CreateFlightRequest request) {
 
-        if (flightRepository.existsByFlightNumber(
-                request.flightNumber().toUpperCase())) {
+        // Flight numbers are not globally unique - the same number can recur
+        // daily under a schedule. Uniqueness is per (flightNumber, departureTime).
+        if (flightRepository.existsByFlightNumberAndDepartureTime(
+                request.flightNumber().toUpperCase(),
+                request.departureTime())) {
 
             throw new IllegalArgumentException(
-                    "Flight number already exists : "
-                            + request.flightNumber());
+                    "Flight " + request.flightNumber()
+                            + " already exists for departure time " + request.departureTime());
         }
 
         if (!request.arrivalTime().isAfter(request.departureTime())) {
@@ -299,48 +302,6 @@ public class FlightServiceImpl implements FlightService {
 
         return FlightMapper.toResponse(
                 flightRepository.save(flight));
-    }
-
-    @Override
-    public void createSchedule() {
-        throw new UnsupportedOperationException(
-                "FlightSchedule module will be implemented in Phase 2.");
-    }
-
-    @Override
-    public void updateSchedule() {
-        throw new UnsupportedOperationException(
-                "FlightSchedule module will be implemented in Phase 2.");
-    }
-
-    @Override
-    public void pauseSchedule() {
-        throw new UnsupportedOperationException(
-                "FlightSchedule module will be implemented in Phase 2.");
-    }
-
-    @Override
-    public void resumeSchedule() {
-        throw new UnsupportedOperationException(
-                "FlightSchedule module will be implemented in Phase 2.");
-    }
-
-    @Override
-    public void extendSchedule() {
-        throw new UnsupportedOperationException(
-                "FlightSchedule module will be implemented in Phase 2.");
-    }
-
-    @Override
-    public void cancelSchedule() {
-        throw new UnsupportedOperationException(
-                "FlightSchedule module will be implemented in Phase 2.");
-    }
-
-    @Override
-    public void generateFlights() {
-        throw new UnsupportedOperationException(
-                "FlightSchedule module will be implemented in Phase 2.");
     }
 
     @Override
