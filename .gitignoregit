@@ -1,0 +1,1 @@
+"*.zip"  add .gitignoregit commit -m "chore: ignore zip archives"git push
