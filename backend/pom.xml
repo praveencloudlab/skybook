@@ -23,6 +23,8 @@
         <module>notification-service</module>
         <module>skybook-common</module>
         <module>flight-service</module>
+        <module>booking-service</module>
+
     </modules>
 
     <dependencyManagement>
