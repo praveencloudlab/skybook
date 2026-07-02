@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Booking Service — Unit &amp; Integration Test Report</title>
+<style>
+  :root {
+    --pass: #1a7f37;
+    --pass-bg: #dafbe1;
+    --ink: #1f2328;
+    --muted: #656d76;
+    --border: #d0d7de;
+    --bg: #ffffff;
+    --panel: #f6f8fa;
+    --accent: #0969da;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    margin: 0;
+    padding: 32px 24px 64px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: var(--panel);
+    text-align: center;
+  }
+  .card .num { font-size: 22px; font-weight: 700; }
+  .card .label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .card.pass .num { color: var(--pass); }
+  .meta {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    background: var(--panel);
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+  .meta span { color: var(--ink); font-weight: 600; }
+  .note {
+    border: 1px solid #f6c343;
+    background: #fff8e6;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 12.5px;
+    color: #7a5b00;
+    margin-bottom: 32px;
+  }
+  .toc {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    background: var(--panel);
+    margin-bottom: 32px;
+    font-size: 13px;
+  }
+  .toc h2 { font-size: 13px; margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .toc ul { columns: 2; margin: 0; padding-left: 18px; }
+  .toc li { margin-bottom: 4px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .section-header { font-size: 17px; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--ink); }
+  .group {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .group-header h2 { font-size: 15px; margin: 0; }
+  .group-header .count { font-size: 12px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 10px 16px; font-size: 13.5px; border-top: 1px solid var(--border); }
+  tr:first-child td { border-top: none; }
+  td.name { width: 62%; }
+  td.desc { color: var(--muted); font-size: 12.5px; }
+  td.time { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; width: 15%; }
+  td.status { width: 10%; text-align: right; }
+  .badge {
+    display: inline-block;
+    background: var(--pass-bg);
+    color: var(--pass);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 12px;
+  }
+  .badge::before { content: "✓ "; }
+  footer {
+    margin-top: 40px;
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  footer code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Booking Service — Unit &amp; Integration Test Report</h1>
+  <div class="subtitle">12 test classes · backend/booking-service · <code>mvn test -pl booking-service -am</code></div>
+
+  <div class="summary">
+    <div class="card pass"><div class="num">202</div><div class="label">Total tests</div></div>
+    <div class="card pass"><div class="num">202</div><div class="label">Passed</div></div>
+    <div class="card"><div class="num">0</div><div class="label">Failed</div></div>
+    <div class="card"><div class="num">0</div><div class="label">Errors</div></div>
+    <div class="card"><div class="num">22.05s</div><div class="label">Total time</div></div>
+  </div>
+
+  <div class="meta">
+    Run: <span>mvn test -pl booking-service -am</span> ·
+    Result: <span>BUILD SUCCESS</span> ·
+    Java <span>21.0.11</span> · JUnit <span>5.12.2</span> · Mockito <span>5.17.0</span> · AssertJ <span>3.27.7</span> · Testcontainers <span>1.21.4</span> (PostgreSQL 16)
+  </div>
+
+  <div class="note">
+    <code>BookingServiceApplicationTests</code> (the Spring-generated context-load smoke test) is not included in this run — it has no surefire report from the final green build, so it isn't part of the 202 executed here. Every number on this page is read directly from the <code>target/surefire-reports/TEST-*.xml</code> files for the 12 hand-written test classes; nothing is estimated.
+  </div>
+
+  <div class="toc">
+    <h2>Test classes</h2>
+    <ul>
+      <li><a href="#controller">BookingControllerTest</a> — 13</li>
+      <li><a href="#statemachine">BookingStateMachineTest</a> — 11</li>
+      <li><a href="#validator">BookingValidatorTest</a> — 10</li>
+      <li><a href="#fare">FareCalculatorTest</a> — 5</li>
+      <li><a href="#pnr">PnrGeneratorTest</a> — 101</li>
+      <li><a href="#exception">GlobalExceptionHandlerTest</a> — 9</li>
+      <li><a href="#facade">BookingFacadeTest</a> — 4</li>
+      <li><a href="#bookingmapper">BookingMapperTest</a> — 5</li>
+      <li><a href="#passengermapper">PassengerMapperTest</a> — 3</li>
+      <li><a href="#producer">BookingEventProducerTest</a> — 4</li>
+      <li><a href="#persistence">BookingPersistenceIntegrationTest</a> — 9</li>
+      <li><a href="#serviceimpl">BookingServiceImplTest</a> — 28</li>
+    </ul>
+  </div>
+
+  <h2 class="section-header" id="controller">BookingControllerTest <span style="font-weight:400;color:var(--muted);font-size:13px;">— @WebMvcTest, BookingFacade/BookingService mocked</span></h2>
+  <div class="group">
+    <div class="group-header"><h2>Request/response binding, routing, validation, status codes</h2><span class="count">13 tests</span></div>
+    <table>
+      <tr><td class="name">Create booking returns 201 with the facade's response</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Create booking returns 400 when customerId is missing<div class="desc">bean-validation error surfaced via GlobalExceptionHandler</div></td><td class="time">378 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Get booking by ID returns 200 when found</td><td class="time">8 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Get booking by ID returns 404 when not found</td><td class="time">12 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Get booking by reference returns 200</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Get all bookings returns 200 with a list</td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Search bookings builds the criteria from query params and returns 200<div class="desc">verifies the assembled BookingSearchRequest via ArgumentCaptor</div></td><td class="time">27 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Confirm booking returns 200</td><td class="time">284 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Cancel booking with reason body passes the reason through</td><td class="time">95 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Cancel booking without a body passes a null reason</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Complete booking returns 200</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Check-in passenger returns 200</td><td class="time">6 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Board passenger returns 200</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+
+  <h2 class="section-header" id="statemachine">BookingStateMachineTest <span style="font-weight:400;color:var(--muted);font-size:13px;">— 3 independent state machines, plain unit tests</span></h2>
+  <div class="group">
+    <div class="group-header"><h2>BookingStatusTransitions</h2><span class="count">5 tests</span></div>
+    <table>
+      <tr><td class="name">Applies a valid transition and records history</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects an invalid transition and records no history</td><td class="time">1 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Cancelling a booking closes check-in for every passenger</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Cancelling does not error when a passenger is already closed</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Matches the full golden transition table</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+  <div class="group">
+    <div class="group-header"><h2>PaymentStatusTransitions</h2><span class="count">3 tests</span></div>
+    <table>
+      <tr><td class="name">Matches the full golden transition table</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects skipping straight from PENDING to REFUNDED</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Moving to PAID stamps paidAt</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+  <div class="group">
+    <div class="group-header"><h2>CheckInStatusTransitions</h2><span class="count">3 tests</span></div>
+    <table>
+      <tr><td class="name">Applies a valid transition and records history on the owning booking</td><td class="time">83 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Matches the full golden transition table</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects boarding a passenger who never checked in</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+
+  <h2 class="section-header" id="validator">BookingValidatorTest</h2>
+  <div class="group">
+    <div class="group-header"><h2>ValidatePassportValidForTravel</h2><span class="count">4 tests</span></div>
+    <table>
+      <tr><td class="name">Allows passport expiring after travel date</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects passport expiring before travel date</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects passport expiring on travel date</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects null passport expiry</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+  <div class="group">
+    <div class="group-header"><h2>ValidateRefundAllowed</h2><span class="count">2 tests</span></div>
+    <table>
+      <tr><td class="name">Rejects refund for non-cancelled booking</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Allows refund for cancelled booking</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+  <div class="group">
+    <div class="group-header"><h2>ValidateCheckInAllowed</h2><span class="count">4 tests</span></div>
+    <table>
+      <tr><td class="name">Rejects check-in when there is no payment record at all</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects check-in when booking not confirmed</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects check-in when payment not captured</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Allows check-in for confirmed and paid booking</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+
+  <h2 class="section-header" id="fare">FareCalculatorTest</h2>
+  <div class="group">
+    <div class="group-header"><h2>Fare rules by travel class and fare type</h2><span class="count">5 tests</span></div>
+    <table>
+      <tr><td class="name">Applies saver discount to economy base fare</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Applies premium surcharge to business base fare</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Flexi fare equals base fare</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Result is always scaled to two decimal places</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">First class is more expensive than business</td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+
+  <h2 class="section-header" id="pnr">PnrGeneratorTest</h2>
+  <div class="group">
+    <div class="group-header"><h2>PNR format, uniqueness across draws, ambiguous-character exclusion</h2><span class="count">101 tests (2 × @RepeatedTest(50) + 1)</span></div>
+    <table>
+      <tr><td class="name">Generates candidate matching expected format <code>^SB[2-9A-HJ-NP-Z]{4}$</code><div class="desc">50 repetitions — collapsed into one row here</div></td><td class="time">50 runs, 38 ms total</td><td class="status"><span class="badge">Pass ×50</span></td></tr>
+      <tr><td class="name">Never contains ambiguous characters (0, O, 1, I, L)<div class="desc">50 repetitions — collapsed into one row here</div></td><td class="time">50 runs, 32 ms total</td><td class="status"><span class="badge">Pass ×50</span></td></tr>
+      <tr><td class="name">Generates different candidates across many calls<div class="desc">200 draws from a ~1M-combination space produce &gt;150 distinct values</div></td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+
+  <h2 class="section-header" id="exception">GlobalExceptionHandlerTest <span style="font-weight:400;color:var(--muted);font-size:13px;">— one test per @ExceptionHandler method</span></h2>
+  <div class="group">
+    <div class="group-header"><h2>Exception → HTTP status + message mapping</h2><span class="count">9 tests</span></div>
+    <table>
+      <tr><td class="name">Booking not found maps to 404</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Booking passenger not found maps to 404</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Flight not found for booking maps to 404</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Seat already booked maps to 409</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Illegal state exception maps to 409</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Optimistic locking failure maps to 409 with a fixed user-facing message</td><td class="time">111 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Illegal argument exception maps to 400</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Validation exception maps to 400 with joined field errors</td><td class="time">173 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Flight service unavailable maps to 502</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+
+  <h2 class="section-header" id="facade">BookingFacadeTest <span style="font-weight:400;color:var(--muted);font-size:13px;">— Controller → Facade → Service orchestration, FlightServiceClient + BookingService mocked</span></h2>
+  <div class="group">
+    <div class="group-header"><h2>Flight validation gate, event publishing after each transition</h2><span class="count">4 tests</span></div>
+    <table>
+      <tr><td class="name">Create booking validates flight, then creates and publishes a Created event</td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Create booking rejects a cancelled flight without touching BookingService or Kafka</td><td class="time">126 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Confirm booking confirms, then publishes a Confirmed event</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Cancel booking cancels, then publishes a Cancelled event</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+
+  <h2 class="section-header" id="bookingmapper">BookingMapperTest</h2>
+  <div class="group">
+    <div class="group-header"><h2>Entity → response DTO mapping</h2><span class="count">5 tests</span></div>
+    <table>
+      <tr><td class="name">Maps scalar fields from Booking to response</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Maps null contact and payment to null responses</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Maps contact and payment when present</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Maps each passenger, including nested Passenger fields</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Maps empty passenger list to empty response list</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+
+  <h2 class="section-header" id="passengermapper">PassengerMapperTest</h2>
+  <div class="group">
+    <div class="group-header"><h2>PassengerBookingDetail → Passenger entity mapping</h2><span class="count">3 tests</span></div>
+    <table>
+      <tr><td class="name">Maps every field from detail to entity</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Uppercases nationality and passport number</td><td class="time">10 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Leaves optional fields null when not supplied</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+
+  <h2 class="section-header" id="producer">BookingEventProducerTest <span style="font-weight:400;color:var(--muted);font-size:13px;">— KafkaTemplate mocked</span></h2>
+  <div class="group">
+    <div class="group-header"><h2>Booking lifecycle events published to booking-events topic</h2><span class="count">4 tests</span></div>
+    <table>
+      <tr><td class="name">Publish booking created sends a Created event to the booking-events topic</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Publish booking confirmed sends a Confirmed event</td><td class="time">12 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Publish booking cancelled sends a Cancelled event</td><td class="time">3 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Skips publishing when booking has no contact on file</td><td class="time">132 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+
+  <h2 class="section-header" id="persistence">BookingPersistenceIntegrationTest <span style="font-weight:400;color:var(--muted);font-size:13px;">— @DataJpaTest + Testcontainers PostgreSQL 16, real database, no mocks</span></h2>
+  <div class="group">
+    <div class="group-header"><h2>Hibernate mapping, cascades, constraints against a real Postgres instance</h2><span class="count">9 tests</span></div>
+    <table>
+      <tr><td class="name">bookingStatus is persisted as its enum name, not ordinal<div class="desc">raw native-query check on the DB column — proves the @Enumerated(STRING) fix</div></td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">checkInStatus (and travelClass, fareType) are persisted as enum names, not ordinals</td><td class="time">51 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">paymentStatus is persisted as its enum name, not ordinal</td><td class="time">23 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Saving a booking cascades passengers and persists the full aggregate</td><td class="time">26 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Orphan removal deletes the passenger row when removed from the booking's list</td><td class="time">385 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Unique constraint prevents double-booking the same seat on the same flight</td><td class="time">36 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">existsByBookingReference and findByBookingReference work against a real DB</td><td class="time">26 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">findByBookingStatus filters correctly against a real DB</td><td class="time">32 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Auditable timestamps (createdAt/updatedAt) are populated on persist</td><td class="time">9 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+
+  <h2 class="section-header" id="serviceimpl">BookingServiceImplTest <span style="font-weight:400;color:var(--muted);font-size:13px;">— BookingRepository, FlightServiceClient, BookingEventProducer mocked</span></h2>
+  <div class="group">
+    <div class="group-header"><h2>CreateBooking</h2><span class="count">7 tests</span></div>
+    <table>
+      <tr><td class="name">Creates booking with a single passenger</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Sums up fare across multiple passengers</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects when seat already booked</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects blank seat number</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects when passport expires before travel date</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Retries PNR generation on collision until a unique one is found</td><td class="time">54 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Exhausts retries when every generated PNR collides</td><td class="time">9 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+  <div class="group">
+    <div class="group-header"><h2>Reads</h2><span class="count">5 tests</span></div>
+    <table>
+      <tr><td class="name">getBookingById returns mapped booking</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">getBookingById throws when not found</td><td class="time">3 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">getBookingByReference returns mapped booking</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">getBookingByReference throws when not found</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">getAllBookings returns every booking mapped</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+  <div class="group">
+    <div class="group-header"><h2>SearchBookings</h2><span class="count">6 tests</span></div>
+    <table>
+      <tr><td class="name">Returns everything when no filters are given</td><td class="time">6 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Filters by booking reference</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Filters by booking status</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Filters by contact email</td><td class="time">2 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Filters by passport number</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Filters by passenger name, partial match</td><td class="time">2 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+  <div class="group">
+    <div class="group-header"><h2>ConfirmCancelComplete</h2><span class="count">5 tests</span></div>
+    <table>
+      <tr><td class="name">Throws when booking not found</td><td class="time">4 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Confirm marks payment paid and booking confirmed</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Cancel refunds when payment was captured</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Cancel does not refund when payment was never captured</td><td class="time">7 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Complete transitions confirmed to completed</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+  <div class="group">
+    <div class="group-header"><h2>CheckInAndBoard</h2><span class="count">5 tests</span></div>
+    <table>
+      <tr><td class="name">Check-in opens window, then checks in a confirmed, paid booking</td><td class="time">147 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects check-in when booking not confirmed and paid</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Boards a checked-in passenger</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Rejects boarding a passenger who never checked in</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+      <tr><td class="name">Throws when passenger does not belong to booking</td><td class="time">5 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+    </table>
+  </div>
+
+  <footer>
+    Generated directly from the 12 <code>target/surefire-reports/TEST-*.xml</code> files under <code>backend/booking-service</code> (final green run — <code>Tests run: 202, Failures: 0, Errors: 0, Skipped: 0</code>). Per-class totals: BookingControllerTest 13 (4.92s) · BookingStateMachineTest 11 (0.13s) · BookingValidatorTest 10 (0.03s) · FareCalculatorTest 5 (0.02s) · PnrGeneratorTest 101 (0.11s) · GlobalExceptionHandlerTest 9 (0.30s) · BookingFacadeTest 4 (0.14s) · BookingMapperTest 5 (0.02s) · PassengerMapperTest 3 (0.01s) · BookingEventProducerTest 4 (0.15s) · BookingPersistenceIntegrationTest 9 (6.94s) · BookingServiceImplTest 28 (0.28s).
+    <br>See <code>docs/BOOKING_SERVICE_REFERENCE.md</code> for full architecture, DTO, and endpoint documentation.
+  </footer>
+
+</div>
+</body>
+</html>

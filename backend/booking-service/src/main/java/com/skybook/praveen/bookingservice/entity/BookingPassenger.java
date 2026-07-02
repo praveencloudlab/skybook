@@ -7,6 +7,8 @@ import com.skybook.praveen.common.entity.Auditable;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -68,9 +70,11 @@ public class BookingPassenger extends Auditable {
     @Column(name = "flight_id", nullable = false)
     private Long flightId;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private TravelClass travelClass;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private FareType fareType;
 
@@ -80,6 +84,7 @@ public class BookingPassenger extends Auditable {
     @Column(nullable = false)
     private BigDecimal fare;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private CheckInStatus checkInStatus;
 
