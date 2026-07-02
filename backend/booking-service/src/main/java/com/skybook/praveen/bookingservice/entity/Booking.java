@@ -5,6 +5,8 @@ import com.skybook.praveen.common.entity.Auditable;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -58,6 +60,7 @@ public class Booking extends Auditable {
     @Column(nullable = false)
     private Long flightId;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private BookingStatus bookingStatus;
 

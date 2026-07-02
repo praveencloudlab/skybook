@@ -25,7 +25,7 @@ class PnrGeneratorTest {
     @RepeatedTest(50)
     void neverContainsAmbiguousCharacters() {
         String candidate = pnrGenerator.generateCandidate();
-        assertThat(candidate).doesNotContainAnyOf("0", "O", "1", "I", "L");
+        assertThat(candidate).doesNotContain("0", "O", "1", "I", "L");
     }
 
     @Test

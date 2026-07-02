@@ -392,6 +392,10 @@ class BookingServiceImplTest {
                     .passengers(new ArrayList<>()).history(new ArrayList<>())
                     .payment(BookingPayment.builder().paymentStatus(PaymentStatus.PENDING).build())
                     .build();
+            // BookingPayment.booking must be built before Booking exists, so the
+            // back-reference has to be wired up after the fact - same reason
+            // BookingPassenger needs an explicit setBooking() call below.
+            booking.getPayment().setBooking(booking);
             when(bookingRepository.findById(1L)).thenReturn(Optional.of(booking));
             stubSaveReturnsArgument();
 
@@ -403,12 +407,15 @@ class BookingServiceImplTest {
 
         @Test
         void cancelRefundsWhenPaymentWasCaptured() {
-            BookingPassenger passenger = BookingPassenger.builder().checkInStatus(CheckInStatus.CHECKED_IN).build();
+            BookingPassenger passenger = BookingPassenger.builder()
+                    .passenger(Passenger.builder().id(5L).firstName("Jane").lastName("Doe").build())
+                    .checkInStatus(CheckInStatus.CHECKED_IN).build();
             Booking booking = Booking.builder().id(1L).bookingStatus(BookingStatus.CONFIRMED)
                     .passengers(new ArrayList<>(List.of(passenger))).history(new ArrayList<>())
                     .payment(BookingPayment.builder().paymentStatus(PaymentStatus.PAID).build())
                     .build();
             passenger.setBooking(booking);
+            booking.getPayment().setBooking(booking);
             when(bookingRepository.findById(1L)).thenReturn(Optional.of(booking));
             stubSaveReturnsArgument();
 
@@ -461,7 +468,9 @@ class BookingServiceImplTest {
 
         @Test
         void checkInOpensWindowThenChecksInAConfirmedPaidBooking() {
-            BookingPassenger passenger = BookingPassenger.builder().id(10L).checkInStatus(CheckInStatus.NOT_OPEN).build();
+            BookingPassenger passenger = BookingPassenger.builder().id(10L)
+                    .passenger(Passenger.builder().id(5L).firstName("Jane").lastName("Doe").build())
+                    .checkInStatus(CheckInStatus.NOT_OPEN).build();
             Booking booking = Booking.builder().id(1L).bookingStatus(BookingStatus.CONFIRMED)
                     .passengers(new ArrayList<>(List.of(passenger))).history(new ArrayList<>())
                     .payment(BookingPayment.builder().paymentStatus(PaymentStatus.PAID).build())
@@ -503,7 +512,9 @@ class BookingServiceImplTest {
 
         @Test
         void boardsACheckedInPassenger() {
-            BookingPassenger passenger = BookingPassenger.builder().id(10L).checkInStatus(CheckInStatus.CHECKED_IN).build();
+            BookingPassenger passenger = BookingPassenger.builder().id(10L)
+                    .passenger(Passenger.builder().id(5L).firstName("Jane").lastName("Doe").build())
+                    .checkInStatus(CheckInStatus.CHECKED_IN).build();
             Booking booking = Booking.builder().id(1L).bookingStatus(BookingStatus.CONFIRMED)
                     .passengers(new ArrayList<>(List.of(passenger))).history(new ArrayList<>()).build();
             passenger.setBooking(booking);
