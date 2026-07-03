@@ -24,6 +24,7 @@
         <module>skybook-common</module>
         <module>flight-service</module>
         <module>booking-service</module>
+        <module>inventory-service</module>
 
     </modules>
 
