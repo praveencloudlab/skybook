@@ -40,3 +40,10 @@ springdoc:
 # Base URL for flight-service lookups (Feign client - added later this sprint).
 flight-service:
   base-url: http://localhost:8082
+
+inventory:
+  hold:
+    # How long a seat hold blocks the seat before SeatHoldExpiryJob releases it.
+    ttl-minutes: 15
+    # How often SeatHoldExpiryJob sweeps for expired holds.
+    sweep-interval-ms: 60000
