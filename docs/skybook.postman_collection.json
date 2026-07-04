@@ -1,18 +1,54 @@
 {
   "info": {
     "name": "SkyBook Backend",
-    "description": "End-to-end requests for the SkyBook microservices. Flow: pick a flight (Flights folder) -> create + confirm a booking (Bookings) -> optionally exercise seat inventory (Inventory & Reservations). Create Booking auto-saves {{bookingId}} and {{pnr}}; inventory requests auto-save {{aircraftId}}.",
+    "description": "End-to-end requests for the SkyBook microservices. Flow: pick a flight (Flights folder) -> create + confirm a booking (Bookings) -> optionally exercise seat inventory (Inventory & Reservations). Create Booking auto-saves {{bookingId}} and {{pnr}}; inventory requests auto-save {{aircraftId}}. Payments folder: run Bookings first (needs {{bookingId}}); the consumer auto-creates the payment, or use 1b for manual creation. Simulated gateway: amounts ending .13 decline authorization, .31 fail capture.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "auth_url", "value": "http://localhost:8080" },
-    { "key": "flight_url", "value": "http://localhost:8082" },
-    { "key": "booking_url", "value": "http://localhost:8083" },
-    { "key": "inventory_url", "value": "http://localhost:8084" },
-    { "key": "flightId", "value": "10" },
-    { "key": "bookingId", "value": "" },
-    { "key": "pnr", "value": "" },
-    { "key": "aircraftId", "value": "" }
+    {
+      "key": "auth_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "flight_url",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "booking_url",
+      "value": "http://localhost:8083"
+    },
+    {
+      "key": "inventory_url",
+      "value": "http://localhost:8084"
+    },
+    {
+      "key": "flightId",
+      "value": "10"
+    },
+    {
+      "key": "bookingId",
+      "value": ""
+    },
+    {
+      "key": "pnr",
+      "value": ""
+    },
+    {
+      "key": "aircraftId",
+      "value": ""
+    },
+    {
+      "key": "payment_url",
+      "value": "http://localhost:8086"
+    },
+    {
+      "key": "paymentId",
+      "value": ""
+    },
+    {
+      "key": "paymentReference",
+      "value": ""
+    }
   ],
   "item": [
     {
@@ -20,17 +56,28 @@
       "item": [
         {
           "name": "List all flights",
-          "request": { "method": "GET", "url": "{{flight_url}}/api/flights" }
+          "request": {
+            "method": "GET",
+            "url": "{{flight_url}}/api/flights"
+          }
         },
         {
           "name": "Get flight by id",
-          "request": { "method": "GET", "url": "{{flight_url}}/api/flights/{{flightId}}" }
+          "request": {
+            "method": "GET",
+            "url": "{{flight_url}}/api/flights/{{flightId}}"
+          }
         },
         {
           "name": "Create flight",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{flight_url}}/api/flights",
             "body": {
               "mode": "raw",
@@ -62,7 +109,12 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{booking_url}}/api/bookings",
             "body": {
               "mode": "raw",
@@ -72,24 +124,41 @@
         },
         {
           "name": "Confirm booking (simulated payment)",
-          "request": { "method": "PATCH", "url": "{{booking_url}}/api/bookings/{{bookingId}}/confirm" }
+          "request": {
+            "method": "PATCH",
+            "url": "{{booking_url}}/api/bookings/{{bookingId}}/confirm"
+          }
         },
         {
           "name": "Get booking by PNR",
-          "request": { "method": "GET", "url": "{{booking_url}}/api/bookings/reference/{{pnr}}" }
+          "request": {
+            "method": "GET",
+            "url": "{{booking_url}}/api/bookings/reference/{{pnr}}"
+          }
         },
         {
           "name": "Cancel booking",
           "request": {
             "method": "PATCH",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{booking_url}}/api/bookings/{{bookingId}}/cancel",
-            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"cancelled via postman\"\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"cancelled via postman\"\n}"
+            }
           }
         },
         {
           "name": "Get all bookings",
-          "request": { "method": "GET", "url": "{{booking_url}}/api/bookings" }
+          "request": {
+            "method": "GET",
+            "url": "{{booking_url}}/api/bookings"
+          }
         }
       ]
     },
@@ -112,16 +181,29 @@
           ],
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{inventory_url}}/api/aircraft",
-            "body": { "mode": "raw", "raw": "{\n  \"registrationNumber\": \"VT-SKB\",\n  \"manufacturer\": \"Airbus\",\n  \"model\": \"A320neo\"\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"registrationNumber\": \"VT-SKB\",\n  \"manufacturer\": \"Airbus\",\n  \"model\": \"A320neo\"\n}"
+            }
           }
         },
         {
           "name": "2. Create seat map",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{inventory_url}}/api/aircraft/{{aircraftId}}/seat-map",
             "body": {
               "mode": "raw",
@@ -131,73 +213,133 @@
         },
         {
           "name": "3. Get seat map",
-          "request": { "method": "GET", "url": "{{inventory_url}}/api/aircraft/{{aircraftId}}/seat-map" }
+          "request": {
+            "method": "GET",
+            "url": "{{inventory_url}}/api/aircraft/{{aircraftId}}/seat-map"
+          }
         },
         {
           "name": "4. Create flight inventory",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{inventory_url}}/api/inventory",
-            "body": { "mode": "raw", "raw": "{\n  \"flightId\": {{flightId}},\n  \"aircraftId\": {{aircraftId}}\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"flightId\": {{flightId}},\n  \"aircraftId\": {{aircraftId}}\n}"
+            }
           }
         },
         {
           "name": "5. Hold seat",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{inventory_url}}/api/inventory/hold",
-            "body": { "mode": "raw", "raw": "{\n  \"flightId\": {{flightId}},\n  \"seatNumber\": \"12A\",\n  \"bookingId\": {{bookingId}}\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"flightId\": {{flightId}},\n  \"seatNumber\": \"12A\",\n  \"bookingId\": {{bookingId}}\n}"
+            }
           }
         },
         {
           "name": "6. Reserve seat (confirms the hold)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{inventory_url}}/api/reservations",
-            "body": { "mode": "raw", "raw": "{\n  \"flightId\": {{flightId}},\n  \"seatNumber\": \"12A\",\n  \"bookingId\": {{bookingId}}\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"flightId\": {{flightId}},\n  \"seatNumber\": \"12A\",\n  \"bookingId\": {{bookingId}}\n}"
+            }
           }
         },
         {
           "name": "7. Inventory counts for flight",
-          "request": { "method": "GET", "url": "{{inventory_url}}/api/inventory/flight/{{flightId}}" }
+          "request": {
+            "method": "GET",
+            "url": "{{inventory_url}}/api/inventory/flight/{{flightId}}"
+          }
         },
         {
           "name": "8. Inventory history for flight",
-          "request": { "method": "GET", "url": "{{inventory_url}}/api/inventory/flight/{{flightId}}/history" }
+          "request": {
+            "method": "GET",
+            "url": "{{inventory_url}}/api/inventory/flight/{{flightId}}/history"
+          }
         },
         {
           "name": "9. Cancel reservation",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{inventory_url}}/api/reservations/cancel",
-            "body": { "mode": "raw", "raw": "{\n  \"flightId\": {{flightId}},\n  \"seatNumber\": \"12A\",\n  \"bookingId\": {{bookingId}},\n  \"reason\": \"postman test\"\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"flightId\": {{flightId}},\n  \"seatNumber\": \"12A\",\n  \"bookingId\": {{bookingId}},\n  \"reason\": \"postman test\"\n}"
+            }
           }
         },
         {
           "name": "Release hold (alternative to reserve)",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{inventory_url}}/api/inventory/release",
-            "body": { "mode": "raw", "raw": "{\n  \"flightId\": {{flightId}},\n  \"seatNumber\": \"12A\",\n  \"bookingId\": {{bookingId}},\n  \"reason\": \"released via postman\"\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"flightId\": {{flightId}},\n  \"seatNumber\": \"12A\",\n  \"bookingId\": {{bookingId}},\n  \"reason\": \"released via postman\"\n}"
+            }
           }
         },
         {
           "name": "Search inventories",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{inventory_url}}/api/inventory/search",
-            "body": { "mode": "raw", "raw": "{\n  \"status\": \"OPEN\",\n  \"minAvailableSeats\": 1\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"OPEN\",\n  \"minAvailableSeats\": 1\n}"
+            }
           }
         },
         {
           "name": "Reservations by booking",
-          "request": { "method": "GET", "url": "{{inventory_url}}/api/reservations/booking/{{bookingId}}" }
+          "request": {
+            "method": "GET",
+            "url": "{{inventory_url}}/api/reservations/booking/{{bookingId}}"
+          }
         }
       ]
     },
@@ -208,19 +350,189 @@
           "name": "Register",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{auth_url}}/api/auth/register",
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"praveen.somireddy@gmail.com\",\n  \"password\": \"ChangeMe123!\",\n  \"firstName\": \"Praveen\",\n  \"lastName\": \"Somireddy\"\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"praveen.somireddy@gmail.com\",\n  \"password\": \"ChangeMe123!\",\n  \"firstName\": \"Praveen\",\n  \"lastName\": \"Somireddy\"\n}"
+            }
           }
         },
         {
           "name": "Login",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": "{{auth_url}}/api/auth/login",
-            "body": { "mode": "raw", "raw": "{\n  \"email\": \"praveen.somireddy@gmail.com\",\n  \"password\": \"ChangeMe123!\"\n}" }
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"praveen.somireddy@gmail.com\",\n  \"password\": \"ChangeMe123!\"\n}"
+            }
           }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "1. Get payment for booking (auto-created by consumer)",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_url}}/api/payments/booking/{{bookingId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const p = pm.response.json();",
+                  "if (pm.response.json().paymentReference) pm.collectionVariables.set('paymentReference', pm.response.json().paymentReference);",
+                  "if (p.id) pm.collectionVariables.set('paymentId', p.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "1b. Create payment manually (Idempotency-Key)",
+          "request": {
+            "method": "POST",
+            "url": "{{payment_url}}/api/payments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\": {{bookingId}},\n  \"bookingReference\": \"{{pnr}}\",\n  \"amount\": 100.00,\n  \"currency\": \"USD\",\n  \"fareLines\": [\n    { \"fareType\": \"FLEXI\", \"amount\": 100.00 }\n  ]\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "postman-{{bookingId}}"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const p = pm.response.json();",
+                  "if (pm.response.json().paymentReference) pm.collectionVariables.set('paymentReference', pm.response.json().paymentReference);",
+                  "if (p.id) pm.collectionVariables.set('paymentId', p.id);",
+                  "pm.test('201 created or 200 replay', () => pm.expect([200,201]).to.include(pm.response.code));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Authorize",
+          "request": {
+            "method": "PATCH",
+            "url": "{{payment_url}}/api/payments/{{paymentId}}/authorize"
+          }
+        },
+        {
+          "name": "3. Capture (issues invoice, publishes PAYMENT_SUCCEEDED)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{payment_url}}/api/payments/{{paymentId}}/capture"
+          }
+        },
+        {
+          "name": "4. Get invoice",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_url}}/api/invoices/{{paymentId}}"
+          }
+        },
+        {
+          "name": "5. Refund (fare-type rules)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{payment_url}}/api/payments/{{paymentId}}/refund",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"postman refund test\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        {
+          "name": "6. Payment history (audit trail)",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_url}}/api/payments/{{paymentId}}/history"
+          }
+        },
+        {
+          "name": "Cancel (before capture)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{payment_url}}/api/payments/{{paymentId}}/cancel"
+          }
+        },
+        {
+          "name": "Get by reference",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_url}}/api/payments/reference/{{paymentReference}}"
+          }
+        },
+        {
+          "name": "List refunds",
+          "request": {
+            "method": "GET",
+            "url": "{{payment_url}}/api/refunds"
+          }
+        },
+        {
+          "name": "DECLINE demo: create with amount ending .13",
+          "request": {
+            "method": "POST",
+            "url": "{{payment_url}}/api/payments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\": 999913,\n  \"bookingReference\": \"SBDECL\",\n  \"amount\": 50.13,\n  \"currency\": \"USD\"\n}"
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('paymentId', pm.response.json().id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
         }
       ]
     }

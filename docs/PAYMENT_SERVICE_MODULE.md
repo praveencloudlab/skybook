@@ -12,7 +12,7 @@
 | **Base package** | `com.skybook.praveen.paymentservice` |
 | **Port** | `8086` |
 | **Database** | `skybook_payment` (PostgreSQL, `ddl-auto: update`) |
-| **Status** | **DESIGN — not yet implemented** |
+| **Status** | Implemented — 111 tests green (unit + JPA + WebMvc + full-stack + concurrency). See §19. |
 
 Decisions settled up front (agreed before implementation): **two-phase authorize/capture model**, **v1 payments auto-created by consuming `BookingEvent CREATED`**, **fare-type-based refund rules**.
 
@@ -459,4 +459,30 @@ Mirrors the inventory standard: domain unit tests (golden transition tables — 
 
 ---
 
-*Sprint 5 design — review, adjust, then implementation starts at build-order step 1.*
+# 19. Implementation Notes (What Was Actually Built)
+
+Deviations from and additions to the design, discovered during implementation:
+
+- **`BookingEvent.bookingId` added to the shared contract** — the event only carried the PNR, but `Payment.bookingId` (and its unique constraint) key on the numeric id. Additive field, populated by booking-service's producer; the consumer skips pre-enrichment events loudly.
+- **`Payment.fareBreakdown` column** — §16.4's fare snapshot needed a physical home the entity table didn't specify: a compact `"FLEXI:100.00;SAVER:80.00"` string column, read/written only by `RefundCalculator` (`serialize`/`parse`, null falls back to one fully-refundable line).
+- **Begin/record method pairs** implement §2's gateway-outside-transaction rule: `beginAuthorize`/`recordAuthorizationResult`, `beginCapture`/`recordCaptureResult`, `beginCancel`/`recordCancellation`, `beginRefund`/`completeRefund`. Gateway declines are recorded on the ledger and published as events *before* the 422 is thrown — a decline is a fact, not a rollback.
+- **Retry paths as implemented**: retried authorization walks `AUTHORIZATION_FAILED → PENDING → AUTHORIZED` (two history rows); retried capture goes `CAPTURE_FAILED → CAPTURED` directly against the live authorization.
+- **Fully-refunded detection** sums `amount + cancellationFee` across ALL completed refunds vs `capturedAmount` — a SAVER payment fully refunded in two partials still terminates at REFUNDED.
+- **Concurrency findings (from the race tests)**: the double-capture race's loser was stopped by the `invoices.payment_id` unique constraint on first observation — the §3.1.1 "DB-enforced rules survive buggy code" argument, demonstrated live. Legitimate loss modes: conflict at begin, terminal-state transition rejection, `@Version` collision, or the DB backstop. Known cosmetic artifact: a losing concurrent refund can leave an orphan PENDING `Refund` row (its begin transaction committed, its complete transaction rolled back) — `refundedAmount` and payment state stay correct; a cleanup sweep is future work.
+- **`RefundServiceImpl` injects `PaymentServiceImpl`** (impl, not interface) — aggregate lookup + ledger append live in one class, inventory precedent.
+- **`PaymentNotFoundException`** uses static factories (`byId`/`byReference`/`byBooking`) instead of overloaded constructors — `Long`/`String` overloads read ambiguously at call sites.
+
+## Test suite (111 tests, 0 failures)
+
+| Layer | Classes | Highlights |
+|---|---|---|
+| Domain (35) | state machine, refund calculator, validators, reference generator, currency validator, simulated gateway | Golden table incl. self-loop; HALF_UP fee rounding; `.13`/`.31` magic amounts |
+| Service + consumer + facade (39) | 5 classes | Idempotency replay, KAFKA/USER provenance, retry paths, invoice-on-capture, decline-then-throw with events |
+| JPA — Testcontainers PostgreSQL (19) | `PaymentJpaTest`, `PaymentLedgerJpaTest` | Every §3.1.1 DB-enforced invariant incl. one-invoice-per-payment; append-only ledger; provenance columns |
+| WebMvc (14) | 2 classes | 201/200-replay/400/404/409/**422** contract |
+| Integration (4) | full-stack + context | Booking CREATED event → consumer → authorize → capture → invoice → refund → payment events consumed off real Kafka |
+| Concurrency (2) | double capture, racing refunds | Exactly one invoice; `refundedAmount == capturedAmount`, never more |
+
+---
+
+*Sprint 5 — feature/payment-management. Designed, reviewed, implemented and tested. Sprint 6: booking-service consumes PAYMENT_SUCCEEDED, retires the simulated confirm payment, inventory joins the flow.*
