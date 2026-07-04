@@ -1,0 +1,228 @@
+{
+  "info": {
+    "name": "SkyBook Backend",
+    "description": "End-to-end requests for the SkyBook microservices. Flow: pick a flight (Flights folder) -> create + confirm a booking (Bookings) -> optionally exercise seat inventory (Inventory & Reservations). Create Booking auto-saves {{bookingId}} and {{pnr}}; inventory requests auto-save {{aircraftId}}.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "auth_url", "value": "http://localhost:8080" },
+    { "key": "flight_url", "value": "http://localhost:8082" },
+    { "key": "booking_url", "value": "http://localhost:8083" },
+    { "key": "inventory_url", "value": "http://localhost:8084" },
+    { "key": "flightId", "value": "10" },
+    { "key": "bookingId", "value": "" },
+    { "key": "pnr", "value": "" },
+    { "key": "aircraftId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Flights",
+      "item": [
+        {
+          "name": "List all flights",
+          "request": { "method": "GET", "url": "{{flight_url}}/api/flights" }
+        },
+        {
+          "name": "Get flight by id",
+          "request": { "method": "GET", "url": "{{flight_url}}/api/flights/{{flightId}}" }
+        },
+        {
+          "name": "Create flight",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{flight_url}}/api/flights",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"flightNumber\": \"SB101\",\n  \"airlineCode\": \"SB\",\n  \"originAirportCode\": \"HYD\",\n  \"destinationAirportCode\": \"LHR\",\n  \"departureTime\": \"2026-08-15T09:30:00\",\n  \"arrivalTime\": \"2026-08-15T19:45:00\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        {
+          "name": "Create booking",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('bookingId', b.id);",
+                  "pm.collectionVariables.set('pnr', b.bookingReference);",
+                  "pm.test('201 created', () => pm.response.to.have.status(201));",
+                  "pm.test('has PNR', () => pm.expect(b.bookingReference).to.be.a('string'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{booking_url}}/api/bookings",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": 1,\n  \"flightId\": {{flightId}},\n  \"passengers\": [\n    {\n      \"title\": \"Mr\",\n      \"firstName\": \"Praveen\",\n      \"lastName\": \"Somireddy\",\n      \"dob\": \"1990-01-15\",\n      \"gender\": \"M\",\n      \"nationality\": \"IND\",\n      \"passportNumber\": \"N1234567\",\n      \"passportExpiry\": \"2030-06-30\",\n      \"email\": \"praveen.somireddy@gmail.com\",\n      \"travelClass\": \"ECONOMY\",\n      \"fareType\": \"FLEXI\",\n      \"seatNumber\": \"14A\"\n    }\n  ],\n  \"contact\": {\n    \"contactName\": \"Praveen Somireddy\",\n    \"contactEmail\": \"praveen.somireddy@gmail.com\",\n    \"contactPhone\": \"+44 7700 900123\"\n  },\n  \"remarks\": \"postman collection booking\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Confirm booking (simulated payment)",
+          "request": { "method": "PATCH", "url": "{{booking_url}}/api/bookings/{{bookingId}}/confirm" }
+        },
+        {
+          "name": "Get booking by PNR",
+          "request": { "method": "GET", "url": "{{booking_url}}/api/bookings/reference/{{pnr}}" }
+        },
+        {
+          "name": "Cancel booking",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{booking_url}}/api/bookings/{{bookingId}}/cancel",
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"cancelled via postman\"\n}" }
+          }
+        },
+        {
+          "name": "Get all bookings",
+          "request": { "method": "GET", "url": "{{booking_url}}/api/bookings" }
+        }
+      ]
+    },
+    {
+      "name": "Inventory & Reservations",
+      "item": [
+        {
+          "name": "1. Create aircraft",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('aircraftId', pm.response.json().id);",
+                  "pm.test('201 created', () => pm.response.to.have.status(201));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{inventory_url}}/api/aircraft",
+            "body": { "mode": "raw", "raw": "{\n  \"registrationNumber\": \"VT-SKB\",\n  \"manufacturer\": \"Airbus\",\n  \"model\": \"A320neo\"\n}" }
+          }
+        },
+        {
+          "name": "2. Create seat map",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{inventory_url}}/api/aircraft/{{aircraftId}}/seat-map",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"seats\": [\n    { \"seatNumber\": \"1A\", \"rowNumber\": 1, \"seatType\": \"BUSINESS\", \"position\": \"WINDOW\" },\n    { \"seatNumber\": \"1C\", \"rowNumber\": 1, \"seatType\": \"BUSINESS\", \"position\": \"AISLE\" },\n    { \"seatNumber\": \"12A\", \"rowNumber\": 12, \"seatType\": \"ECONOMY\", \"position\": \"WINDOW\", \"exitRow\": true },\n    { \"seatNumber\": \"12B\", \"rowNumber\": 12, \"seatType\": \"ECONOMY\", \"position\": \"MIDDLE\" },\n    { \"seatNumber\": \"12C\", \"rowNumber\": 12, \"seatType\": \"ECONOMY\", \"position\": \"AISLE\" }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "3. Get seat map",
+          "request": { "method": "GET", "url": "{{inventory_url}}/api/aircraft/{{aircraftId}}/seat-map" }
+        },
+        {
+          "name": "4. Create flight inventory",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{inventory_url}}/api/inventory",
+            "body": { "mode": "raw", "raw": "{\n  \"flightId\": {{flightId}},\n  \"aircraftId\": {{aircraftId}}\n}" }
+          }
+        },
+        {
+          "name": "5. Hold seat",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{inventory_url}}/api/inventory/hold",
+            "body": { "mode": "raw", "raw": "{\n  \"flightId\": {{flightId}},\n  \"seatNumber\": \"12A\",\n  \"bookingId\": {{bookingId}}\n}" }
+          }
+        },
+        {
+          "name": "6. Reserve seat (confirms the hold)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{inventory_url}}/api/reservations",
+            "body": { "mode": "raw", "raw": "{\n  \"flightId\": {{flightId}},\n  \"seatNumber\": \"12A\",\n  \"bookingId\": {{bookingId}}\n}" }
+          }
+        },
+        {
+          "name": "7. Inventory counts for flight",
+          "request": { "method": "GET", "url": "{{inventory_url}}/api/inventory/flight/{{flightId}}" }
+        },
+        {
+          "name": "8. Inventory history for flight",
+          "request": { "method": "GET", "url": "{{inventory_url}}/api/inventory/flight/{{flightId}}/history" }
+        },
+        {
+          "name": "9. Cancel reservation",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{inventory_url}}/api/reservations/cancel",
+            "body": { "mode": "raw", "raw": "{\n  \"flightId\": {{flightId}},\n  \"seatNumber\": \"12A\",\n  \"bookingId\": {{bookingId}},\n  \"reason\": \"postman test\"\n}" }
+          }
+        },
+        {
+          "name": "Release hold (alternative to reserve)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{inventory_url}}/api/inventory/release",
+            "body": { "mode": "raw", "raw": "{\n  \"flightId\": {{flightId}},\n  \"seatNumber\": \"12A\",\n  \"bookingId\": {{bookingId}},\n  \"reason\": \"released via postman\"\n}" }
+          }
+        },
+        {
+          "name": "Search inventories",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{inventory_url}}/api/inventory/search",
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"OPEN\",\n  \"minAvailableSeats\": 1\n}" }
+          }
+        },
+        {
+          "name": "Reservations by booking",
+          "request": { "method": "GET", "url": "{{inventory_url}}/api/reservations/booking/{{bookingId}}" }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{auth_url}}/api/auth/register",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"praveen.somireddy@gmail.com\",\n  \"password\": \"ChangeMe123!\",\n  \"firstName\": \"Praveen\",\n  \"lastName\": \"Somireddy\"\n}" }
+          }
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{auth_url}}/api/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"praveen.somireddy@gmail.com\",\n  \"password\": \"ChangeMe123!\"\n}" }
+          }
+        }
+      ]
+    }
+  ]
+}
