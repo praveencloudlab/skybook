@@ -1,0 +1,10 @@
+       table       | rows 
+-------------------+------
+ aircraft          |    0
+ aircraft_seats    |    0
+ flight_inventory  |    0
+ inventory_history |    0
+ seat_holds        |    0
+ seat_reservations |    0
+(6 rows)
+

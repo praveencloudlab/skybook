@@ -58,6 +58,25 @@ public class BookingEventProducer {
                 .contactName(booking.contact().contactName())
                 .subject(subject)
                 .message(message)
+                // Structured details for notification-service's HTML template.
+                .bookingStatus(booking.bookingStatus() != null ? booking.bookingStatus().name() : null)
+                .flightId(booking.flightId())
+                .bookingDate(booking.bookingDate() != null
+                        ? booking.bookingDate().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+                        : null)
+                .passengers(booking.passengers() == null ? null : booking.passengers().stream()
+                        .map(p -> com.skybook.praveen.common.event.BookingEventPassenger.builder()
+                                .name((p.firstName() + " " + p.lastName()).trim())
+                                .seatNumber(p.seatNumber())
+                                .travelClass(p.travelClass() != null ? p.travelClass().name() : null)
+                                .fareType(p.fareType() != null ? p.fareType().name() : null)
+                                .fare(p.fare())
+                                .build())
+                        .toList())
+                .totalFare(booking.totalFare())
+                .currency(booking.payment() != null ? booking.payment().currency() : null)
+                .paymentStatus(booking.payment() != null && booking.payment().paymentStatus() != null
+                        ? booking.payment().paymentStatus().name() : null)
                 .build();
 
         kafkaTemplate.send(KafkaTopics.BOOKING_EVENTS, event);

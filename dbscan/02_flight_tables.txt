@@ -1,0 +1,7 @@
+             table              | rows 
+--------------------------------+------
+ flight_schedule_operating_days |    3
+ flight_schedules               |    1
+ flights                        |   43
+(3 rows)
+
