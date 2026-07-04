@@ -58,7 +58,9 @@ public class BookingEventProducer {
                 .contactName(booking.contact().contactName())
                 .subject(subject)
                 .message(message)
-                // Structured details for notification-service's HTML template.
+                // Structured details for notification-service's HTML template
+                // and payment-service's consumer.
+                .bookingId(booking.id())
                 .bookingStatus(booking.bookingStatus() != null ? booking.bookingStatus().name() : null)
                 .flightId(booking.flightId())
                 .bookingDate(booking.bookingDate() != null

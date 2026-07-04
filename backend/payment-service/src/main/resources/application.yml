@@ -1,0 +1,58 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: payment-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/skybook_payment
+    username: postgres
+    password: postgres
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+    consumer:
+      group-id: payment-service
+      auto-offset-reset: earliest
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+springdoc:
+  api-docs:
+    path: /api-docs
+
+  swagger-ui:
+    path: /swagger-ui.html
+
+  packages-to-scan: com.skybook.praveen.paymentservice.controller
+
+skybook:
+  kafka:
+    topics:
+      booking-events: skybook.booking.events
+
+payment:
+  # ISO-4217 codes accepted by CurrencyValidator.
+  supported-currencies: USD,GBP,EUR,INR
+  refund:
+    # Cancellation fee withheld from SAVER fares (design doc section 6).
+    saver-fee-percent: 30
+  gateway:
+    # v1: SimulatedPaymentGateway (amounts ending .13 decline authorization,
+    # .31 fail capture). Future: stripe/adyen selection.
+    simulated: true
