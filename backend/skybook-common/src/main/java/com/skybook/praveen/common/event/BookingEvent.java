@@ -52,6 +52,9 @@ public class BookingEvent {
     // them still deserialize and fall back to the plain message above)
     // -----------------------------------------------------------------
 
+    /** Numeric booking id - correlation key for payment-service (unique per payment) */
+    private Long bookingId;
+
     /** Booking status after this event, e.g. "CONFIRMED" */
     private String bookingStatus;
 
