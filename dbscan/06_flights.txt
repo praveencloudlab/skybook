@@ -1,0 +1,47 @@
+ id | flight_number | origin_airport_code | destination_airport_code |   departure_time    |  status   
+----+---------------+---------------------+--------------------------+---------------------+-----------
+  1 | BA178         | LHR                 | JFK                      | 2026-07-01 10:15:00 | SCHEDULED
+  2 | BA117         | LHR                 | BOM                      | 2026-07-01 21:40:00 | SCHEDULED
+  3 | BA035         | LHR                 | HKG                      | 2026-07-02 11:25:00 | SCHEDULED
+  4 | BA075         | LHR                 | JNB                      | 2026-07-02 19:30:00 | SCHEDULED
+  5 | EK001         | LHR                 | DXB                      | 2026-07-03 08:25:00 | SCHEDULED
+  6 | EK007         | MAN                 | DXB                      | 2026-07-03 20:55:00 | SCHEDULED
+  7 | EK030         | BHX                 | DXB                      | 2026-07-04 09:35:00 | SCHEDULED
+  8 | QR013         | LHR                 | DOH                      | 2026-07-04 20:35:00 | SCHEDULED
+  9 | QR003         | EDI                 | DOH                      | 2026-07-05 20:05:00 | SCHEDULED
+ 10 | AI131         | LHR                 | DEL                      | 2026-07-05 14:25:00 | SCHEDULED
+ 11 | AI117         | LHR                 | BOM                      | 2026-07-06 14:35:00 | SCHEDULED
+ 12 | AI173         | GLA                 | DEL                      | 2026-07-07 15:55:00 | SCHEDULED
+ 13 | LH900         | LHR                 | FRA                      | 2026-07-07 07:10:00 | SCHEDULED
+ 14 | LH908         | MAN                 | FRA                      | 2026-07-08 06:50:00 | SCHEDULED
+ 15 | SQ322         | LHR                 | SIN                      | 2026-07-08 21:25:00 | SCHEDULED
+ 16 | SQ326         | MAN                 | SIN                      | 2026-07-09 13:10:00 | SCHEDULED
+ 17 | AF1380        | LHR                 | CDG                      | 2026-07-09 07:30:00 | SCHEDULED
+ 18 | AF1680        | EDI                 | CDG                      | 2026-07-10 08:15:00 | SCHEDULED
+ 19 | VS300         | LHR                 | JFK                      | 2026-07-10 11:10:00 | SCHEDULED
+ 20 | VS103         | MAN                 | ATL                      | 2026-07-11 11:55:00 | SCHEDULED
+ 21 | EY017         | LHR                 | AUH                      | 2026-07-11 21:50:00 | SCHEDULED
+ 22 | EY012         | MAN                 | AUH                      | 2026-07-12 20:35:00 | SCHEDULED
+ 23 | TK1980        | LHR                 | IST                      | 2026-07-12 07:55:00 | SCHEDULED
+ 24 | TK1984        | EDI                 | IST                      | 2026-07-13 09:20:00 | SCHEDULED
+ 25 | CX238         | LHR                 | HKG                      | 2026-07-13 21:10:00 | SCHEDULED
+ 26 | QF002         | LHR                 | SYD                      | 2026-07-14 21:20:00 | SCHEDULED
+ 27 | AI121         | BHX                 | DEL                      | 2026-07-15 16:35:00 | SCHEDULED
+ 28 | BA257         | LHR                 | NBO                      | 2026-07-16 20:35:00 | SCHEDULED
+ 29 | EK009         | GLA                 | DXB                      | 2026-07-16 21:15:00 | SCHEDULED
+ 30 | QR017         | LHR                 | DOH                      | 2026-07-17 13:05:00 | SCHEDULED
+ 31 | BA178         | LHR                 | JFK                      | 2026-07-03 10:15:00 | SCHEDULED
+ 32 | BA178         | LHR                 | JFK                      | 2026-07-06 10:15:00 | SCHEDULED
+ 33 | BA178         | LHR                 | JFK                      | 2026-07-08 10:15:00 | SCHEDULED
+ 34 | BA178         | LHR                 | JFK                      | 2026-07-10 10:15:00 | SCHEDULED
+ 35 | BA178         | LHR                 | JFK                      | 2026-07-13 10:15:00 | SCHEDULED
+ 36 | BA178         | LHR                 | JFK                      | 2026-07-15 10:15:00 | SCHEDULED
+ 37 | BA178         | LHR                 | JFK                      | 2026-07-17 10:15:00 | SCHEDULED
+ 38 | BA178         | LHR                 | JFK                      | 2026-07-20 10:15:00 | SCHEDULED
+ 39 | BA178         | LHR                 | JFK                      | 2026-07-22 10:15:00 | SCHEDULED
+ 40 | BA178         | LHR                 | JFK                      | 2026-07-24 10:15:00 | SCHEDULED
+ 41 | BA178         | LHR                 | JFK                      | 2026-07-27 10:15:00 | SCHEDULED
+ 42 | BA178         | LHR                 | JFK                      | 2026-07-29 10:15:00 | SCHEDULED
+ 43 | BA178         | LHR                 | JFK                      | 2026-07-31 10:15:00 | SCHEDULED
+(43 rows)
+

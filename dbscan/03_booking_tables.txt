@@ -1,0 +1,10 @@
+       table        | rows 
+--------------------+------
+ booking_contacts   |    0
+ booking_history    |    0
+ booking_passengers |    0
+ booking_payments   |    0
+ bookings           |    0
+ passengers         |    0
+(6 rows)
+

@@ -1,0 +1,14 @@
+                                                                         List of databases
+       Name        |  Owner   | Encoding | Locale Provider |           Collate           |            Ctype            | Locale | ICU Rules |   Access privileges   
+-------------------+----------+----------+-----------------+-----------------------------+-----------------------------+--------+-----------+-----------------------
+ postgres          | postgres | UTF8     | libc            | English_United Kingdom.1252 | English_United Kingdom.1252 |        |           | 
+ skybook_auth      | postgres | UTF8     | libc            | English_United Kingdom.1252 | English_United Kingdom.1252 |        |           | 
+ skybook_booking   | postgres | UTF8     | libc            | English_United Kingdom.1252 | English_United Kingdom.1252 |        |           | 
+ skybook_flight    | postgres | UTF8     | libc            | English_United Kingdom.1252 | English_United Kingdom.1252 |        |           | 
+ skybook_inventory | postgres | UTF8     | libc            | English_United Kingdom.1252 | English_United Kingdom.1252 |        |           | 
+ template0         | postgres | UTF8     | libc            | English_United Kingdom.1252 | English_United Kingdom.1252 |        |           | =c/postgres          +
+                   |          |          |                 |                             |                             |        |           | postgres=CTc/postgres
+ template1         | postgres | UTF8     | libc            | English_United Kingdom.1252 | English_United Kingdom.1252 |        |           | =c/postgres          +
+                   |          |          |                 |                             |                             |        |           | postgres=CTc/postgres
+(7 rows)
+
