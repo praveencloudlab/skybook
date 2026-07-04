@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Inventory Service — Unit &amp; Integration Test Report</title>
+<style>
+  :root {
+    --pass: #1a7f37;
+    --pass-bg: #dafbe1;
+    --ink: #1f2328;
+    --muted: #656d76;
+    --border: #d0d7de;
+    --bg: #ffffff;
+    --panel: #f6f8fa;
+    --accent: #0969da;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    margin: 0;
+    padding: 32px 24px 64px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: var(--panel);
+    text-align: center;
+  }
+  .card .num { font-size: 22px; font-weight: 700; }
+  .card .label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .card.pass .num { color: var(--pass); }
+  .meta {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    background: var(--panel);
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+  .meta span { color: var(--ink); font-weight: 600; }
+  .note {
+    border: 1px solid #f6c343;
+    background: #fff8e6;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 12.5px;
+    color: #7a5b00;
+    margin-bottom: 32px;
+  }
+  .toc {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    background: var(--panel);
+    margin-bottom: 32px;
+    font-size: 13px;
+  }
+  .toc h2 { font-size: 13px; margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .toc ul { columns: 2; margin: 0; padding-left: 18px; }
+  .toc li { margin-bottom: 4px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .section-header { font-size: 17px; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--ink); }
+  .group {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .group-header h2 { font-size: 15px; margin: 0; }
+  .group-header .count { font-size: 12px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 10px 16px; font-size: 13.5px; border-top: 1px solid var(--border); }
+  tr:first-child td { border-top: none; }
+  td.name { width: 62%; }
+  td.desc { color: var(--muted); font-size: 12.5px; }
+  td.time { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; width: 15%; }
+  td.status { width: 10%; text-align: right; }
+  .badge {
+    display: inline-block;
+    background: var(--pass-bg);
+    color: var(--pass);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 12px;
+  }
+  .badge::before { content: "✓ "; }
+  footer {
+    margin-top: 40px;
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  footer code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Inventory Service — Unit &amp; Integration Test Report</h1>
+  <div class="subtitle">21 test classes · backend/inventory-service · <code>mvn test -pl inventory-service -am</code> · Sprint 4, feature/inventory-management</div>
+
+  <div class="summary">
+    <div class="card pass"><div class="num">181</div><div class="label">Total tests</div></div>
+    <div class="card pass"><div class="num">181</div><div class="label">Passed</div></div>
+    <div class="card"><div class="num">0</div><div class="label">Failed</div></div>
+    <div class="card"><div class="num">0</div><div class="label">Skipped</div></div>
+    <div class="card"><div class="num">16.14s</div><div class="label">Total time</div></div>
+  </div>
+
+  <div class="meta">
+    Run: <span>mvn test -pl inventory-service -am</span> ·
+    Result: <span>BUILD SUCCESS</span> ·
+    Finished: <span>2026-07-04 01:49</span> ·
+    Java <span>21</span> · Spring Boot <span>3.5.16</span> · JUnit 5 · Mockito · AssertJ · Testcontainers (PostgreSQL 16)
+  </div>
+
+  <div class="note">
+    Every number on this page is read directly from the <code>target/surefire-reports/TEST-*.xml</code> files of the final green run; nothing is estimated. The JPA classes run against a real PostgreSQL 16 in Docker (shared singleton Testcontainer) and are skipped automatically when Docker is absent (<code>@Testcontainers(disabledWithoutDocker&nbsp;=&nbsp;true)</code>). <code>InventoryServiceApplication</code> has no context-load smoke test yet — noted in INVENTORY_SERVICE_MODULE.md §17.
+  </div>
+
+  <div class="toc">
+    <h2>Test classes</h2>
+    <ul>
+<li><a href="#InventoryStateMachineTest">InventoryStateMachineTest</a> — 13</li>
+<li><a href="#SeatAvailabilityCheckerTest">SeatAvailabilityCheckerTest</a> — 8</li>
+<li><a href="#SeatAllocationValidatorTest">SeatAllocationValidatorTest</a> — 7</li>
+<li><a href="#SeatHoldExpiryCalculatorTest">SeatHoldExpiryCalculatorTest</a> — 5</li>
+<li><a href="#SeatMapGeneratorTest">SeatMapGeneratorTest</a> — 6</li>
+<li><a href="#AircraftServiceImplTest">AircraftServiceImplTest</a> — 6</li>
+<li><a href="#AircraftSeatServiceImplTest">AircraftSeatServiceImplTest</a> — 6</li>
+<li><a href="#InventoryServiceImplTest">InventoryServiceImplTest</a> — 19</li>
+<li><a href="#SeatReservationServiceImplTest">SeatReservationServiceImplTest</a> — 13</li>
+<li><a href="#AircraftJpaTest">AircraftJpaTest</a> — 9</li>
+<li><a href="#AircraftSeatJpaTest">AircraftSeatJpaTest</a> — 11</li>
+<li><a href="#FlightInventoryJpaTest">FlightInventoryJpaTest</a> — 11</li>
+<li><a href="#SeatHoldAndReservationJpaTest">SeatHoldAndReservationJpaTest</a> — 14</li>
+<li><a href="#InventoryMappersTest">InventoryMappersTest</a> — 10</li>
+<li><a href="#InventoryFacadeTest">InventoryFacadeTest</a> — 8</li>
+<li><a href="#AircraftControllerTest">AircraftControllerTest</a> — 6</li>
+<li><a href="#AircraftSeatControllerTest">AircraftSeatControllerTest</a> — 6</li>
+<li><a href="#FlightInventoryControllerTest">FlightInventoryControllerTest</a> — 10</li>
+<li><a href="#SeatReservationControllerTest">SeatReservationControllerTest</a> — 6</li>
+<li><a href="#InventoryEventProducerTest">InventoryEventProducerTest</a> — 5</li>
+<li><a href="#SeatHoldExpiryJobTest">SeatHoldExpiryJobTest</a> — 2</li>
+    </ul>
+  </div>
+
+<h2 class="section-header" id="domain">Domain layer</h2>
+<div class="group" id="InventoryStateMachineTest"><div class="group-header"><h2>InventoryStateMachineTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— pure domain, no mocks — golden transition tables</span></h2><span class="count">13 tests · 0.25s</span></div><table>
+<tr><td class="name">Record history sets changed at and appends</td><td class="time">215 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Inventory Transitions</td></tr>
+<tr><td class="name">Sold out records history without seat or booking</td><td class="time">7 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Matches the full golden transition table</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Hold Transitions</td></tr>
+<tr><td class="name">Matches the full golden transition table</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Inventory Transitions</td></tr>
+<tr><td class="name">Reopen from closed records reopened history</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Open to open throws</td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Reservation Transitions</td></tr>
+<tr><td class="name">Reserved can only go to cancelled</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancel sets cancelled at and records history</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancelling twice throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Hold Transitions</td></tr>
+<tr><td class="name">Transition from terminal state throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Release records hold released history</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Expiry records hold expired history</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Confirmation records seat reserved history</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="SeatAvailabilityCheckerTest"><div class="group-header"><h2>SeatAvailabilityCheckerTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— pure domain, no mocks</span></h2><span class="count">8 tests · 0.00s</span></div><table>
+<tr><td class="name">Seat is available when every condition holds</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Active hold blocks availability</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Inventory on non active aircraft is not open</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Only active seats are usable</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Open inventory on active aircraft is open</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Zero available seats blocks availability</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Closed or sold out inventory is not open</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Active reservation blocks availability</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="SeatAllocationValidatorTest"><div class="group-header"><h2>SeatAllocationValidatorTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— pure domain, no mocks</span></h2><span class="count">7 tests · 0.02s</span></div><table>
+<tr><td class="name">Exit row seat requires eligibility</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Open inventory on active aircraft passes</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Blocked and inoperative seats fail</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Closed inventory fails with inventory reason</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Non active aircraft fails with aircraft reason</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Active seat passes</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Non exit row seat needs no eligibility</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="SeatHoldExpiryCalculatorTest"><div class="group-header"><h2>SeatHoldExpiryCalculatorTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— pure domain, no mocks</span></h2><span class="count">5 tests · 0.00s</span></div><table>
+<tr><td class="name">Ttl is configurable</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Expired after the boundary</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Not expired before the boundary</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Expiry is held at plus configured TTL</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Not expired exactly at the boundary</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="SeatMapGeneratorTest"><div class="group-header"><h2>SeatMapGeneratorTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— pure domain, no mocks</span></h2><span class="count">6 tests · 0.03s</span></div><table>
+<tr><td class="name">Second batch appends and recounts total</td><td class="time">6 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Maps all request fields</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Null exit row defaults to false</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Collision with existing seat throws and adds nothing</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Generates seats attached to the aircraft</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Duplicate seat number within request throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<h2 class="section-header" id="service">Service layer</h2>
+<div class="group" id="AircraftServiceImplTest"><div class="group-header"><h2>AircraftServiceImplTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— Mockito — repositories mocked, domain real</span></h2><span class="count">6 tests · 0.00s</span></div><table>
+<tr><td class="name">Get by registration throws when missing</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Create with duplicate registration throws conflict</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Retired is terminal</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Get by id throws when missing</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Status update applies transition</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Create saves and returns response</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="AircraftSeatServiceImplTest"><div class="group-header"><h2>AircraftSeatServiceImplTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— Mockito — repositories mocked, real SeatMapGenerator</span></h2><span class="count">6 tests · 0.16s</span></div><table>
+<tr><td class="name">Seat map response carries aircraft context</td><td class="time">159 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Update seat status changes the seat</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Update unknown seat throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Create seat map is all or nothing</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Add seat to unknown aircraft throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Add seat attaches to aircraft and updates total</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="InventoryServiceImplTest"><div class="group-header"><h2>InventoryServiceImplTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— Mockito — repositories mocked, real state machine/validator/calculator</span></h2><span class="count">19 tests · 0.35s</span></div><table>
+<tr><td class="name">Close then reopen walks the state machine</td><td class="time">270 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Release And Expire</td></tr>
+<tr><td class="name">Release without active hold throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Release returns seat to pool</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Release by someone elses booking throws</td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Expire holds sweeps every overdue hold and restores counts</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Expire holds with nothing overdue returns zero</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Release reopens sold out inventory</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Hold Seat</td></tr>
+<tr><td class="name">Closed inventory rejects holds</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Already reserved seat throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Unknown flight throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Last seat flips inventory to sold out</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Already held seat throws</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Hold moves seat from available to held and sets expiry</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Create Inventory</td></tr>
+<tr><td class="name">Aircraft without seat map throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Non active aircraft throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Derives counts from active seats and records history</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Blocked exceeding sellable throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Unknown aircraft throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Duplicate flight throws conflict</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="SeatReservationServiceImplTest"><div class="group-header"><h2>SeatReservationServiceImplTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— Mockito — real InventoryServiceImpl wired over the same mocks</span></h2><span class="count">13 tests · 0.03s</span></div><table>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Cancel Reservation</td></tr>
+<tr><td class="name">Cancel without active reservation throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancel by someone elses booking throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancel returns seat to pool and reopens sold out</td><td class="time">11 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Reserve Direct</td></tr>
+<tr><td class="name">Closed inventory rejects direct reservation</td><td class="time">1 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Already reserved seat throws</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Direct reservation takes from available</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Last seat direct reservation flips sold out</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Reserve From Hold</td></tr>
+<tr><td class="name">Unknown hold id throws conflict</td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Expired hold throws gone</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Bookings own hold is resolved without hold id</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Hold for different seat throws conflict</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Someone elses hold blocks the seat</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Explicit hold id confirms the hold</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<h2 class="section-header" id="jpa">JPA integration (Testcontainers PostgreSQL)</h2>
+<div class="group" id="AircraftJpaTest"><div class="group-header"><h2>AircraftJpaTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— @DataJpaTest — Testcontainers PostgreSQL 16</span></h2><span class="count">9 tests · 5.20s</span></div><table>
+<tr><td class="name">Audit columns are populated</td><td class="time">170 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Find by registration number and exists</td><td class="time">185 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Find by status filters</td><td class="time">22 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Status is stored as string</td><td class="time">34 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Status defaults to active and total seats to zero</td><td class="time">8 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Registration number is unique</td><td class="time">23 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Version increments on update</td><td class="time">23 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Model is mandatory</td><td class="time">7 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Manufacturer is mandatory</td><td class="time">7 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="AircraftSeatJpaTest"><div class="group-header"><h2>AircraftSeatJpaTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— @DataJpaTest — Testcontainers PostgreSQL 16</span></h2><span class="count">11 tests · 0.49s</span></div><table>
+<tr><td class="name">Seat belongs to its aircraft</td><td class="time">37 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Deleting aircraft cascades to seats</td><td class="time">215 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Inoperative seat persists correctly</td><td class="time">23 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Enums are stored as strings not ordinals</td><td class="time">21 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Seat number is unique per aircraft</td><td class="time">23 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Find by aircraft id and seat number</td><td class="time">34 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Find and count by status</td><td class="time">26 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Same seat number allowed on different aircraft</td><td class="time">24 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Status defaults to active and exit row to false</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Removing seat from collection orphan removes it</td><td class="time">25 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Find by aircraft id orders by row then seat</td><td class="time">24 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="FlightInventoryJpaTest"><div class="group-header"><h2>FlightInventoryJpaTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— @DataJpaTest — Testcontainers PostgreSQL 16</span></h2><span class="count">11 tests · 0.30s</span></div><table>
+<tr><td class="name">Find by status and by aircraft id</td><td class="time">42 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">One inventory per flight id</td><td class="time">21 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">History persists via cascade and reads back in changed at order</td><td class="time">33 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Status is stored as string</td><td class="time">24 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Status defaults to open and counts default via pre persist</td><td class="time">19 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Flight id is mandatory</td><td class="time">20 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Find by flight id and exists</td><td class="time">29 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">History find by booking id</td><td class="time">31 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">History type is stored as string</td><td class="time">26 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Aircraft is mandatory</td><td class="time">19 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Version increments on count update</td><td class="time">20 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="SeatHoldAndReservationJpaTest"><div class="group-header"><h2>SeatHoldAndReservationJpaTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— @DataJpaTest — Testcontainers PostgreSQL 16</span></h2><span class="count">14 tests · 0.55s</span></div><table>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Reservations</td></tr>
+<tr><td class="name">Originating hold link persists</td><td class="time">56 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Status is stored as string</td><td class="time">28 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Holds</td></tr>
+<tr><td class="name">Status is stored as string</td><td class="time">29 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Reservations</td></tr>
+<tr><td class="name">Reservation links and defaults</td><td class="time">35 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Passenger is optional</td><td class="time">27 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Repository finders</td><td class="time">45 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Booking id is mandatory</td><td class="time">31 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Holds</td></tr>
+<tr><td class="name">Booking id is mandatory</td><td class="time">26 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Hold links to inventory and seat</td><td class="time">35 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Find by booking id and by status finders</td><td class="time">50 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Expires at is mandatory</td><td class="time">34 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Expiry sweep finder returns only overdue active holds</td><td class="time">43 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Terminal and active holds can coexist on the same seat</td><td class="time">37 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Status defaults to active and held at defaults to now</td><td class="time">31 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<h2 class="section-header" id="mapper">Mappers</h2>
+<div class="group" id="InventoryMappersTest"><div class="group-header"><h2>InventoryMappersTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— static mappers, plain objects</span></h2><span class="count">10 tests · 0.03s</span></div><table>
+<tr><td class="name">Seat hold maps expiry and flattens seat and flight</td><td class="time">2 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Aircraft seat maps all fields</td><td class="time">1 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Flight inventory maps counts status and aircraft context</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Inventory History Mapping</td></tr>
+<tr><td class="name">Maps seat level entry</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Inventory level entry maps null seat</td><td class="time">7 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Seat Reservation Mapping</td></tr>
+<tr><td class="name">Maps booking passenger seat and status</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Null originating hold maps to null id</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Aircraft Mapping</td></tr>
+<tr><td class="name">Empty seat list maps to empty list not null</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Maps all fields</td><td class="time">11 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Seat map response carries ordered seats</td><td class="time">1 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<h2 class="section-header" id="facade">Facade</h2>
+<div class="group" id="InventoryFacadeTest"><div class="group-header"><h2>InventoryFacadeTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— Mockito — client/services/producer mocked</span></h2><span class="count">8 tests · 0.22s</span></div><table>
+<tr><td class="name">Reserve delegates and publishes seat reserved</td><td class="time">175 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Hold delegates and publishes seat held</td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Missing flight stops before the service</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Failed hold publishes nothing</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Create validates flight then delegates then publishes</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancel delegates and publishes reservation cancelled</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Release delegates and publishes seat released</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancelled flight is rejected before the service</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<h2 class="section-header" id="controller">Controllers (@WebMvcTest)</h2>
+<div class="group" id="AircraftControllerTest"><div class="group-header"><h2>AircraftControllerTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— @WebMvcTest, AircraftService mocked</span></h2><span class="count">6 tests · 5.18s</span></div><table>
+<tr><td class="name">Missing aircraft returns404 with error contract</td><td class="time">290 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Status update returns200</td><td class="time">33 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Create returns201 with body</td><td class="time">267 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Duplicate registration returns409</td><td class="time">6 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Get by id returns200</td><td class="time">11 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Invalid body returns400</td><td class="time">33 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="AircraftSeatControllerTest"><div class="group-header"><h2>AircraftSeatControllerTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— @WebMvcTest, AircraftSeatService mocked</span></h2><span class="count">6 tests · 1.07s</span></div><table>
+<tr><td class="name">Get seat map returns200</td><td class="time">59 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Invalid seat number pattern returns400</td><td class="time">68 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Duplicate seat returns400</td><td class="time">18 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Empty seat map returns400</td><td class="time">98 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Add seat returns201</td><td class="time">17 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Seat map create returns201 with all seats</td><td class="time">48 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="FlightInventoryControllerTest"><div class="group-header"><h2>FlightInventoryControllerTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— @WebMvcTest, facade + service mocked</span></h2><span class="count">10 tests · 1.30s</span></div><table>
+<tr><td class="name">Unknown flight returns404 and flight service down returns502</td><td class="time">67 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Create returns201</td><td class="time">35 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Search returns200</td><td class="time">31 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Get by flight id returns200 and404 when missing</td><td class="time">17 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Duplicate inventory returns409</td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Held seat conflict returns409</td><td class="time">17 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Release returns200</td><td class="time">35 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Hold returns201</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Missing body fields return400</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Close and reopen return200</td><td class="time">50 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="SeatReservationControllerTest"><div class="group-header"><h2>SeatReservationControllerTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— @WebMvcTest, facade + service mocked</span></h2><span class="count">6 tests · 0.81s</span></div><table>
+<tr><td class="name">Cancel returns200 with cancelled status</td><td class="time">25 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Reserve returns201</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Missing booking id returns400</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Get by booking and by flight return200</td><td class="time">5 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Already reserved returns409</td><td class="time">11 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Expired hold returns410</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<h2 class="section-header" id="producer">Kafka producer</h2>
+<div class="group" id="InventoryEventProducerTest"><div class="group-header"><h2>InventoryEventProducerTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— Mockito — KafkaTemplate mocked, payload captured</span></h2><span class="count">5 tests · 0.15s</span></div><table>
+<tr><td class="name">Seat reserved and cancelled map to their types</td><td class="time">131 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Inventory created publishes to inventory topic without seat or booking</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Seat released carries correlation fields</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Seat held carries flight seat booking and expiry</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Reservation cancelled maps to its type</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<h2 class="section-header" id="scheduler">Scheduler</h2>
+<div class="group" id="SeatHoldExpiryJobTest"><div class="group-header"><h2>SeatHoldExpiryJobTest <span style="font-weight:400;color:var(--muted);font-size:12px;">— Mockito — delegates to InventoryService.expireHolds()</span></h2><span class="count">2 tests · 0.00s</span></div><table>
+<tr><td class="name">Delegates the sweep to the service</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Zero expired holds is ano op without errors</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+
+  <footer>
+    Generated from <code>backend/inventory-service/target/surefire-reports/</code> · Sprint 4 · 181 tests, 0 failures, 0 errors, 0 skipped ·
+    See <code>docs/INVENTORY_SERVICE_MODULE.md</code> for the full module documentation.
+  </footer>
+</div>
+</body>
+</html>
