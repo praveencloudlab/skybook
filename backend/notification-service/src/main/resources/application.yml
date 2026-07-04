@@ -36,3 +36,4 @@ skybook:
   kafka:
     topics:
       email-events: skybook.email.events
+      booking-events: skybook.booking.events
