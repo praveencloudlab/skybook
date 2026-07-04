@@ -14,7 +14,7 @@
 | **Port** | `8084` |
 | **Database** | `skybook_inventory` (PostgreSQL, `ddl-auto: update`) |
 | **Java / Spring Boot** | 21 / 3.5.16 (parent-managed) |
-| **Status** | Implemented — 83 unit tests green |
+| **Status** | Implemented — 181 tests green (unit + JPA integration + WebMvc) |
 
 ---
 
@@ -533,7 +533,9 @@ scheduler/  SeatHoldExpiryJob
 
 # 17. Test Suite
 
-**83 tests, 0 failures** (`mvn test -pl inventory-service -am`).
+**181 tests, 0 failures** (`mvn test -pl inventory-service -am` — Docker required for the JPA layer).
+
+## 17.1 Unit tests (83)
 
 | Class | Tests | Covers |
 |---|---|---|
@@ -549,7 +551,19 @@ scheduler/  SeatHoldExpiryJob
 
 **Testing philosophy:** repositories are the *only* mocks. Domain collaborators run real, and `SeatReservationServiceImplTest` wires a real `InventoryServiceImpl` over the same mocks — so the count invariant is exercised across the service boundary, not stubbed away.
 
-Not covered yet: controllers (thin), facade (thin), Kafka producer, Feign client, context-load smoke test, DB integration (Testcontainers ready in POM).
+## 17.2 Integration & slice tests (98)
+
+| Layer | Classes | Covers |
+|---|---|---|
+| JPA (`@DataJpaTest` + **Testcontainers PostgreSQL**) | `AircraftJpaTest`, `AircraftSeatJpaTest`, `FlightInventoryJpaTest`, `SeatHoldAndReservationJpaTest` (shared singleton container via `AbstractPostgresJpaTest`) | Real-PostgreSQL schema creation, unique constraints (registration, per-aircraft seat, per-flight inventory), not-null violations, `@PrePersist` defaults, enums stored as strings (native-query verified), cascade/orphanRemoval, `@Version` increments, auditing columns, every derived-query finder incl. the expiry sweep. Also *documents* that active+terminal holds coexist at DB level (service-layer rule, §13). |
+| Mappers | `InventoryMappersTest` | Full field mapping for all 6 mappers, null-hold/null-seat branches, empty-seat-list behavior. |
+| Facade | `InventoryFacadeTest` | Flight validated *before* the service, cancelled/missing flight stops orchestration, each seat op publishes its event, failed ops publish nothing. |
+| Controllers (`@WebMvcTest` + imported `SecurityConfig`) | 4 test classes | Status codes (201/200/400/404/409/410/502), bean-validation rejections, `ErrorResponse` contract fields. |
+| Producer / Scheduler | `InventoryEventProducerTest`, `SeatHoldExpiryJobTest` | Topic + payload per event type; job delegates to `expireHolds()`. |
+
+Test-design note: PostgreSQL aborts a transaction after the first constraint violation, so JPA tests assert exactly one violation per test method.
+
+Not covered yet: Feign client against a live flight-service, Kafka against a real broker, context-load smoke test.
 
 ---
 
@@ -601,4 +615,4 @@ Swagger UI at `http://localhost:8084/swagger-ui.html` covers everything above in
 
 ---
 
-*Sprint 4 — feature/inventory-management. 83 tests green. Ready for review/merge and Sprint 5 (booking ↔ inventory integration).*
+*Sprint 4 — feature/inventory-management. 181 tests green (unit + JPA integration + WebMvc). Ready for review/merge and Sprint 5 (booking ↔ inventory integration).*
