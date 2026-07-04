@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
  * Base for entity/repository integration tests: real PostgreSQL via
@@ -20,7 +21,13 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * JpaAuditingConfig is imported explicitly: @DataJpaTest doesn't pick up
  * regular @Configuration classes, and without @EnableJpaAuditing every
  * insert would fail on the non-null createdAt/updatedAt columns.
+ *
+ * disabledWithoutDocker: when Docker isn't running, every subclass is
+ * SKIPPED (not failed) - JUnit evaluates this condition before the class is
+ * instantiated, so the container in the static initializer is never started.
+ * The rest of the suite (unit + WebMvc tests) runs normally.
  */
+@Testcontainers(disabledWithoutDocker = true)
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import(JpaAuditingConfig.class)
