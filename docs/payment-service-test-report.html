@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Payment Service — Test Report</title>
+<style>
+  :root {
+    --pass: #1a7f37;
+    --pass-bg: #dafbe1;
+    --ink: #1f2328;
+    --muted: #656d76;
+    --border: #d0d7de;
+    --bg: #ffffff;
+    --panel: #f6f8fa;
+    --accent: #0969da;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    margin: 0;
+    padding: 32px 24px 64px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    background: var(--panel);
+    text-align: center;
+  }
+  .card .num { font-size: 22px; font-weight: 700; }
+  .card .label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .card.pass .num { color: var(--pass); }
+  .meta {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    background: var(--panel);
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+  .meta span { color: var(--ink); font-weight: 600; }
+  .note {
+    border: 1px solid #f6c343;
+    background: #fff8e6;
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 12.5px;
+    color: #7a5b00;
+    margin-bottom: 32px;
+  }
+  .toc {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    background: var(--panel);
+    margin-bottom: 32px;
+    font-size: 13px;
+  }
+  .toc h2 { font-size: 13px; margin: 0 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .toc ul { columns: 2; margin: 0; padding-left: 18px; }
+  .toc li { margin-bottom: 4px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .section-header { font-size: 17px; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--ink); }
+  .group {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .group-header h2 { font-size: 15px; margin: 0; }
+  .group-header .count { font-size: 12px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 10px 16px; font-size: 13.5px; border-top: 1px solid var(--border); }
+  tr:first-child td { border-top: none; }
+  td.name { width: 62%; }
+  td.desc { color: var(--muted); font-size: 12.5px; }
+  td.time { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; width: 15%; }
+  td.status { width: 10%; text-align: right; }
+  .badge {
+    display: inline-block;
+    background: var(--pass-bg);
+    color: var(--pass);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 2px 9px;
+    border-radius: 12px;
+  }
+  .badge::before { content: "✓ "; }
+  footer {
+    margin-top: 40px;
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
+  footer code { background: var(--panel); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body><div class="wrap">
+  <h1>Payment Service — Unit &amp; Integration Test Report</h1>
+  <div class="subtitle">18 test classes · backend/payment-service · <code>mvn test -pl payment-service -am</code> · Sprint 5, feature/payment-management</div>
+  <div class="summary">
+    <div class="card pass"><div class="num">111</div><div class="label">Total tests</div></div>
+    <div class="card pass"><div class="num">111</div><div class="label">Passed</div></div>
+    <div class="card"><div class="num">0</div><div class="label">Failed</div></div>
+    <div class="card"><div class="num">0</div><div class="label">Skipped</div></div>
+    <div class="card"><div class="num">24.83s</div><div class="label">Total time</div></div>
+  </div>
+  <div class="meta">
+    Result: <span>BUILD SUCCESS</span> · Java <span>21</span> · Spring Boot <span>3.5.16</span> · JUnit 5 · Mockito · AssertJ · Testcontainers (PostgreSQL 16, Apache Kafka 3.8)
+  </div>
+  <div class="note">
+    All numbers read directly from <code>target/surefire-reports/TEST-*.xml</code> of the final green run. JPA/integration classes run against real PostgreSQL and Kafka in Docker and skip automatically without it. The double-capture concurrency test's first run observed the <code>invoices.payment_id</code> unique constraint stopping the losing thread - the design doc section 3.1.1 DB-backstop argument, demonstrated live.
+  </div>
+  <div class="toc"><h2>Test classes</h2><ul>
+<li><a href="#PaymentStateMachineTest">PaymentStateMachineTest</a> - 6</li>
+<li><a href="#RefundCalculatorTest">RefundCalculatorTest</a> - 10</li>
+<li><a href="#PaymentValidatorTest">PaymentValidatorTest</a> - 7</li>
+<li><a href="#PaymentReferenceGeneratorTest">PaymentReferenceGeneratorTest</a> - 3</li>
+<li><a href="#CurrencyValidatorTest">CurrencyValidatorTest</a> - 4</li>
+<li><a href="#SimulatedPaymentGatewayTest">SimulatedPaymentGatewayTest</a> - 5</li>
+<li><a href="#PaymentServiceImplTest">PaymentServiceImplTest</a> - 17</li>
+<li><a href="#RefundServiceImplTest">RefundServiceImplTest</a> - 7</li>
+<li><a href="#InvoiceServiceImplTest">InvoiceServiceImplTest</a> - 2</li>
+<li><a href="#BookingEventConsumerTest">BookingEventConsumerTest</a> - 7</li>
+<li><a href="#PaymentFacadeTest">PaymentFacadeTest</a> - 6</li>
+<li><a href="#PaymentJpaTest">PaymentJpaTest</a> - 9</li>
+<li><a href="#PaymentLedgerJpaTest">PaymentLedgerJpaTest</a> - 8</li>
+<li><a href="#PaymentControllerTest">PaymentControllerTest</a> - 10</li>
+<li><a href="#RefundAndInvoiceControllerTest">RefundAndInvoiceControllerTest</a> - 4</li>
+<li><a href="#PaymentServiceApplicationTests">PaymentServiceApplicationTests</a> - 2</li>
+<li><a href="#PaymentApiKafkaIntegrationTest">PaymentApiKafkaIntegrationTest</a> - 2</li>
+<li><a href="#PaymentConcurrencyTest">PaymentConcurrencyTest</a> - 2</li>
+  </ul></div>
+<h2 class="section-header" id="domain">Domain layer</h2>
+<div class="group" id="PaymentStateMachineTest"><div class="group-header"><h2>PaymentStateMachineTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- pure domain - golden transition table incl. self-loop</span></h2><span class="count">6 tests · 0.02s</span></div><table>
+<tr><td class="name">Record history is usable for non transition events</td><td class="time">6 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Transition records history with full provenance</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Matches the full golden transition table</td><td class="time">11 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Invalid transition throws and records nothing</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Terminal states have no exits</td><td class="time">5 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Partially refunded self loop is legal</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="RefundCalculatorTest"><div class="group-header"><h2>RefundCalculatorTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- pure domain - fare-type rules, rounding, breakdown format</span></h2><span class="count">10 tests · 0.03s</span></div><table>
+<tr><td class="name">Saver withholds the configured fee</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Flexi and premium refund in full</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Fee rounds half up to two decimals</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Fee percent is configurable</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Mixed fare booking refunds each line by its own rule</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Serialize and parse round trip</td><td class="time">13 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Fare type matching is case insensitive</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Malformed breakdown throws</td><td class="time">3 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Serialize of empty list is null</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Null breakdown falls back to one fully refundable line</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="PaymentValidatorTest"><div class="group-header"><h2>PaymentValidatorTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- pure domain - guard clauses incl. refund cap invariant</span></h2><span class="count">7 tests · 0.01s</span></div><table>
+<tr><td class="name">Amount must be positive</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Refundable only from captured states</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Captured payments cannot be cancelled only refunded</td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Only implemented methods pass</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Refund cannot exceed remaining captured amount</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Capturable from authorized and failed capture only</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Authorizable from pending and failed authorization only</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="PaymentReferenceGeneratorTest"><div class="group-header"><h2>PaymentReferenceGeneratorTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- pure domain - PNR-philosophy references</span></h2><span class="count">3 tests · 0.16s</span></div><table>
+<tr><td class="name">Ambiguous characters never appear</td><td class="time">48 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">References follow the pnr philosophy format</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Collisions are rare across many generations</td><td class="time">99 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="CurrencyValidatorTest"><div class="group-header"><h2>CurrencyValidatorTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- pure domain - ISO-4217 whitelist</span></h2><span class="count">4 tests · 0.02s</span></div><table>
+<tr><td class="name">Unsupported currency is rejected with the whitelist in the message</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Supported currencies pass case insensitively</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Null currency is rejected</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Whitelist config tolerates whitespace</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="SimulatedPaymentGatewayTest"><div class="group-header"><h2>SimulatedPaymentGatewayTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- deterministic gateway - .13/.31 magic amounts</span></h2><span class="count">5 tests · 0.31s</span></div><table>
+<tr><td class="name">Amounts ending in point31 fail capture but authorize fine</td><td class="time">248 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Normal amounts authorize successfully</td><td class="time">6 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Void and refund always succeed</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Normal capture succeeds and keeps the gateway reference</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Amounts ending in point13 are declined</td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<h2 class="section-header" id="service">Service, consumer & facade</h2>
+<div class="group" id="PaymentServiceImplTest"><div class="group-header"><h2>PaymentServiceImplTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- Mockito - repositories mocked, domain real</span></h2><span class="count">17 tests · 0.41s</span></div><table>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Capture And Cancel</td></tr>
+<tr><td class="name">Begin cancel signals void only when authorized</td><td class="time">351 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancellation with void appends avoid ledger row</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Successful capture sets amounts and creates the invoice in the same call</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Failed capture leaves the authorization alive</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancellation without void writes no ledger row</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Authorize</td></tr>
+<tr><td class="name">Successful authorization transitions and appends ledger row</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Declined authorization records failure state and ledger row</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Retry after failure walks back through pending</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Begin authorize returns gateway inputs for pending payment</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Begin authorize rejects captured payment</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Create From Booking Event</td></tr>
+<tr><td class="name">Duplicate event is idempotent by booking id</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Builds the payment from the enriched event</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Event without booking id is rejected</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td colspan="3" style="background:var(--panel);font-size:12px;color:var(--muted);font-weight:600;padding:6px 16px;">Create</td></tr>
+<tr><td class="name">Unsupported currency and method are rejected</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Creates pending payment with serialized fare breakdown</td><td class="time">14 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Idempotency key replay returns the original without saving</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Duplicate booking is rejected</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="RefundServiceImplTest"><div class="group-header"><h2>RefundServiceImplTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- Mockito - real calculator + state machine</span></h2><span class="count">7 tests · 0.14s</span></div><table>
+<tr><td class="name">Partial refund leaves payment partially refunded</td><td class="time">110 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Failed gateway refund marks the refund failed and leaves the payment state</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Begin refund with subset lines is apartial refund</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Completed full refund terminates at refunded despite withheld fees</td><td class="time">17 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Begin refund rejects non captured payments</td><td class="time">2 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Begin refund computes fare rules and creates pending refund</td><td class="time">3 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Second partial refund that settles everything reaches refunded</td><td class="time">2 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="InvoiceServiceImplTest"><div class="group-header"><h2>InvoiceServiceImplTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- Mockito - sequence generator mocked</span></h2><span class="count">2 tests · 0.22s</span></div><table>
+<tr><td class="name">Missing invoice explains that invoices exist only after capture</td><td class="time">223 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Create snapshots the captured payment with v1 money breakdown</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="BookingEventConsumerTest"><div class="group-header"><h2>BookingEventConsumerTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- Mockito - CREATED/CANCELLED routing</span></h2><span class="count">7 tests · 1.61s</span></div><table>
+<tr><td class="name">Cancelled booking with captured payment triggers afull refund</td><td class="time">1564 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Event without booking id is skipped entirely</td><td class="time">5 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Created event creates the payment</td><td class="time">10 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancelled booking with uncaptured payment cancels it</td><td class="time">6 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Confirmed and other events are ignored</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancelled booking without any payment is ano op</td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancelled booking with terminal payment is ano op</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="PaymentFacadeTest"><div class="group-header"><h2>PaymentFacadeTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- Mockito - decline-then-throw, event publishing</span></h2><span class="count">6 tests · 0.16s</span></div><table>
+<tr><td class="name">Refund success publishes refund completed</td><td class="time">127 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Authorize runs begin gateway record in order</td><td class="time">21 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Declined authorization is recorded published then thrown422</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancel of pending payment skips the gateway entirely</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancel of authorized payment voids at the gateway</td><td class="time">12 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Capture success publishes payment succeeded with the invoice number</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<h2 class="section-header" id="jpa">JPA integration (Testcontainers PostgreSQL)</h2>
+<div class="group" id="PaymentJpaTest"><div class="group-header"><h2>PaymentJpaTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- @DataJpaTest - Testcontainers PostgreSQL 16</span></h2><span class="count">9 tests · 2.24s</span></div><table>
+<tr><td class="name">One booking one payment</td><td class="time">39 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Null idempotency keys may coexist</td><td class="time">21 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Pre persist defaults status method and amounts</td><td class="time">14 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Status and method are stored as strings</td><td class="time">49 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Payment reference is unique</td><td class="time">23 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Version increments on update</td><td class="time">33 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Idempotency key is unique when present</td><td class="time">20 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">History persists via cascade with provenance in changed at order</td><td class="time">38 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Finders by reference booking and idempotency key</td><td class="time">32 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="PaymentLedgerJpaTest"><div class="group-header"><h2>PaymentLedgerJpaTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- @DataJpaTest - ledger/refund/invoice invariants</span></h2><span class="count">8 tests · 0.23s</span></div><table>
+<tr><td class="name">Failed interactions are first class ledger rows</td><td class="time">35 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Ledger reads back in occurred at order</td><td class="time">28 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Transaction reference is unique</td><td class="time">26 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Refund defaults to pending with zero fee</td><td class="time">24 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">One payment gets exactly one invoice</td><td class="time">25 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Invoice number is unique</td><td class="time">28 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Invoice pre persist defaults tax discount and issued at</td><td class="time">32 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Refund status is stored as string</td><td class="time">26 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<h2 class="section-header" id="controller">Controllers (@WebMvcTest)</h2>
+<div class="group" id="PaymentControllerTest"><div class="group-header"><h2>PaymentControllerTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- @WebMvcTest - incl. 422 and Idempotency-Key replay</span></h2><span class="count">10 tests · 4.55s</span></div><table>
+<tr><td class="name">Authorize returns200</td><td class="time">239 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Idempotency key replay returns200 with the original</td><td class="time">158 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Capture in wrong state returns409</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Lookups return200 and404</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Create returns201</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Refund without abody works</td><td class="time">31 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Missing booking id returns400</td><td class="time">12 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Duplicate booking returns409</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Gateway decline returns422</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Cancel returns200</td><td class="time">11 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="RefundAndInvoiceControllerTest"><div class="group-header"><h2>RefundAndInvoiceControllerTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- @WebMvcTest - refunds + invoices</span></h2><span class="count">4 tests · 0.57s</span></div><table>
+<tr><td class="name">Uncaptured payment has no invoice404 with explanation</td><td class="time">15 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Unknown refund returns404</td><td class="time">16 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Invoice by payment id returns200</td><td class="time">11 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">List and get refunds</td><td class="time">21 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<h2 class="section-header" id="integration">Full-stack & concurrency (PostgreSQL + Kafka)</h2>
+<div class="group" id="PaymentServiceApplicationTests"><div class="group-header"><h2>PaymentServiceApplicationTests <span style="font-weight:400;color:var(--muted);font-size:12px;">- full context - PostgreSQL + Kafka</span></h2><span class="count">2 tests · 0.02s</span></div><table>
+<tr><td class="name">Key beans are wired</td><td class="time">8 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Context loads</td><td class="time">0 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="PaymentApiKafkaIntegrationTest"><div class="group-header"><h2>PaymentApiKafkaIntegrationTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- booking event -&gt; consumer -&gt; lifecycle -&gt; payment events</span></h2><span class="count">2 tests · 13.59s</span></div><table>
+<tr><td class="name">Gateway decline surfaces as422 and payment failed event</td><td class="time">1628 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Booking event drives the full payment lifecycle</td><td class="time">1116 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+<div class="group" id="PaymentConcurrencyTest"><div class="group-header"><h2>PaymentConcurrencyTest <span style="font-weight:400;color:var(--muted);font-size:12px;">- double capture / racing refunds - real transactions</span></h2><span class="count">2 tests · 0.53s</span></div><table>
+<tr><td class="name">Concurrent full refunds cannot exceed the captured amount</td><td class="time">176 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+<tr><td class="name">Double capture mints exactly one invoice</td><td class="time">340 ms</td><td class="status"><span class="badge">Pass</span></td></tr>
+</table></div>
+  <footer>Generated from <code>backend/payment-service/target/surefire-reports/</code> · Sprint 5 · 111 tests, 0 failures · See <code>docs/PAYMENT_SERVICE_MODULE.md</code>.</footer>
+</div></body></html>
