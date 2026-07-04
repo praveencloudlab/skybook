@@ -22,8 +22,6 @@ spring:
     port: 587
     username: ${MAIL_USERNAME}
     password: ${MAIL_PASSWORD}
-    #username: pravs.sr@gmail.com
-    #password: cdip vbxn mtse fkme
     properties:
       mail:
         smtp:
