@@ -1,0 +1,1348 @@
+﻿{
+    "openapi":  "3.1.0",
+    "info":  {
+                 "title":  "OpenAPI definition",
+                 "version":  "v0"
+             },
+    "servers":  [
+                    {
+                        "url":  "http://localhost:8084",
+                        "description":  "Generated server url"
+                    }
+                ],
+    "paths":  {
+                  "/api/reservations":  {
+                                            "post":  {
+                                                         "tags":  [
+                                                                      "seat-reservation-controller"
+                                                                  ],
+                                                         "operationId":  "reserveSeat",
+                                                         "requestBody":  {
+                                                                             "content":  {
+                                                                                             "application/json":  {
+                                                                                                                      "schema":  {
+                                                                                                                                     "$ref":  "#/components/schemas/ReserveSeatRequest"
+                                                                                                                                 }
+                                                                                                                  }
+                                                                                         },
+                                                                             "required":  true
+                                                                         },
+                                                         "responses":  {
+                                                                           "200":  {
+                                                                                       "description":  "OK",
+                                                                                       "content":  {
+                                                                                                       "*/*":  {
+                                                                                                                   "schema":  {
+                                                                                                                                  "$ref":  "#/components/schemas/SeatReservationResponse"
+                                                                                                                              }
+                                                                                                               }
+                                                                                                   }
+                                                                                   }
+                                                                       }
+                                                     }
+                                        },
+                  "/api/reservations/cancel":  {
+                                                   "post":  {
+                                                                "tags":  [
+                                                                             "seat-reservation-controller"
+                                                                         ],
+                                                                "operationId":  "cancelReservation",
+                                                                "requestBody":  {
+                                                                                    "content":  {
+                                                                                                    "application/json":  {
+                                                                                                                             "schema":  {
+                                                                                                                                            "$ref":  "#/components/schemas/ReleaseSeatRequest"
+                                                                                                                                        }
+                                                                                                                         }
+                                                                                                },
+                                                                                    "required":  true
+                                                                                },
+                                                                "responses":  {
+                                                                                  "200":  {
+                                                                                              "description":  "OK",
+                                                                                              "content":  {
+                                                                                                              "*/*":  {
+                                                                                                                          "schema":  {
+                                                                                                                                         "$ref":  "#/components/schemas/SeatReservationResponse"
+                                                                                                                                     }
+                                                                                                                      }
+                                                                                                          }
+                                                                                          }
+                                                                              }
+                                                            }
+                                               },
+                  "/api/inventory":  {
+                                         "post":  {
+                                                      "tags":  [
+                                                                   "flight-inventory-controller"
+                                                               ],
+                                                      "operationId":  "createInventory",
+                                                      "requestBody":  {
+                                                                          "content":  {
+                                                                                          "application/json":  {
+                                                                                                                   "schema":  {
+                                                                                                                                  "$ref":  "#/components/schemas/CreateFlightInventoryRequest"
+                                                                                                                              }
+                                                                                                               }
+                                                                                      },
+                                                                          "required":  true
+                                                                      },
+                                                      "responses":  {
+                                                                        "200":  {
+                                                                                    "description":  "OK",
+                                                                                    "content":  {
+                                                                                                    "*/*":  {
+                                                                                                                "schema":  {
+                                                                                                                               "$ref":  "#/components/schemas/FlightInventoryResponse"
+                                                                                                                           }
+                                                                                                            }
+                                                                                                }
+                                                                                }
+                                                                    }
+                                                  }
+                                     },
+                  "/api/inventory/search":  {
+                                                "post":  {
+                                                             "tags":  [
+                                                                          "flight-inventory-controller"
+                                                                      ],
+                                                             "operationId":  "search",
+                                                             "requestBody":  {
+                                                                                 "content":  {
+                                                                                                 "application/json":  {
+                                                                                                                          "schema":  {
+                                                                                                                                         "$ref":  "#/components/schemas/InventorySearchRequest"
+                                                                                                                                     }
+                                                                                                                      }
+                                                                                             },
+                                                                                 "required":  true
+                                                                             },
+                                                             "responses":  {
+                                                                               "200":  {
+                                                                                           "description":  "OK",
+                                                                                           "content":  {
+                                                                                                           "*/*":  {
+                                                                                                                       "schema":  {
+                                                                                                                                      "type":  "array",
+                                                                                                                                      "items":  {
+                                                                                                                                                    "$ref":  "#/components/schemas/FlightInventoryResponse"
+                                                                                                                                                }
+                                                                                                                                  }
+                                                                                                                   }
+                                                                                                       }
+                                                                                       }
+                                                                           }
+                                                         }
+                                            },
+                  "/api/inventory/release":  {
+                                                 "post":  {
+                                                              "tags":  [
+                                                                           "flight-inventory-controller"
+                                                                       ],
+                                                              "operationId":  "releaseHold",
+                                                              "requestBody":  {
+                                                                                  "content":  {
+                                                                                                  "application/json":  {
+                                                                                                                           "schema":  {
+                                                                                                                                          "$ref":  "#/components/schemas/ReleaseSeatRequest"
+                                                                                                                                      }
+                                                                                                                       }
+                                                                                              },
+                                                                                  "required":  true
+                                                                              },
+                                                              "responses":  {
+                                                                                "200":  {
+                                                                                            "description":  "OK",
+                                                                                            "content":  {
+                                                                                                            "*/*":  {
+                                                                                                                        "schema":  {
+                                                                                                                                       "$ref":  "#/components/schemas/SeatHoldResponse"
+                                                                                                                                   }
+                                                                                                                    }
+                                                                                                        }
+                                                                                        }
+                                                                            }
+                                                          }
+                                             },
+                  "/api/inventory/hold":  {
+                                              "post":  {
+                                                           "tags":  [
+                                                                        "flight-inventory-controller"
+                                                                    ],
+                                                           "operationId":  "holdSeat",
+                                                           "requestBody":  {
+                                                                               "content":  {
+                                                                                               "application/json":  {
+                                                                                                                        "schema":  {
+                                                                                                                                       "$ref":  "#/components/schemas/HoldSeatRequest"
+                                                                                                                                   }
+                                                                                                                    }
+                                                                                           },
+                                                                               "required":  true
+                                                                           },
+                                                           "responses":  {
+                                                                             "200":  {
+                                                                                         "description":  "OK",
+                                                                                         "content":  {
+                                                                                                         "*/*":  {
+                                                                                                                     "schema":  {
+                                                                                                                                    "$ref":  "#/components/schemas/SeatHoldResponse"
+                                                                                                                                }
+                                                                                                                 }
+                                                                                                     }
+                                                                                     }
+                                                                         }
+                                                       }
+                                          },
+                  "/api/aircraft":  {
+                                        "get":  {
+                                                    "tags":  [
+                                                                 "aircraft-controller"
+                                                             ],
+                                                    "operationId":  "getAllAircraft",
+                                                    "responses":  {
+                                                                      "200":  {
+                                                                                  "description":  "OK",
+                                                                                  "content":  {
+                                                                                                  "*/*":  {
+                                                                                                              "schema":  {
+                                                                                                                             "type":  "array",
+                                                                                                                             "items":  {
+                                                                                                                                           "$ref":  "#/components/schemas/AircraftResponse"
+                                                                                                                                       }
+                                                                                                                         }
+                                                                                                          }
+                                                                                              }
+                                                                              }
+                                                                  }
+                                                },
+                                        "post":  {
+                                                     "tags":  [
+                                                                  "aircraft-controller"
+                                                              ],
+                                                     "operationId":  "createAircraft",
+                                                     "requestBody":  {
+                                                                         "content":  {
+                                                                                         "application/json":  {
+                                                                                                                  "schema":  {
+                                                                                                                                 "$ref":  "#/components/schemas/CreateAircraftRequest"
+                                                                                                                             }
+                                                                                                              }
+                                                                                     },
+                                                                         "required":  true
+                                                                     },
+                                                     "responses":  {
+                                                                       "200":  {
+                                                                                   "description":  "OK",
+                                                                                   "content":  {
+                                                                                                   "*/*":  {
+                                                                                                               "schema":  {
+                                                                                                                              "$ref":  "#/components/schemas/AircraftResponse"
+                                                                                                                          }
+                                                                                                           }
+                                                                                               }
+                                                                               }
+                                                                   }
+                                                 }
+                                    },
+                  "/api/aircraft/{aircraftId}/seats":  {
+                                                           "post":  {
+                                                                        "tags":  [
+                                                                                     "aircraft-seat-controller"
+                                                                                 ],
+                                                                        "operationId":  "addSeat",
+                                                                        "parameters":  [
+                                                                                           {
+                                                                                               "name":  "aircraftId",
+                                                                                               "in":  "path",
+                                                                                               "required":  true,
+                                                                                               "schema":  {
+                                                                                                              "type":  "integer",
+                                                                                                              "format":  "int64"
+                                                                                                          }
+                                                                                           }
+                                                                                       ],
+                                                                        "requestBody":  {
+                                                                                            "content":  {
+                                                                                                            "application/json":  {
+                                                                                                                                     "schema":  {
+                                                                                                                                                    "$ref":  "#/components/schemas/CreateAircraftSeatRequest"
+                                                                                                                                                }
+                                                                                                                                 }
+                                                                                                        },
+                                                                                            "required":  true
+                                                                                        },
+                                                                        "responses":  {
+                                                                                          "200":  {
+                                                                                                      "description":  "OK",
+                                                                                                      "content":  {
+                                                                                                                      "*/*":  {
+                                                                                                                                  "schema":  {
+                                                                                                                                                 "$ref":  "#/components/schemas/AircraftSeatResponse"
+                                                                                                                                             }
+                                                                                                                              }
+                                                                                                                  }
+                                                                                                  }
+                                                                                      }
+                                                                    }
+                                                       },
+                  "/api/aircraft/{aircraftId}/seat-map":  {
+                                                              "get":  {
+                                                                          "tags":  [
+                                                                                       "aircraft-seat-controller"
+                                                                                   ],
+                                                                          "operationId":  "getSeatMap",
+                                                                          "parameters":  [
+                                                                                             {
+                                                                                                 "name":  "aircraftId",
+                                                                                                 "in":  "path",
+                                                                                                 "required":  true,
+                                                                                                 "schema":  {
+                                                                                                                "type":  "integer",
+                                                                                                                "format":  "int64"
+                                                                                                            }
+                                                                                             }
+                                                                                         ],
+                                                                          "responses":  {
+                                                                                            "200":  {
+                                                                                                        "description":  "OK",
+                                                                                                        "content":  {
+                                                                                                                        "*/*":  {
+                                                                                                                                    "schema":  {
+                                                                                                                                                   "$ref":  "#/components/schemas/SeatMapResponse"
+                                                                                                                                               }
+                                                                                                                                }
+                                                                                                                    }
+                                                                                                    }
+                                                                                        }
+                                                                      },
+                                                              "post":  {
+                                                                           "tags":  [
+                                                                                        "aircraft-seat-controller"
+                                                                                    ],
+                                                                           "operationId":  "createSeatMap",
+                                                                           "parameters":  [
+                                                                                              {
+                                                                                                  "name":  "aircraftId",
+                                                                                                  "in":  "path",
+                                                                                                  "required":  true,
+                                                                                                  "schema":  {
+                                                                                                                 "type":  "integer",
+                                                                                                                 "format":  "int64"
+                                                                                                             }
+                                                                                              }
+                                                                                          ],
+                                                                           "requestBody":  {
+                                                                                               "content":  {
+                                                                                                               "application/json":  {
+                                                                                                                                        "schema":  {
+                                                                                                                                                       "$ref":  "#/components/schemas/CreateSeatMapRequest"
+                                                                                                                                                   }
+                                                                                                                                    }
+                                                                                                           },
+                                                                                               "required":  true
+                                                                                           },
+                                                                           "responses":  {
+                                                                                             "200":  {
+                                                                                                         "description":  "OK",
+                                                                                                         "content":  {
+                                                                                                                         "*/*":  {
+                                                                                                                                     "schema":  {
+                                                                                                                                                    "type":  "array",
+                                                                                                                                                    "items":  {
+                                                                                                                                                                  "$ref":  "#/components/schemas/AircraftSeatResponse"
+                                                                                                                                                              }
+                                                                                                                                                }
+                                                                                                                                 }
+                                                                                                                     }
+                                                                                                     }
+                                                                                         }
+                                                                       }
+                                                          },
+                  "/api/inventory/flight/{flightId}/reopen":  {
+                                                                  "patch":  {
+                                                                                "tags":  [
+                                                                                             "flight-inventory-controller"
+                                                                                         ],
+                                                                                "operationId":  "reopenInventory",
+                                                                                "parameters":  [
+                                                                                                   {
+                                                                                                       "name":  "flightId",
+                                                                                                       "in":  "path",
+                                                                                                       "required":  true,
+                                                                                                       "schema":  {
+                                                                                                                      "type":  "integer",
+                                                                                                                      "format":  "int64"
+                                                                                                                  }
+                                                                                                   },
+                                                                                                   {
+                                                                                                       "name":  "reason",
+                                                                                                       "in":  "query",
+                                                                                                       "required":  false,
+                                                                                                       "schema":  {
+                                                                                                                      "type":  "string"
+                                                                                                                  }
+                                                                                                   }
+                                                                                               ],
+                                                                                "responses":  {
+                                                                                                  "200":  {
+                                                                                                              "description":  "OK",
+                                                                                                              "content":  {
+                                                                                                                              "*/*":  {
+                                                                                                                                          "schema":  {
+                                                                                                                                                         "$ref":  "#/components/schemas/FlightInventoryResponse"
+                                                                                                                                                     }
+                                                                                                                                      }
+                                                                                                                          }
+                                                                                                          }
+                                                                                              }
+                                                                            }
+                                                              },
+                  "/api/inventory/flight/{flightId}/close":  {
+                                                                 "patch":  {
+                                                                               "tags":  [
+                                                                                            "flight-inventory-controller"
+                                                                                        ],
+                                                                               "operationId":  "closeInventory",
+                                                                               "parameters":  [
+                                                                                                  {
+                                                                                                      "name":  "flightId",
+                                                                                                      "in":  "path",
+                                                                                                      "required":  true,
+                                                                                                      "schema":  {
+                                                                                                                     "type":  "integer",
+                                                                                                                     "format":  "int64"
+                                                                                                                 }
+                                                                                                  },
+                                                                                                  {
+                                                                                                      "name":  "reason",
+                                                                                                      "in":  "query",
+                                                                                                      "required":  false,
+                                                                                                      "schema":  {
+                                                                                                                     "type":  "string"
+                                                                                                                 }
+                                                                                                  }
+                                                                                              ],
+                                                                               "responses":  {
+                                                                                                 "200":  {
+                                                                                                             "description":  "OK",
+                                                                                                             "content":  {
+                                                                                                                             "*/*":  {
+                                                                                                                                         "schema":  {
+                                                                                                                                                        "$ref":  "#/components/schemas/FlightInventoryResponse"
+                                                                                                                                                    }
+                                                                                                                                     }
+                                                                                                                         }
+                                                                                                         }
+                                                                                             }
+                                                                           }
+                                                             },
+                  "/api/aircraft/{id}/status":  {
+                                                    "patch":  {
+                                                                  "tags":  [
+                                                                               "aircraft-controller"
+                                                                           ],
+                                                                  "operationId":  "updateAircraftStatus",
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "id",
+                                                                                         "in":  "path",
+                                                                                         "required":  true,
+                                                                                         "schema":  {
+                                                                                                        "type":  "integer",
+                                                                                                        "format":  "int64"
+                                                                                                    }
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "status",
+                                                                                         "in":  "query",
+                                                                                         "required":  true,
+                                                                                         "schema":  {
+                                                                                                        "type":  "string",
+                                                                                                        "enum":  [
+                                                                                                                     "ACTIVE",
+                                                                                                                     "MAINTENANCE",
+                                                                                                                     "GROUNDED",
+                                                                                                                     "RETIRED"
+                                                                                                                 ]
+                                                                                                    }
+                                                                                     }
+                                                                                 ],
+                                                                  "responses":  {
+                                                                                    "200":  {
+                                                                                                "description":  "OK",
+                                                                                                "content":  {
+                                                                                                                "*/*":  {
+                                                                                                                            "schema":  {
+                                                                                                                                           "$ref":  "#/components/schemas/AircraftResponse"
+                                                                                                                                       }
+                                                                                                                        }
+                                                                                                            }
+                                                                                            }
+                                                                                }
+                                                              }
+                                                },
+                  "/api/aircraft/{aircraftId}/seats/{seatNumber}/status":  {
+                                                                               "patch":  {
+                                                                                             "tags":  [
+                                                                                                          "aircraft-seat-controller"
+                                                                                                      ],
+                                                                                             "operationId":  "updateSeatStatus",
+                                                                                             "parameters":  [
+                                                                                                                {
+                                                                                                                    "name":  "aircraftId",
+                                                                                                                    "in":  "path",
+                                                                                                                    "required":  true,
+                                                                                                                    "schema":  {
+                                                                                                                                   "type":  "integer",
+                                                                                                                                   "format":  "int64"
+                                                                                                                               }
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "name":  "seatNumber",
+                                                                                                                    "in":  "path",
+                                                                                                                    "required":  true,
+                                                                                                                    "schema":  {
+                                                                                                                                   "type":  "string"
+                                                                                                                               }
+                                                                                                                },
+                                                                                                                {
+                                                                                                                    "name":  "status",
+                                                                                                                    "in":  "query",
+                                                                                                                    "required":  true,
+                                                                                                                    "schema":  {
+                                                                                                                                   "type":  "string",
+                                                                                                                                   "enum":  [
+                                                                                                                                                "ACTIVE",
+                                                                                                                                                "BLOCKED",
+                                                                                                                                                "INOPERATIVE"
+                                                                                                                                            ]
+                                                                                                                               }
+                                                                                                                }
+                                                                                                            ],
+                                                                                             "responses":  {
+                                                                                                               "200":  {
+                                                                                                                           "description":  "OK",
+                                                                                                                           "content":  {
+                                                                                                                                           "*/*":  {
+                                                                                                                                                       "schema":  {
+                                                                                                                                                                      "$ref":  "#/components/schemas/AircraftSeatResponse"
+                                                                                                                                                                  }
+                                                                                                                                                   }
+                                                                                                                                       }
+                                                                                                                       }
+                                                                                                           }
+                                                                                         }
+                                                                           },
+                  "/api/reservations/flight/{flightId}":  {
+                                                              "get":  {
+                                                                          "tags":  [
+                                                                                       "seat-reservation-controller"
+                                                                                   ],
+                                                                          "operationId":  "getReservationsByFlight",
+                                                                          "parameters":  [
+                                                                                             {
+                                                                                                 "name":  "flightId",
+                                                                                                 "in":  "path",
+                                                                                                 "required":  true,
+                                                                                                 "schema":  {
+                                                                                                                "type":  "integer",
+                                                                                                                "format":  "int64"
+                                                                                                            }
+                                                                                             }
+                                                                                         ],
+                                                                          "responses":  {
+                                                                                            "200":  {
+                                                                                                        "description":  "OK",
+                                                                                                        "content":  {
+                                                                                                                        "*/*":  {
+                                                                                                                                    "schema":  {
+                                                                                                                                                   "type":  "array",
+                                                                                                                                                   "items":  {
+                                                                                                                                                                 "$ref":  "#/components/schemas/SeatReservationResponse"
+                                                                                                                                                             }
+                                                                                                                                               }
+                                                                                                                                }
+                                                                                                                    }
+                                                                                                    }
+                                                                                        }
+                                                                      }
+                                                          },
+                  "/api/reservations/booking/{bookingId}":  {
+                                                                "get":  {
+                                                                            "tags":  [
+                                                                                         "seat-reservation-controller"
+                                                                                     ],
+                                                                            "operationId":  "getReservationsByBooking",
+                                                                            "parameters":  [
+                                                                                               {
+                                                                                                   "name":  "bookingId",
+                                                                                                   "in":  "path",
+                                                                                                   "required":  true,
+                                                                                                   "schema":  {
+                                                                                                                  "type":  "integer",
+                                                                                                                  "format":  "int64"
+                                                                                                              }
+                                                                                               }
+                                                                                           ],
+                                                                            "responses":  {
+                                                                                              "200":  {
+                                                                                                          "description":  "OK",
+                                                                                                          "content":  {
+                                                                                                                          "*/*":  {
+                                                                                                                                      "schema":  {
+                                                                                                                                                     "type":  "array",
+                                                                                                                                                     "items":  {
+                                                                                                                                                                   "$ref":  "#/components/schemas/SeatReservationResponse"
+                                                                                                                                                               }
+                                                                                                                                                 }
+                                                                                                                                  }
+                                                                                                                      }
+                                                                                                      }
+                                                                                          }
+                                                                        }
+                                                            },
+                  "/api/inventory/flight/{flightId}":  {
+                                                           "get":  {
+                                                                       "tags":  [
+                                                                                    "flight-inventory-controller"
+                                                                                ],
+                                                                       "operationId":  "getByFlightId",
+                                                                       "parameters":  [
+                                                                                          {
+                                                                                              "name":  "flightId",
+                                                                                              "in":  "path",
+                                                                                              "required":  true,
+                                                                                              "schema":  {
+                                                                                                             "type":  "integer",
+                                                                                                             "format":  "int64"
+                                                                                                         }
+                                                                                          }
+                                                                                      ],
+                                                                       "responses":  {
+                                                                                         "200":  {
+                                                                                                     "description":  "OK",
+                                                                                                     "content":  {
+                                                                                                                     "*/*":  {
+                                                                                                                                 "schema":  {
+                                                                                                                                                "$ref":  "#/components/schemas/FlightInventoryResponse"
+                                                                                                                                            }
+                                                                                                                             }
+                                                                                                                 }
+                                                                                                 }
+                                                                                     }
+                                                                   }
+                                                       },
+                  "/api/inventory/flight/{flightId}/history":  {
+                                                                   "get":  {
+                                                                               "tags":  [
+                                                                                            "flight-inventory-controller"
+                                                                                        ],
+                                                                               "operationId":  "getHistory",
+                                                                               "parameters":  [
+                                                                                                  {
+                                                                                                      "name":  "flightId",
+                                                                                                      "in":  "path",
+                                                                                                      "required":  true,
+                                                                                                      "schema":  {
+                                                                                                                     "type":  "integer",
+                                                                                                                     "format":  "int64"
+                                                                                                                 }
+                                                                                                  }
+                                                                                              ],
+                                                                               "responses":  {
+                                                                                                 "200":  {
+                                                                                                             "description":  "OK",
+                                                                                                             "content":  {
+                                                                                                                             "*/*":  {
+                                                                                                                                         "schema":  {
+                                                                                                                                                        "type":  "array",
+                                                                                                                                                        "items":  {
+                                                                                                                                                                      "$ref":  "#/components/schemas/InventoryHistoryResponse"
+                                                                                                                                                                  }
+                                                                                                                                                    }
+                                                                                                                                     }
+                                                                                                                         }
+                                                                                                         }
+                                                                                             }
+                                                                           }
+                                                               },
+                  "/api/aircraft/{id}":  {
+                                             "get":  {
+                                                         "tags":  [
+                                                                      "aircraft-controller"
+                                                                  ],
+                                                         "operationId":  "getAircraftById",
+                                                         "parameters":  [
+                                                                            {
+                                                                                "name":  "id",
+                                                                                "in":  "path",
+                                                                                "required":  true,
+                                                                                "schema":  {
+                                                                                               "type":  "integer",
+                                                                                               "format":  "int64"
+                                                                                           }
+                                                                            }
+                                                                        ],
+                                                         "responses":  {
+                                                                           "200":  {
+                                                                                       "description":  "OK",
+                                                                                       "content":  {
+                                                                                                       "*/*":  {
+                                                                                                                   "schema":  {
+                                                                                                                                  "$ref":  "#/components/schemas/AircraftResponse"
+                                                                                                                              }
+                                                                                                               }
+                                                                                                   }
+                                                                                   }
+                                                                       }
+                                                     }
+                                         },
+                  "/api/aircraft/{aircraftId}/seats/status/{status}":  {
+                                                                           "get":  {
+                                                                                       "tags":  [
+                                                                                                    "aircraft-seat-controller"
+                                                                                                ],
+                                                                                       "operationId":  "getSeatsByStatus",
+                                                                                       "parameters":  [
+                                                                                                          {
+                                                                                                              "name":  "aircraftId",
+                                                                                                              "in":  "path",
+                                                                                                              "required":  true,
+                                                                                                              "schema":  {
+                                                                                                                             "type":  "integer",
+                                                                                                                             "format":  "int64"
+                                                                                                                         }
+                                                                                                          },
+                                                                                                          {
+                                                                                                              "name":  "status",
+                                                                                                              "in":  "path",
+                                                                                                              "required":  true,
+                                                                                                              "schema":  {
+                                                                                                                             "type":  "string",
+                                                                                                                             "enum":  [
+                                                                                                                                          "ACTIVE",
+                                                                                                                                          "BLOCKED",
+                                                                                                                                          "INOPERATIVE"
+                                                                                                                                      ]
+                                                                                                                         }
+                                                                                                          }
+                                                                                                      ],
+                                                                                       "responses":  {
+                                                                                                         "200":  {
+                                                                                                                     "description":  "OK",
+                                                                                                                     "content":  {
+                                                                                                                                     "*/*":  {
+                                                                                                                                                 "schema":  {
+                                                                                                                                                                "type":  "array",
+                                                                                                                                                                "items":  {
+                                                                                                                                                                              "$ref":  "#/components/schemas/AircraftSeatResponse"
+                                                                                                                                                                          }
+                                                                                                                                                            }
+                                                                                                                                             }
+                                                                                                                                 }
+                                                                                                                 }
+                                                                                                     }
+                                                                                   }
+                                                                       },
+                  "/api/aircraft/status/{status}":  {
+                                                        "get":  {
+                                                                    "tags":  [
+                                                                                 "aircraft-controller"
+                                                                             ],
+                                                                    "operationId":  "getAircraftByStatus",
+                                                                    "parameters":  [
+                                                                                       {
+                                                                                           "name":  "status",
+                                                                                           "in":  "path",
+                                                                                           "required":  true,
+                                                                                           "schema":  {
+                                                                                                          "type":  "string",
+                                                                                                          "enum":  [
+                                                                                                                       "ACTIVE",
+                                                                                                                       "MAINTENANCE",
+                                                                                                                       "GROUNDED",
+                                                                                                                       "RETIRED"
+                                                                                                                   ]
+                                                                                                      }
+                                                                                       }
+                                                                                   ],
+                                                                    "responses":  {
+                                                                                      "200":  {
+                                                                                                  "description":  "OK",
+                                                                                                  "content":  {
+                                                                                                                  "*/*":  {
+                                                                                                                              "schema":  {
+                                                                                                                                             "type":  "array",
+                                                                                                                                             "items":  {
+                                                                                                                                                           "$ref":  "#/components/schemas/AircraftResponse"
+                                                                                                                                                       }
+                                                                                                                                         }
+                                                                                                                          }
+                                                                                                              }
+                                                                                              }
+                                                                                  }
+                                                                }
+                                                    },
+                  "/api/aircraft/registration/{registrationNumber}":  {
+                                                                          "get":  {
+                                                                                      "tags":  [
+                                                                                                   "aircraft-controller"
+                                                                                               ],
+                                                                                      "operationId":  "getAircraftByRegistrationNumber",
+                                                                                      "parameters":  [
+                                                                                                         {
+                                                                                                             "name":  "registrationNumber",
+                                                                                                             "in":  "path",
+                                                                                                             "required":  true,
+                                                                                                             "schema":  {
+                                                                                                                            "type":  "string"
+                                                                                                                        }
+                                                                                                         }
+                                                                                                     ],
+                                                                                      "responses":  {
+                                                                                                        "200":  {
+                                                                                                                    "description":  "OK",
+                                                                                                                    "content":  {
+                                                                                                                                    "*/*":  {
+                                                                                                                                                "schema":  {
+                                                                                                                                                               "$ref":  "#/components/schemas/AircraftResponse"
+                                                                                                                                                           }
+                                                                                                                                            }
+                                                                                                                                }
+                                                                                                                }
+                                                                                                    }
+                                                                                  }
+                                                                      }
+              },
+    "components":  {
+                       "schemas":  {
+                                       "ReserveSeatRequest":  {
+                                                                  "type":  "object",
+                                                                  "properties":  {
+                                                                                     "flightId":  {
+                                                                                                      "type":  "integer",
+                                                                                                      "format":  "int64"
+                                                                                                  },
+                                                                                     "seatNumber":  {
+                                                                                                        "type":  "string",
+                                                                                                        "maxLength":  5,
+                                                                                                        "minLength":  0
+                                                                                                    },
+                                                                                     "bookingId":  {
+                                                                                                       "type":  "integer",
+                                                                                                       "format":  "int64"
+                                                                                                   },
+                                                                                     "bookingPassengerId":  {
+                                                                                                                "type":  "integer",
+                                                                                                                "format":  "int64"
+                                                                                                            },
+                                                                                     "holdId":  {
+                                                                                                    "type":  "integer",
+                                                                                                    "format":  "int64"
+                                                                                                }
+                                                                                 },
+                                                                  "required":  [
+                                                                                   "bookingId",
+                                                                                   "flightId",
+                                                                                   "seatNumber"
+                                                                               ]
+                                                              },
+                                       "SeatReservationResponse":  {
+                                                                       "type":  "object",
+                                                                       "properties":  {
+                                                                                          "id":  {
+                                                                                                     "type":  "integer",
+                                                                                                     "format":  "int64"
+                                                                                                 },
+                                                                                          "flightId":  {
+                                                                                                           "type":  "integer",
+                                                                                                           "format":  "int64"
+                                                                                                       },
+                                                                                          "aircraftSeatId":  {
+                                                                                                                 "type":  "integer",
+                                                                                                                 "format":  "int64"
+                                                                                                             },
+                                                                                          "seatNumber":  {
+                                                                                                             "type":  "string"
+                                                                                                         },
+                                                                                          "bookingId":  {
+                                                                                                            "type":  "integer",
+                                                                                                            "format":  "int64"
+                                                                                                        },
+                                                                                          "bookingPassengerId":  {
+                                                                                                                     "type":  "integer",
+                                                                                                                     "format":  "int64"
+                                                                                                                 },
+                                                                                          "originatingHoldId":  {
+                                                                                                                    "type":  "integer",
+                                                                                                                    "format":  "int64"
+                                                                                                                },
+                                                                                          "status":  {
+                                                                                                         "type":  "string",
+                                                                                                         "enum":  [
+                                                                                                                      "RESERVED",
+                                                                                                                      "CANCELLED"
+                                                                                                                  ]
+                                                                                                     },
+                                                                                          "reservedAt":  {
+                                                                                                             "type":  "string",
+                                                                                                             "format":  "date-time"
+                                                                                                         },
+                                                                                          "cancelledAt":  {
+                                                                                                              "type":  "string",
+                                                                                                              "format":  "date-time"
+                                                                                                          }
+                                                                                      }
+                                                                   },
+                                       "ReleaseSeatRequest":  {
+                                                                  "type":  "object",
+                                                                  "properties":  {
+                                                                                     "flightId":  {
+                                                                                                      "type":  "integer",
+                                                                                                      "format":  "int64"
+                                                                                                  },
+                                                                                     "seatNumber":  {
+                                                                                                        "type":  "string",
+                                                                                                        "maxLength":  5,
+                                                                                                        "minLength":  0
+                                                                                                    },
+                                                                                     "bookingId":  {
+                                                                                                       "type":  "integer",
+                                                                                                       "format":  "int64"
+                                                                                                   },
+                                                                                     "reason":  {
+                                                                                                    "type":  "string",
+                                                                                                    "maxLength":  500,
+                                                                                                    "minLength":  0
+                                                                                                }
+                                                                                 },
+                                                                  "required":  [
+                                                                                   "bookingId",
+                                                                                   "flightId",
+                                                                                   "seatNumber"
+                                                                               ]
+                                                              },
+                                       "CreateFlightInventoryRequest":  {
+                                                                            "type":  "object",
+                                                                            "properties":  {
+                                                                                               "flightId":  {
+                                                                                                                "type":  "integer",
+                                                                                                                "format":  "int64"
+                                                                                                            },
+                                                                                               "aircraftId":  {
+                                                                                                                  "type":  "integer",
+                                                                                                                  "format":  "int64"
+                                                                                                              },
+                                                                                               "blockedSeats":  {
+                                                                                                                    "type":  "integer",
+                                                                                                                    "format":  "int32",
+                                                                                                                    "minimum":  0
+                                                                                                                }
+                                                                                           },
+                                                                            "required":  [
+                                                                                             "aircraftId",
+                                                                                             "flightId"
+                                                                                         ]
+                                                                        },
+                                       "FlightInventoryResponse":  {
+                                                                       "type":  "object",
+                                                                       "properties":  {
+                                                                                          "id":  {
+                                                                                                     "type":  "integer",
+                                                                                                     "format":  "int64"
+                                                                                                 },
+                                                                                          "flightId":  {
+                                                                                                           "type":  "integer",
+                                                                                                           "format":  "int64"
+                                                                                                       },
+                                                                                          "aircraftId":  {
+                                                                                                             "type":  "integer",
+                                                                                                             "format":  "int64"
+                                                                                                         },
+                                                                                          "aircraftRegistrationNumber":  {
+                                                                                                                             "type":  "string"
+                                                                                                                         },
+                                                                                          "status":  {
+                                                                                                         "type":  "string",
+                                                                                                         "enum":  [
+                                                                                                                      "OPEN",
+                                                                                                                      "SOLD_OUT",
+                                                                                                                      "CLOSED"
+                                                                                                                  ]
+                                                                                                     },
+                                                                                          "totalSeats":  {
+                                                                                                             "type":  "integer",
+                                                                                                             "format":  "int32"
+                                                                                                         },
+                                                                                          "availableSeats":  {
+                                                                                                                 "type":  "integer",
+                                                                                                                 "format":  "int32"
+                                                                                                             },
+                                                                                          "heldSeats":  {
+                                                                                                            "type":  "integer",
+                                                                                                            "format":  "int32"
+                                                                                                        },
+                                                                                          "reservedSeats":  {
+                                                                                                                "type":  "integer",
+                                                                                                                "format":  "int32"
+                                                                                                            },
+                                                                                          "blockedSeats":  {
+                                                                                                               "type":  "integer",
+                                                                                                               "format":  "int32"
+                                                                                                           },
+                                                                                          "version":  {
+                                                                                                          "type":  "integer",
+                                                                                                          "format":  "int64"
+                                                                                                      },
+                                                                                          "createdAt":  {
+                                                                                                            "type":  "string",
+                                                                                                            "format":  "date-time"
+                                                                                                        },
+                                                                                          "updatedAt":  {
+                                                                                                            "type":  "string",
+                                                                                                            "format":  "date-time"
+                                                                                                        }
+                                                                                      }
+                                                                   },
+                                       "InventorySearchRequest":  {
+                                                                      "type":  "object",
+                                                                      "properties":  {
+                                                                                         "flightId":  {
+                                                                                                          "type":  "integer",
+                                                                                                          "format":  "int64"
+                                                                                                      },
+                                                                                         "aircraftId":  {
+                                                                                                            "type":  "integer",
+                                                                                                            "format":  "int64"
+                                                                                                        },
+                                                                                         "status":  {
+                                                                                                        "type":  "string",
+                                                                                                        "enum":  [
+                                                                                                                     "OPEN",
+                                                                                                                     "SOLD_OUT",
+                                                                                                                     "CLOSED"
+                                                                                                                 ]
+                                                                                                    },
+                                                                                         "minAvailableSeats":  {
+                                                                                                                   "type":  "integer",
+                                                                                                                   "format":  "int32",
+                                                                                                                   "minimum":  0
+                                                                                                               }
+                                                                                     }
+                                                                  },
+                                       "SeatHoldResponse":  {
+                                                                "type":  "object",
+                                                                "properties":  {
+                                                                                   "id":  {
+                                                                                              "type":  "integer",
+                                                                                              "format":  "int64"
+                                                                                          },
+                                                                                   "flightId":  {
+                                                                                                    "type":  "integer",
+                                                                                                    "format":  "int64"
+                                                                                                },
+                                                                                   "aircraftSeatId":  {
+                                                                                                          "type":  "integer",
+                                                                                                          "format":  "int64"
+                                                                                                      },
+                                                                                   "seatNumber":  {
+                                                                                                      "type":  "string"
+                                                                                                  },
+                                                                                   "bookingId":  {
+                                                                                                     "type":  "integer",
+                                                                                                     "format":  "int64"
+                                                                                                 },
+                                                                                   "status":  {
+                                                                                                  "type":  "string",
+                                                                                                  "enum":  [
+                                                                                                               "ACTIVE",
+                                                                                                               "CONFIRMED",
+                                                                                                               "RELEASED",
+                                                                                                               "EXPIRED"
+                                                                                                           ]
+                                                                                              },
+                                                                                   "heldAt":  {
+                                                                                                  "type":  "string",
+                                                                                                  "format":  "date-time"
+                                                                                              },
+                                                                                   "expiresAt":  {
+                                                                                                     "type":  "string",
+                                                                                                     "format":  "date-time"
+                                                                                                 }
+                                                                               }
+                                                            },
+                                       "HoldSeatRequest":  {
+                                                               "type":  "object",
+                                                               "properties":  {
+                                                                                  "flightId":  {
+                                                                                                   "type":  "integer",
+                                                                                                   "format":  "int64"
+                                                                                               },
+                                                                                  "seatNumber":  {
+                                                                                                     "type":  "string",
+                                                                                                     "maxLength":  5,
+                                                                                                     "minLength":  0
+                                                                                                 },
+                                                                                  "bookingId":  {
+                                                                                                    "type":  "integer",
+                                                                                                    "format":  "int64"
+                                                                                                }
+                                                                              },
+                                                               "required":  [
+                                                                                "bookingId",
+                                                                                "flightId",
+                                                                                "seatNumber"
+                                                                            ]
+                                                           },
+                                       "CreateAircraftRequest":  {
+                                                                     "type":  "object",
+                                                                     "properties":  {
+                                                                                        "registrationNumber":  {
+                                                                                                                   "type":  "string",
+                                                                                                                   "maxLength":  10,
+                                                                                                                   "minLength":  0,
+                                                                                                                   "pattern":  "[A-Z0-9-]+"
+                                                                                                               },
+                                                                                        "manufacturer":  {
+                                                                                                             "type":  "string",
+                                                                                                             "maxLength":  50,
+                                                                                                             "minLength":  0
+                                                                                                         },
+                                                                                        "model":  {
+                                                                                                      "type":  "string",
+                                                                                                      "maxLength":  50,
+                                                                                                      "minLength":  0
+                                                                                                  }
+                                                                                    },
+                                                                     "required":  [
+                                                                                      "manufacturer",
+                                                                                      "model",
+                                                                                      "registrationNumber"
+                                                                                  ]
+                                                                 },
+                                       "AircraftResponse":  {
+                                                                "type":  "object",
+                                                                "properties":  {
+                                                                                   "id":  {
+                                                                                              "type":  "integer",
+                                                                                              "format":  "int64"
+                                                                                          },
+                                                                                   "registrationNumber":  {
+                                                                                                              "type":  "string"
+                                                                                                          },
+                                                                                   "manufacturer":  {
+                                                                                                        "type":  "string"
+                                                                                                    },
+                                                                                   "model":  {
+                                                                                                 "type":  "string"
+                                                                                             },
+                                                                                   "totalSeats":  {
+                                                                                                      "type":  "integer",
+                                                                                                      "format":  "int32"
+                                                                                                  },
+                                                                                   "status":  {
+                                                                                                  "type":  "string",
+                                                                                                  "enum":  [
+                                                                                                               "ACTIVE",
+                                                                                                               "MAINTENANCE",
+                                                                                                               "GROUNDED",
+                                                                                                               "RETIRED"
+                                                                                                           ]
+                                                                                              },
+                                                                                   "createdBy":  {
+                                                                                                     "type":  "string"
+                                                                                                 },
+                                                                                   "updatedBy":  {
+                                                                                                     "type":  "string"
+                                                                                                 },
+                                                                                   "version":  {
+                                                                                                   "type":  "integer",
+                                                                                                   "format":  "int64"
+                                                                                               },
+                                                                                   "createdAt":  {
+                                                                                                     "type":  "string",
+                                                                                                     "format":  "date-time"
+                                                                                                 },
+                                                                                   "updatedAt":  {
+                                                                                                     "type":  "string",
+                                                                                                     "format":  "date-time"
+                                                                                                 }
+                                                                               }
+                                                            },
+                                       "CreateAircraftSeatRequest":  {
+                                                                         "type":  "object",
+                                                                         "properties":  {
+                                                                                            "seatNumber":  {
+                                                                                                               "type":  "string",
+                                                                                                               "maxLength":  5,
+                                                                                                               "minLength":  0,
+                                                                                                               "pattern":  "\\d{1,3}[A-K]"
+                                                                                                           },
+                                                                                            "rowNumber":  {
+                                                                                                              "type":  "integer",
+                                                                                                              "format":  "int32",
+                                                                                                              "minimum":  1
+                                                                                                          },
+                                                                                            "seatType":  {
+                                                                                                             "type":  "string",
+                                                                                                             "enum":  [
+                                                                                                                          "ECONOMY",
+                                                                                                                          "PREMIUM_ECONOMY",
+                                                                                                                          "BUSINESS",
+                                                                                                                          "FIRST"
+                                                                                                                      ]
+                                                                                                         },
+                                                                                            "position":  {
+                                                                                                             "type":  "string",
+                                                                                                             "enum":  [
+                                                                                                                          "WINDOW",
+                                                                                                                          "MIDDLE",
+                                                                                                                          "AISLE"
+                                                                                                                      ]
+                                                                                                         },
+                                                                                            "exitRow":  {
+                                                                                                            "type":  "boolean"
+                                                                                                        }
+                                                                                        },
+                                                                         "required":  [
+                                                                                          "position",
+                                                                                          "rowNumber",
+                                                                                          "seatNumber",
+                                                                                          "seatType"
+                                                                                      ]
+                                                                     },
+                                       "AircraftSeatResponse":  {
+                                                                    "type":  "object",
+                                                                    "properties":  {
+                                                                                       "id":  {
+                                                                                                  "type":  "integer",
+                                                                                                  "format":  "int64"
+                                                                                              },
+                                                                                       "seatNumber":  {
+                                                                                                          "type":  "string"
+                                                                                                      },
+                                                                                       "rowNumber":  {
+                                                                                                         "type":  "integer",
+                                                                                                         "format":  "int32"
+                                                                                                     },
+                                                                                       "seatType":  {
+                                                                                                        "type":  "string",
+                                                                                                        "enum":  [
+                                                                                                                     "ECONOMY",
+                                                                                                                     "PREMIUM_ECONOMY",
+                                                                                                                     "BUSINESS",
+                                                                                                                     "FIRST"
+                                                                                                                 ]
+                                                                                                    },
+                                                                                       "position":  {
+                                                                                                        "type":  "string",
+                                                                                                        "enum":  [
+                                                                                                                     "WINDOW",
+                                                                                                                     "MIDDLE",
+                                                                                                                     "AISLE"
+                                                                                                                 ]
+                                                                                                    },
+                                                                                       "status":  {
+                                                                                                      "type":  "string",
+                                                                                                      "enum":  [
+                                                                                                                   "ACTIVE",
+                                                                                                                   "BLOCKED",
+                                                                                                                   "INOPERATIVE"
+                                                                                                               ]
+                                                                                                  },
+                                                                                       "exitRow":  {
+                                                                                                       "type":  "boolean"
+                                                                                                   }
+                                                                                   }
+                                                                },
+                                       "CreateSeatMapRequest":  {
+                                                                    "type":  "object",
+                                                                    "properties":  {
+                                                                                       "seats":  {
+                                                                                                     "type":  "array",
+                                                                                                     "items":  {
+                                                                                                                   "$ref":  "#/components/schemas/CreateAircraftSeatRequest"
+                                                                                                               },
+                                                                                                     "maxItems":  1000,
+                                                                                                     "minItems":  0
+                                                                                                 }
+                                                                                   },
+                                                                    "required":  [
+                                                                                     "seats"
+                                                                                 ]
+                                                                },
+                                       "InventoryHistoryResponse":  {
+                                                                        "type":  "object",
+                                                                        "properties":  {
+                                                                                           "id":  {
+                                                                                                      "type":  "integer",
+                                                                                                      "format":  "int64"
+                                                                                                  },
+                                                                                           "historyType":  {
+                                                                                                               "type":  "string",
+                                                                                                               "enum":  [
+                                                                                                                            "INVENTORY_CREATED",
+                                                                                                                            "SEAT_HELD",
+                                                                                                                            "HOLD_RELEASED",
+                                                                                                                            "HOLD_EXPIRED",
+                                                                                                                            "SEAT_RESERVED",
+                                                                                                                            "RESERVATION_CANCELLED",
+                                                                                                                            "INVENTORY_CLOSED",
+                                                                                                                            "INVENTORY_REOPENED",
+                                                                                                                            "INVENTORY_SOLD_OUT"
+                                                                                                                        ]
+                                                                                                           },
+                                                                                           "seatNumber":  {
+                                                                                                              "type":  "string"
+                                                                                                          },
+                                                                                           "bookingId":  {
+                                                                                                             "type":  "integer",
+                                                                                                             "format":  "int64"
+                                                                                                         },
+                                                                                           "details":  {
+                                                                                                           "type":  "string"
+                                                                                                       },
+                                                                                           "changedAt":  {
+                                                                                                             "type":  "string",
+                                                                                                             "format":  "date-time"
+                                                                                                         }
+                                                                                       }
+                                                                    },
+                                       "SeatMapResponse":  {
+                                                               "type":  "object",
+                                                               "properties":  {
+                                                                                  "aircraftId":  {
+                                                                                                     "type":  "integer",
+                                                                                                     "format":  "int64"
+                                                                                                 },
+                                                                                  "registrationNumber":  {
+                                                                                                             "type":  "string"
+                                                                                                         },
+                                                                                  "model":  {
+                                                                                                "type":  "string"
+                                                                                            },
+                                                                                  "aircraftStatus":  {
+                                                                                                         "type":  "string",
+                                                                                                         "enum":  [
+                                                                                                                      "ACTIVE",
+                                                                                                                      "MAINTENANCE",
+                                                                                                                      "GROUNDED",
+                                                                                                                      "RETIRED"
+                                                                                                                  ]
+                                                                                                     },
+                                                                                  "totalSeats":  {
+                                                                                                     "type":  "integer",
+                                                                                                     "format":  "int32"
+                                                                                                 },
+                                                                                  "seats":  {
+                                                                                                "type":  "array",
+                                                                                                "items":  {
+                                                                                                              "$ref":  "#/components/schemas/AircraftSeatResponse"
+                                                                                                          }
+                                                                                            }
+                                                                              }
+                                                           }
+                                   }
+                   }
+}

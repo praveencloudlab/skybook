@@ -1,0 +1,4 @@
+ id | booking_reference | flight_id | booking_status | total_fare | booking_date 
+----+-------------------+-----------+----------------+------------+--------------
+(0 rows)
+

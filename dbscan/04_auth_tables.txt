@@ -1,0 +1,9 @@
+             table              | rows 
+--------------------------------+------
+ flight_schedule_operating_days |    0
+ flight_schedules               |    0
+ flights                        |    0
+ flyway_schema_history          |    0
+ users                          |    6
+(5 rows)
+
