@@ -44,4 +44,5 @@ build/
 # Secrets
 *.pem
 *.key
-*.crt"*.zip" 
+*.crt
+*.zip

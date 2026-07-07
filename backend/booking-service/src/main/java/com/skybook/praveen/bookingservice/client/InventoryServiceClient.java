@@ -1,0 +1,101 @@
+package com.skybook.praveen.bookingservice.client;
+
+import com.skybook.praveen.bookingservice.exception.InventoryServiceUnavailableException;
+import com.skybook.praveen.bookingservice.exception.SeatUnavailableException;
+import feign.FeignException;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+import java.util.Optional;
+
+/**
+ * Sprint 6 seat-inventory boundary. Encodes the "hold if inventory exists"
+ * policy (design decision): a flight without a FlightInventory record is
+ * legal - holds are skipped, signaled by Optional.empty(). A flight WITH
+ * inventory enforces seat availability - conflicts become 409s.
+ *
+ * The *Quietly variants are for compensation/cleanup paths where the
+ * primary operation (cancellation, payment-driven confirmation) must not
+ * fail because inventory cleanup hiccupped - failures are logged, never
+ * thrown.
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class InventoryServiceClient {
+
+    private static final String NO_INVENTORY_MARKER = "Flight inventory not found";
+
+    private final InventoryServiceFeignClient feignClient;
+
+    /** Optional.empty() = the flight has no inventory record - proceed without a hold. */
+    public Optional<InventoryHoldDetails> holdSeat(Long flightId, String seatNumber, Long bookingId) {
+        try {
+            return Optional.of(feignClient.holdSeat(InventorySeatCall.hold(flightId, seatNumber, bookingId)));
+
+        } catch (FeignException.NotFound notFound) {
+            if (notFound.contentUTF8().contains(NO_INVENTORY_MARKER)) {
+                log.info("Flight {} has no seat inventory - booking proceeds without holds", flightId);
+                return Optional.empty();
+            }
+            // Inventory exists but the seat doesn't (seat map mismatch) -
+            // that seat cannot be sold.
+            throw new SeatUnavailableException(flightId, seatNumber,
+                    "seat does not exist in the flight's seat inventory");
+
+        } catch (FeignException.Conflict conflict) {
+            throw new SeatUnavailableException(flightId, seatNumber, "already held or reserved");
+
+        } catch (FeignException unreachable) {
+            log.error("Could not reach inventory-service to hold seat {} on flight {}",
+                    seatNumber, flightId, unreachable);
+            throw new InventoryServiceUnavailableException(flightId, unreachable);
+        }
+    }
+
+    public Optional<InventoryReservationDetails> reserveSeat(Long flightId, String seatNumber,
+                                                             Long bookingId, Long bookingPassengerId) {
+        try {
+            return Optional.of(feignClient.reserveSeat(
+                    InventorySeatCall.reserve(flightId, seatNumber, bookingId, bookingPassengerId)));
+
+        } catch (FeignException.NotFound notFound) {
+            if (notFound.contentUTF8().contains(NO_INVENTORY_MARKER)) {
+                return Optional.empty();
+            }
+            throw new SeatUnavailableException(flightId, seatNumber,
+                    "seat does not exist in the flight's seat inventory");
+
+        } catch (FeignException.Conflict conflict) {
+            throw new SeatUnavailableException(flightId, seatNumber, "already reserved");
+
+        } catch (FeignException unreachable) {
+            log.error("Could not reach inventory-service to reserve seat {} on flight {}",
+                    seatNumber, flightId, unreachable);
+            throw new InventoryServiceUnavailableException(flightId, unreachable);
+        }
+    }
+
+    /** Compensation/cleanup - never throws. */
+    public void releaseHoldQuietly(Long flightId, String seatNumber, Long bookingId, String reason) {
+        try {
+            feignClient.releaseHold(InventorySeatCall.release(flightId, seatNumber, bookingId, reason));
+            log.info("Released hold on seat {} flight {} ({})", seatNumber, flightId, reason);
+        } catch (FeignException e) {
+            log.warn("Could not release hold on seat {} flight {} ({}): {}",
+                    seatNumber, flightId, reason, e.getMessage());
+        }
+    }
+
+    /** Cleanup on booking cancellation - never throws. */
+    public void cancelReservationQuietly(Long flightId, String seatNumber, Long bookingId, String reason) {
+        try {
+            feignClient.cancelReservation(InventorySeatCall.release(flightId, seatNumber, bookingId, reason));
+            log.info("Cancelled reservation of seat {} flight {} ({})", seatNumber, flightId, reason);
+        } catch (FeignException e) {
+            log.warn("Could not cancel reservation of seat {} flight {} ({}): {}",
+                    seatNumber, flightId, reason, e.getMessage());
+        }
+    }
+}
