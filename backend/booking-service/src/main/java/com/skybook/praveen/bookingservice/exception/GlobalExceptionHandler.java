@@ -45,6 +45,20 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_GATEWAY, exception.getMessage(), request);
     }
 
+    // Sprint 6 - seat inventory integration.
+
+    @ExceptionHandler(SeatUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleSeatUnavailableException(
+            SeatUnavailableException exception, HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(InventoryServiceUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleInventoryServiceUnavailableException(
+            InventoryServiceUnavailableException exception, HttpServletRequest request) {
+        return build(HttpStatus.BAD_GATEWAY, exception.getMessage(), request);
+    }
+
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ResponseEntity<ErrorResponse> handleOptimisticLockingFailureException(
             ObjectOptimisticLockingFailureException exception, HttpServletRequest request) {

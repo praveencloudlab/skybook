@@ -37,8 +37,16 @@ springdoc:
 
   packages-to-scan: com.skybook.praveen.bookingservice.controller
 
-# Base URL for the one other service booking-service talks to directly
-# (see FlightServiceClient / BookingFacade). Flight validation only - no
-# other cross-service calls exist yet (Payment/Inventory are future work).
+# Synchronous dependencies (Sprint 6): flight validation at create time,
+# seat hold/reserve/release against inventory-service.
 flight-service:
   base-url: http://localhost:8082
+
+inventory-service:
+  base-url: http://localhost:8084
+
+skybook:
+  kafka:
+    topics:
+      # Consumed by PaymentEventConsumer - PAYMENT_SUCCEEDED confirms bookings.
+      payment-events: skybook.payment.events
