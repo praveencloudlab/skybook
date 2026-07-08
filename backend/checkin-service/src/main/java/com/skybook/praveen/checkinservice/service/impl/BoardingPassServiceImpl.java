@@ -78,6 +78,8 @@ public class BoardingPassServiceImpl implements BoardingPassService {
                 checkIn.getFlightId(), checkIn.getSeatNumber(), checkIn.getId());
 
         BoardingPass pass = BoardingPass.builder()
+                .status(BoardingPassStatus.ACTIVE)
+                .issuedAt(LocalDateTime.now())
                 .checkIn(checkIn)
                 .boardingPassNumber(boardingPassNumber)
                 .token(token)
@@ -198,6 +200,7 @@ public class BoardingPassServiceImpl implements BoardingPassService {
                 .actor("USER")
                 .source("API")
                 .details(details)
+                .changedAt(LocalDateTime.now())
                 .build());
     }
 
