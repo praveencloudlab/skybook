@@ -5,6 +5,8 @@ import com.skybook.praveen.common.event.BookingEventType;
 import com.skybook.praveen.notificationservice.service.BookingEmailTemplate;
 import com.skybook.praveen.notificationservice.service.EmailService;
 import com.skybook.praveen.notificationservice.service.QrCodeGenerator;
+import com.skybook.praveen.notificationservice.service.TicketPdfRenderer;
+import com.skybook.praveen.notificationservice.service.TicketPdfTemplate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -26,6 +28,8 @@ public class BookingEventConsumer {
     private final EmailService emailService;
     private final BookingEmailTemplate bookingEmailTemplate;
     private final QrCodeGenerator qrCodeGenerator;
+    private final TicketPdfTemplate ticketPdfTemplate;
+    private final TicketPdfRenderer ticketPdfRenderer;
 
     @KafkaListener(
             topics = "${skybook.kafka.topics.booking-events}",
@@ -47,10 +51,19 @@ public class BookingEventConsumer {
                     || event.getType() == BookingEventType.CONFIRMED
                     || event.getType() == BookingEventType.COMPLETED;
 
-            String html = bookingEmailTemplate.render(event, includeQr);
+            // Downloadable ticket PDF only once the booking is actually
+            // confirmed (paid) - a PDF for a pending booking isn't a ticket.
+            boolean includeTicket = event.getType() == BookingEventType.CONFIRMED;
 
-            if (includeQr) {
-                byte[] qr = qrCodeGenerator.generatePng(qrPayload(event), 280);
+            String html = bookingEmailTemplate.render(event, includeQr);
+            byte[] qr = includeQr ? qrCodeGenerator.generatePng(qrPayload(event), 280) : null;
+
+            if (includeTicket) {
+                byte[] ticketPdf = ticketPdfRenderer.render(ticketPdfTemplate.render(event, qr));
+                emailService.sendHtmlEmail(event.getContactEmail(), event.getSubject(), html,
+                        BookingEmailTemplate.QR_CID, qr,
+                        "SkyBook-Ticket-" + event.getBookingReference() + ".pdf", ticketPdf);
+            } else if (includeQr) {
                 emailService.sendHtmlEmail(event.getContactEmail(), event.getSubject(), html,
                         BookingEmailTemplate.QR_CID, qr);
             } else {
