@@ -49,15 +49,21 @@ public interface CheckInService {
 
     CheckInResponse assignGate(Long id, String gate);
 
-    /** BookingEvent CANCELLED cascade - transitions every non-terminal CheckIn for the booking. */
-    void cancelAllForBooking(Long bookingId, String reason);
+    /**
+     * BookingEvent CANCELLED cascade - transitions every non-terminal
+     * CheckIn for the booking to CANCELLED. Returns the rows actually
+     * cancelled (not the whole booking's check-ins) so the facade can
+     * publish an event and revoke a boarding pass for each.
+     */
+    List<CheckInResponse> cancelAllForBooking(Long bookingId, String reason);
 
     /**
      * No-show sweep (design doc section 5.7/10) - sweeps every SWEEPABLE
      * row whose departureTime is before departureCutoff. The caller (the
      * scheduler) computes departureCutoff as now + gate-close offset, since
      * "gate closed" for a given row means departureTime - offset &lt; now,
-     * i.e. departureTime &lt; now + offset. Returns the number of rows swept.
+     * i.e. departureTime &lt; now + offset. Returns the rows swept so the
+     * facade can publish an event and revoke a boarding pass for each.
      */
-    int sweepNoShows(LocalDateTime departureCutoff);
+    List<CheckInResponse> sweepNoShows(LocalDateTime departureCutoff);
 }
