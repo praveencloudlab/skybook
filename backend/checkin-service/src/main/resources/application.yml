@@ -1,0 +1,58 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: checkin-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/skybook_checkin
+    username: postgres
+    password: postgres
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+    consumer:
+      group-id: checkin-service
+      auto-offset-reset: earliest
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+springdoc:
+  api-docs:
+    path: /api-docs
+
+  swagger-ui:
+    path: /swagger-ui.html
+
+  packages-to-scan: com.skybook.praveen.checkinservice.controller
+
+# Synchronous dependencies (design doc section 9): flight status/departure
+# time, seat-reservation lookups and seat-change calls.
+flight-service:
+  base-url: http://localhost:8082
+
+inventory-service:
+  base-url: http://localhost:8084
+
+skybook:
+  kafka:
+    topics:
+      # Consumed - BookingEvent CONFIRMED creates CheckIn rows, CANCELLED cascades.
+      booking-events: skybook.booking.events
+      # Produced - PassengerCheckedIn/Boarded/NoShow, BoardingPassGenerated.
+      checkin-events: skybook.checkin.events
