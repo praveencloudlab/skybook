@@ -11,7 +11,6 @@ import com.skybook.praveen.checkinservice.exception.SeatUnavailableException;
 import com.skybook.praveen.checkinservice.producer.CheckInEventProducer;
 import com.skybook.praveen.checkinservice.service.BoardingPassService;
 import com.skybook.praveen.checkinservice.service.CheckInService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -29,10 +28,14 @@ import java.util.List;
  *
  * External calls happen outside of and before any DB transaction, same
  * gateway-outside-transaction discipline as PaymentFacade/BookingFacade.
+ *
+ * No @RequiredArgsConstructor - gateClosesMinutesBeforeDeparture is a
+ * @Value primitive, which needs an explicit constructor to be resolvable in
+ * a plain unit test, same reasoning as BoardingPassServiceImpl/
+ * ManifestServiceImpl.
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class CheckInFacade {
 
     private final CheckInService checkInService;
@@ -40,9 +43,19 @@ public class CheckInFacade {
     private final FlightServiceClient flightServiceClient;
     private final InventoryServiceClient inventoryServiceClient;
     private final CheckInEventProducer producer;
+    private final long gateClosesMinutesBeforeDeparture;
 
-    @Value("${checkin.boarding.gate-closes-minutes-before-departure:20}")
-    private long gateClosesMinutesBeforeDeparture;
+    public CheckInFacade(CheckInService checkInService, BoardingPassService boardingPassService,
+            FlightServiceClient flightServiceClient, InventoryServiceClient inventoryServiceClient,
+            CheckInEventProducer producer,
+            @Value("${checkin.boarding.gate-closes-minutes-before-departure:20}") long gateClosesMinutesBeforeDeparture) {
+        this.checkInService = checkInService;
+        this.boardingPassService = boardingPassService;
+        this.flightServiceClient = flightServiceClient;
+        this.inventoryServiceClient = inventoryServiceClient;
+        this.producer = producer;
+        this.gateClosesMinutesBeforeDeparture = gateClosesMinutesBeforeDeparture;
+    }
 
     /**
      * design doc section 5.1/5.2: verifies the flight isn't cancelled and
