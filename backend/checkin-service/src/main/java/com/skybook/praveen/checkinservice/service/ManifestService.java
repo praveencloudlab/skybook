@@ -19,4 +19,14 @@ public interface ManifestService {
 
     /** Idempotent - a no-op if already FINALIZED. Rejects if the gate hasn't closed yet. */
     FlightManifestResponse finalizeManifest(Long flightId, LocalDateTime now);
+
+    /**
+     * Scheduler entry point (design doc section 5.7/10) - finalizes every
+     * flight with at least one CheckIn whose gate has closed and that isn't
+     * already FINALIZED. Computes its own cutoff (no external I/O involved
+     * in manifest finalization, unlike CheckInFacade's operations, so there
+     * is no reason to push the config out to the caller here). Returns the
+     * number of manifests newly finalized.
+     */
+    int finalizeDueManifests();
 }
