@@ -17,7 +17,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({
             CheckInNotFoundException.class,
-            BoardingPassNotFoundException.class
+            BoardingPassNotFoundException.class,
+            FlightNotFoundForCheckInException.class
     })
     public ResponseEntity<ErrorResponse> handleNotFound(
             RuntimeException exception, HttpServletRequest request) {
@@ -29,6 +30,21 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleVerificationFailed(
             BoardingPassVerificationException exception, HttpServletRequest request) {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(SeatUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleSeatUnavailable(
+            SeatUnavailableException exception, HttpServletRequest request) {
+        return build(HttpStatus.CONFLICT, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler({
+            FlightServiceUnavailableException.class,
+            InventoryServiceUnavailableException.class
+    })
+    public ResponseEntity<ErrorResponse> handleUpstreamUnavailable(
+            RuntimeException exception, HttpServletRequest request) {
+        return build(HttpStatus.BAD_GATEWAY, exception.getMessage(), request);
     }
 
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
