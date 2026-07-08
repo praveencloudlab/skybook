@@ -1,17 +1,14 @@
 package com.skybook.praveen.checkinservice.dto.response;
 
 /**
- * Result of GET /api/boarding-passes/verify (design doc section 6) - the
- * gate reader's expected shape: pass/fail plus enough context to display,
- * without requiring a second lookup.
+ * Result of a successful GET /api/boarding-passes/verify (design doc
+ * section 6/7) - enough context for a gate reader to display without a
+ * second lookup. Verification failures (tampered/unknown/revoked/already-
+ * boarded) throw BoardingPassVerificationException -> 422, same "request
+ * was valid, the real-world check failed" distinction payment-service uses
+ * for gateway declines, rather than a valid=false field on a 200 body.
  */
 public record BoardingPassVerifyResponse(
-
-        boolean valid,
-
-        // Populated on failure: TAMPERED_TOKEN, UNKNOWN_PASS, REVOKED,
-        // ALREADY_BOARDED. Null when valid.
-        String reason,
 
         String passengerName,
 
