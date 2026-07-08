@@ -36,7 +36,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -53,7 +52,9 @@ class BookingFacadeTest {
 
     private BookingFacade facade;
 
-    private final LocalDateTime departure = LocalDateTime.now().plusDays(7);
+    private LocalDateTime departure() {
+        return flight.departureTime();
+    }
 
     @BeforeEach
     void setUp() {
@@ -81,10 +82,13 @@ class BookingFacadeTest {
         return new InventoryHoldDetails(5L, seat, "ACTIVE", LocalDateTime.now().plusMinutes(15));
     }
 
+    private final FlightDetails flight = new FlightDetails(
+            10L, "AI131", "LHR", "DEL",
+            LocalDateTime.now().plusDays(7), LocalDateTime.now().plusDays(7).plusHours(9),
+            FlightBookingStatus.SCHEDULED);
+
     private void stubFlightOk() {
-        when(flightServiceClient.getFlight(10L)).thenReturn(new FlightDetails(
-                10L, "AI131", "LHR", "DEL", departure, departure.plusHours(9),
-                FlightBookingStatus.SCHEDULED));
+        when(flightServiceClient.getFlight(10L)).thenReturn(flight);
     }
 
     // ---------------------------------------------------------------
@@ -101,7 +105,7 @@ class BookingFacadeTest {
         void holdsEverySeatThenPublishes() {
             stubFlightOk();
             BookingResponse created = booking(BookingStatus.CREATED, "12A", "12B");
-            when(bookingService.createBooking(request, departure)).thenReturn(created);
+            when(bookingService.createBooking(request, departure())).thenReturn(created);
             when(inventoryServiceClient.holdSeat(eq(10L), anyString(), eq(7L)))
                     .thenAnswer(inv -> Optional.of(hold(inv.getArgument(1))));
 
@@ -109,7 +113,7 @@ class BookingFacadeTest {
 
             verify(inventoryServiceClient).holdSeat(10L, "12A", 7L);
             verify(inventoryServiceClient).holdSeat(10L, "12B", 7L);
-            verify(bookingEventProducer).publishBookingCreated(created);
+            verify(bookingEventProducer).publishBookingCreated(created, flight);
             verify(bookingService, never()).cancelBooking(anyLong(), anyString());
         }
 
@@ -117,21 +121,21 @@ class BookingFacadeTest {
         void flightWithoutInventorySkipsHoldsAfterFirstProbe() {
             stubFlightOk();
             BookingResponse created = booking(BookingStatus.CREATED, "12A", "12B");
-            when(bookingService.createBooking(request, departure)).thenReturn(created);
+            when(bookingService.createBooking(request, departure())).thenReturn(created);
             when(inventoryServiceClient.holdSeat(10L, "12A", 7L)).thenReturn(Optional.empty());
 
             facade.createBooking(request);
 
             verify(inventoryServiceClient).holdSeat(10L, "12A", 7L);
             verify(inventoryServiceClient, never()).holdSeat(10L, "12B", 7L);
-            verify(bookingEventProducer).publishBookingCreated(created);
+            verify(bookingEventProducer).publishBookingCreated(created, flight);
         }
 
         @Test
         void seatConflictCompensatesAndCancelsTheBooking() {
             stubFlightOk();
             BookingResponse created = booking(BookingStatus.CREATED, "12A", "12B");
-            when(bookingService.createBooking(request, departure)).thenReturn(created);
+            when(bookingService.createBooking(request, departure())).thenReturn(created);
             when(inventoryServiceClient.holdSeat(10L, "12A", 7L)).thenReturn(Optional.of(hold("12A")));
             when(inventoryServiceClient.holdSeat(10L, "12B", 7L))
                     .thenThrow(new SeatUnavailableException(10L, "12B", "already held or reserved"));
@@ -142,7 +146,7 @@ class BookingFacadeTest {
             // The successful hold is released, the booking cancelled, no event published.
             verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12A"), eq(7L), anyString());
             verify(bookingService).cancelBooking(eq(7L), anyString());
-            verify(bookingEventProducer, never()).publishBookingCreated(any());
+            verify(bookingEventProducer, never()).publishBookingCreated(any(), any());
         }
     }
 
@@ -164,7 +168,7 @@ class BookingFacadeTest {
             facade.confirmBookingFromPayment(7L, "PAY-2026-K7M4Z9");
 
             verify(inventoryServiceClient).reserveSeat(10L, "12A", 7L, 1L);
-            verify(bookingEventProducer).publishBookingConfirmed(confirmed);
+            verify(bookingEventProducer).publishBookingConfirmed(confirmed, null);
         }
 
         @Test
@@ -177,7 +181,7 @@ class BookingFacadeTest {
 
             facade.confirmBookingFromPayment(7L, "PAY-2026-K7M4Z9");
 
-            verify(bookingEventProducer, never()).publishBookingConfirmed(any());
+            verify(bookingEventProducer, never()).publishBookingConfirmed(any(), any());
         }
 
         @Test
@@ -191,7 +195,7 @@ class BookingFacadeTest {
             BookingResponse result = facade.confirmBookingFromPayment(7L, "PAY-2026-K7M4Z9");
 
             assertThat(result.bookingStatus()).isEqualTo(BookingStatus.CONFIRMED);
-            verify(bookingEventProducer).publishBookingConfirmed(confirmed);
+            verify(bookingEventProducer).publishBookingConfirmed(confirmed, null);
         }
     }
 
@@ -208,7 +212,6 @@ class BookingFacadeTest {
 
         verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12A"), eq(7L), anyString());
         verify(inventoryServiceClient).cancelReservationQuietly(eq(10L), eq("12B"), eq(7L), anyString());
-        verify(bookingEventProducer).publishBookingCancelled(cancelled);
-        verifyNoInteractions(flightServiceClient);
+        verify(bookingEventProducer).publishBookingCancelled(cancelled, null);
     }
 }

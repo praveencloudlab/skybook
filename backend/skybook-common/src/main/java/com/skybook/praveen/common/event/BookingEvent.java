@@ -64,6 +64,19 @@ public class BookingEvent {
     /** Booking date, pre-formatted, e.g. "2026-07-04 02:26" */
     private String bookingDate;
 
+    // Flight context (nullable - populated best-effort from flight-service
+    // for the email template; older events simply lack it).
+    private String flightNumber;
+
+    private String originAirportCode;
+
+    private String destinationAirportCode;
+
+    /** Pre-formatted, e.g. "2026-07-08 21:25" */
+    private String departureTime;
+
+    private String arrivalTime;
+
     private List<BookingEventPassenger> passengers;
 
     private BigDecimal totalFare;
