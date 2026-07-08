@@ -31,8 +31,16 @@ public interface BookingService {
 
     List<BookingResponse> searchBookings(BookingSearchRequest criteria);
 
-    /** v1: no real Payment Service yet - simulates payment success directly. */
+    /** Back-office override - simulates payment success directly. The normal
+     *  Sprint 6 path is confirmBookingFromPayment, driven by PAYMENT_SUCCEEDED. */
     BookingResponse confirmBooking(Long id);
+
+    /** transitioned = false when the booking was already CONFIRMED (idempotent event replay). */
+    record PaymentConfirmation(BookingResponse booking, boolean transitioned) {
+    }
+
+    /** Event-driven confirmation: records the real payment reference from payment-service. */
+    PaymentConfirmation confirmBookingFromPayment(Long bookingId, String paymentReference);
 
     BookingResponse cancelBooking(Long id, String reason);
 
