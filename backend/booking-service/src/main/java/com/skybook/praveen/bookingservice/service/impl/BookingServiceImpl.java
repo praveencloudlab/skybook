@@ -172,15 +172,45 @@ public class BookingServiceImpl implements BookingService {
 
         Booking booking = findBookingOrThrow(id);
 
-        // v1: no real Payment Service yet - this endpoint simulates a
-        // successful payment directly (docs section 11).
+        // Back-office override (Sprint 6): simulates a successful payment
+        // directly. The normal path is confirmBookingFromPayment, driven by
+        // payment-service's PAYMENT_SUCCEEDED event.
         if (booking.getPayment() != null) {
             bookingStateMachine.transitionPaymentStatus(booking.getPayment(), PaymentStatus.PAID, "system");
         }
 
-        bookingStateMachine.transitionBookingStatus(booking, BookingStatus.CONFIRMED, null, "system");
+        bookingStateMachine.transitionBookingStatus(booking, BookingStatus.CONFIRMED,
+                "manual confirmation (back-office override, simulated payment)", "system");
 
         return BookingMapper.toResponse(bookingRepository.save(booking));
+    }
+
+    @Override
+    @Transactional
+    public PaymentConfirmation confirmBookingFromPayment(Long bookingId, String paymentReference) {
+
+        Booking booking = findBookingOrThrow(bookingId);
+
+        // Idempotent: a redelivered PAYMENT_SUCCEEDED finds the booking
+        // already confirmed and changes nothing.
+        if (booking.getBookingStatus() == BookingStatus.CONFIRMED) {
+            log.info("Booking {} already CONFIRMED - duplicate payment event for {}",
+                    booking.getBookingReference(), paymentReference);
+            return new PaymentConfirmation(BookingMapper.toResponse(booking), false);
+        }
+
+        if (booking.getPayment() != null) {
+            booking.getPayment().setExternalPaymentReference(paymentReference);
+            bookingStateMachine.transitionPaymentStatus(booking.getPayment(), PaymentStatus.PAID,
+                    "payment-service");
+        }
+
+        bookingStateMachine.transitionBookingStatus(booking, BookingStatus.CONFIRMED,
+                "payment " + paymentReference + " captured", "payment-service");
+
+        log.info("Booking {} confirmed by payment {}", booking.getBookingReference(), paymentReference);
+
+        return new PaymentConfirmation(BookingMapper.toResponse(bookingRepository.save(booking)), true);
     }
 
     @Override
