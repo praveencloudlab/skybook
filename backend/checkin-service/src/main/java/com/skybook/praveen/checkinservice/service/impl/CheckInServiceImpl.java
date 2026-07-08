@@ -54,6 +54,7 @@ public class CheckInServiceImpl implements CheckInService {
         }
 
         CheckIn checkIn = CheckIn.builder()
+                .status(CheckInStatus.NOT_OPEN)
                 .bookingId(request.bookingId())
                 .bookingReference(request.bookingReference())
                 .bookingPassengerId(request.bookingPassengerId())
