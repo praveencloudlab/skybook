@@ -17,7 +17,6 @@ import com.skybook.praveen.checkinservice.mapper.BoardingPassMapper;
 import com.skybook.praveen.checkinservice.repository.BoardingPassRepository;
 import com.skybook.praveen.checkinservice.repository.CheckInHistoryRepository;
 import com.skybook.praveen.checkinservice.service.BoardingPassService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -26,9 +25,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+/**
+ * No @RequiredArgsConstructor - boardingOpensMinutesBeforeDeparture is a
+ * @Value primitive, which needs an explicit constructor to be resolvable in
+ * a plain unit test (field injection never populates outside a real Spring
+ * context), same reasoning as CheckInValidator/BaggageAllowanceCalculator.
+ */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class BoardingPassServiceImpl implements BoardingPassService {
 
     private static final int MAX_REFERENCE_ATTEMPTS = 10;
@@ -44,9 +48,21 @@ public class BoardingPassServiceImpl implements BoardingPassService {
     private final BoardingPassNumberGenerator numberGenerator;
     private final BoardingPassTokenSigner tokenSigner;
     private final BoardingGroupAssigner boardingGroupAssigner;
+    private final long boardingOpensMinutesBeforeDeparture;
 
-    @Value("${checkin.boarding.opens-minutes-before-departure:45}")
-    private long boardingOpensMinutesBeforeDeparture;
+    public BoardingPassServiceImpl(BoardingPassRepository boardingPassRepository,
+            CheckInHistoryRepository checkInHistoryRepository, CheckInServiceImpl checkInService,
+            BoardingPassNumberGenerator numberGenerator, BoardingPassTokenSigner tokenSigner,
+            BoardingGroupAssigner boardingGroupAssigner,
+            @Value("${checkin.boarding.opens-minutes-before-departure:45}") long boardingOpensMinutesBeforeDeparture) {
+        this.boardingPassRepository = boardingPassRepository;
+        this.checkInHistoryRepository = checkInHistoryRepository;
+        this.checkInService = checkInService;
+        this.numberGenerator = numberGenerator;
+        this.tokenSigner = tokenSigner;
+        this.boardingGroupAssigner = boardingGroupAssigner;
+        this.boardingOpensMinutesBeforeDeparture = boardingOpensMinutesBeforeDeparture;
+    }
 
     @Override
     @Transactional

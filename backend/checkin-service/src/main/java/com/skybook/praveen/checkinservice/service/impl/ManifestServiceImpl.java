@@ -14,7 +14,6 @@ import com.skybook.praveen.checkinservice.repository.BaggageRepository;
 import com.skybook.praveen.checkinservice.repository.CheckInRepository;
 import com.skybook.praveen.checkinservice.repository.FlightManifestRepository;
 import com.skybook.praveen.checkinservice.service.ManifestService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -26,9 +25,13 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
+/**
+ * No @RequiredArgsConstructor - gateClosesMinutesBeforeDeparture is a
+ * @Value primitive, which needs an explicit constructor to be resolvable in
+ * a plain unit test, same reasoning as BoardingPassServiceImpl.
+ */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ManifestServiceImpl implements ManifestService {
 
     private static final Set<CheckInStatus> EVER_CHECKED_IN = EnumSet.of(
@@ -40,9 +43,17 @@ public class ManifestServiceImpl implements ManifestService {
     private final BaggageRepository baggageRepository;
     private final FlightManifestRepository flightManifestRepository;
     private final CheckInValidator validator;
+    private final long gateClosesMinutesBeforeDeparture;
 
-    @Value("${checkin.boarding.gate-closes-minutes-before-departure:20}")
-    private long gateClosesMinutesBeforeDeparture;
+    public ManifestServiceImpl(CheckInRepository checkInRepository, BaggageRepository baggageRepository,
+            FlightManifestRepository flightManifestRepository, CheckInValidator validator,
+            @Value("${checkin.boarding.gate-closes-minutes-before-departure:20}") long gateClosesMinutesBeforeDeparture) {
+        this.checkInRepository = checkInRepository;
+        this.baggageRepository = baggageRepository;
+        this.flightManifestRepository = flightManifestRepository;
+        this.validator = validator;
+        this.gateClosesMinutesBeforeDeparture = gateClosesMinutesBeforeDeparture;
+    }
 
     @Override
     @Transactional(readOnly = true)
