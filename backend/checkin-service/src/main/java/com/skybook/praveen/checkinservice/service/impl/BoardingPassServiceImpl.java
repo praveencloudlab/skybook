@@ -112,6 +112,29 @@ public class BoardingPassServiceImpl implements BoardingPassService {
     }
 
     @Override
+    @Transactional
+    public Optional<BoardingPassResponse> revokeActive(Long checkInId, String reason) {
+
+        CheckIn checkIn = checkInService.findCheckInOrThrow(checkInId);
+
+        var currentActive = boardingPassRepository.findByCheckInIdAndStatus(checkInId, BoardingPassStatus.ACTIVE);
+        if (currentActive.isEmpty()) {
+            return Optional.empty();
+        }
+
+        BoardingPass pass = currentActive.get();
+        pass.setStatus(BoardingPassStatus.REVOKED);
+        pass.setRevokedAt(LocalDateTime.now());
+        BoardingPass saved = boardingPassRepository.save(pass);
+
+        recordHistory(checkIn, CheckInHistoryType.BOARDING_PASS_REVOKED,
+                "Boarding pass " + pass.getBoardingPassNumber() + " revoked (" + reason + ")");
+
+        log.info("Revoked boarding pass {} for check-in {} ({})", pass.getBoardingPassNumber(), checkInId, reason);
+        return Optional.of(BoardingPassMapper.toResponse(saved));
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public BoardingPassResponse getById(Long id) {
         return BoardingPassMapper.toResponse(boardingPassRepository.findById(id)

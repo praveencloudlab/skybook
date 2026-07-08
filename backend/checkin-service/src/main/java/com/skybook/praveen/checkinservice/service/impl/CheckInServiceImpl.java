@@ -179,24 +179,26 @@ public class CheckInServiceImpl implements CheckInService {
 
     @Override
     @Transactional
-    public void cancelAllForBooking(Long bookingId, String reason) {
+    public List<CheckInResponse> cancelAllForBooking(Long bookingId, String reason) {
 
         List<CheckIn> checkIns = checkInRepository.findByBookingId(bookingId);
+        List<CheckIn> cancelled = checkIns.stream()
+                .filter(checkIn -> stateMachine.canTransition(checkIn.getStatus(), CheckInStatus.CANCELLED))
+                .toList();
 
-        for (CheckIn checkIn : checkIns) {
-            if (stateMachine.canTransition(checkIn.getStatus(), CheckInStatus.CANCELLED)) {
-                stateMachine.transition(checkIn, CheckInStatus.CANCELLED, CheckInHistoryType.CANCELLED,
-                        "KAFKA", "BOOKING_EVENT", null, reason);
-                checkInRepository.save(checkIn);
-            }
+        for (CheckIn checkIn : cancelled) {
+            stateMachine.transition(checkIn, CheckInStatus.CANCELLED, CheckInHistoryType.CANCELLED,
+                    "KAFKA", "BOOKING_EVENT", null, reason);
+            checkInRepository.save(checkIn);
         }
 
-        log.info("Cancelled {} check-in(s) for booking {} ({})", checkIns.size(), bookingId, reason);
+        log.info("Cancelled {} check-in(s) for booking {} ({})", cancelled.size(), bookingId, reason);
+        return cancelled.stream().map(CheckInMapper::toResponse).toList();
     }
 
     @Override
     @Transactional
-    public int sweepNoShows(LocalDateTime departureCutoff) {
+    public List<CheckInResponse> sweepNoShows(LocalDateTime departureCutoff) {
 
         List<CheckIn> overdue = checkInRepository.findByStatusInAndDepartureTimeBefore(SWEEPABLE, departureCutoff);
 
@@ -210,7 +212,7 @@ public class CheckInServiceImpl implements CheckInService {
             log.info("No-show sweep marked {} check-in(s) as NO_SHOW", overdue.size());
         }
 
-        return overdue.size();
+        return overdue.stream().map(CheckInMapper::toResponse).toList();
     }
 
     CheckIn findCheckInOrThrow(Long id) {

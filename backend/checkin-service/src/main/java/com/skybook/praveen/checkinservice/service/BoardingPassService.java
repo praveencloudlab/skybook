@@ -19,6 +19,13 @@ public interface BoardingPassService {
      */
     Optional<BoardingPassResponse> reissueForSeatChange(Long checkInId);
 
+    /**
+     * Revokes the current ACTIVE pass (if any), without reissuing - used on
+     * booking cancellation and the no-show sweep, where there is no new
+     * pass to issue. No-op (empty) if no ACTIVE pass exists.
+     */
+    Optional<BoardingPassResponse> revokeActive(Long checkInId, String reason);
+
     BoardingPassResponse getById(Long id);
 
     /**
