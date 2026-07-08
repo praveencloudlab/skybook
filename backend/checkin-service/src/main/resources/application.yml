@@ -56,3 +56,22 @@ skybook:
       booking-events: skybook.booking.events
       # Produced - PassengerCheckedIn/Boarded/NoShow, BoardingPassGenerated.
       checkin-events: skybook.checkin.events
+
+checkin:
+  window:
+    opens-hours-before-departure: 24
+    closes-minutes-before-departure: 45
+  boarding:
+    opens-minutes-before-departure: 45
+    gate-closes-minutes-before-departure: 20
+  baggage:
+    allowance-kg:
+      economy-saver: 15
+      economy-flexi: 20
+      premium-economy: 25
+      business: 32
+    excess-charge-per-kg: 10
+  boarding-pass:
+    # Symmetric HMAC key (design doc section 6) - dev-only default here;
+    # override via CHECKIN_BOARDING_PASS_KEY in any real deployment.
+    signing-key: ${CHECKIN_BOARDING_PASS_KEY:dev-only-insecure-signing-key-change-me}
