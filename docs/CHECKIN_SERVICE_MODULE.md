@@ -129,7 +129,7 @@ FlightManifest (root — one per flight; passenger list is a live query over Che
 |---|---|
 | One `CheckIn` per `bookingPassengerId` | **DB unique constraint** on `bookingPassengerId`. Makes the `BookingEvent CONFIRMED` consumer naturally idempotent (§8). |
 | `CheckIn` cannot reach `CHECKED_IN` before its window opens or after it closes | Service layer (`CheckInValidator`), timestamps computed from the snapshotted `departureTime` and `checkin.window.*` config (§13). |
-| One active `BoardingPass` per `CheckIn` | **DB unique constraint** on `checkInId`; a reissued pass (e.g. after a seat change) revokes-and-replaces rather than adding a second row (§6). |
+| At most one **`ACTIVE`** `BoardingPass` per `CheckIn` | **Service-layer guarantee** (revoke-old-then-insert-new on reissue, §5.6/§6) — not a plain DB unique constraint on `checkInId`, since a `CheckIn` legitimately accumulates multiple `REVOKED` rows over its lifetime (seat changes). `boardingPassNumber`/`token` are still DB-unique per row. |
 | `boardingPassNumber` / QR token unique | **DB unique constraints**, same discipline as payment-service's reference columns. |
 | Terminal states (`CANCELLED`, `NO_SHOW`, `COMPLETED`) are final | State machine — no outgoing transitions (§4). |
 | `history` is append-only | Cascade-only write path, no update/delete — Booking/Payment precedent. |
