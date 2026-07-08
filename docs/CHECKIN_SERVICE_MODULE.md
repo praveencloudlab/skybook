@@ -131,7 +131,7 @@ FlightManifest (root — one per flight; passenger list is a live query over Che
 | `CheckIn` cannot reach `CHECKED_IN` before its window opens or after it closes | Service layer (`CheckInValidator`), timestamps computed from the snapshotted `departureTime` and `checkin.window.*` config (§13). |
 | One active `BoardingPass` per `CheckIn` | **DB unique constraint** on `checkInId`; a reissued pass (e.g. after a seat change) revokes-and-replaces rather than adding a second row (§6). |
 | `boardingPassNumber` / QR token unique | **DB unique constraints**, same discipline as payment-service's reference columns. |
-| Terminal states (`CANCELLED`, `NO_SHOW`, `COMPLETED`, `CLOSED`) are final | State machine — no outgoing transitions (§4). |
+| Terminal states (`CANCELLED`, `NO_SHOW`, `COMPLETED`) are final | State machine — no outgoing transitions (§4). |
 | `history` is append-only | Cascade-only write path, no update/delete — Booking/Payment precedent. |
 
 ## 3.2 `BoardingPass`
@@ -177,15 +177,15 @@ All enum fields `@Enumerated(EnumType.STRING)` — standing rule.
 
 ## 4.1 `CheckInStatus`
 
-The brief's business rules (§5.8 of the original brief) list transitions but only three terminal states while also making `OPEN → CLOSED` reachable with nothing transitioning out of it. **Clarification made here:** `CLOSED` is treated as a fourth terminal state (a passenger who never checked in before the window closed — the "missed the window" outcome, distinct from `NO_SHOW` which is for someone who checked in but never boarded). Also broadened: `CANCELLED` is reachable from any non-terminal state, not only `CHECKED_IN` — a booking can be cancelled before its check-in window ever opens, and that must still resolve to `CANCELLED`, not sit unresolved.
+**Resolved (was §15.2 open question):** `NO_SHOW` means *didn't fly* — reachable from any pre-boarding state, not only `CHECKED_IN`. This matches the real-world meaning of "no-show" (a confirmed passenger who never boards, whether or not they checked in) rather than the brief's literal transition list, which only wired `CHECKED_IN → NO_SHOW` and left an orphaned `OPEN → CLOSED` transition with no stated terminal status. No separate `CLOSED` state — "checked in but vanished" vs. "never checked in at all" is answerable from `CheckInHistory`/`checkedInAt` on the row, not a distinct enum value. Also broadened: `CANCELLED` is reachable from any non-terminal state, not only `CHECKED_IN` — a booking can be cancelled before its check-in window ever opens, and that must still resolve to `CANCELLED`, not sit unresolved.
 
 | From | Allowed to |
 |---|---|
-| `NOT_OPEN` | `OPEN`, `CANCELLED` |
-| `OPEN` | `CHECKED_IN`, `CLOSED`, `CANCELLED` |
+| `NOT_OPEN` | `OPEN`, `NO_SHOW`, `CANCELLED` |
+| `OPEN` | `CHECKED_IN`, `NO_SHOW`, `CANCELLED` |
 | `CHECKED_IN` | `BOARDED`, `NO_SHOW`, `CANCELLED` |
 | `BOARDED` | `COMPLETED` |
-| `CLOSED`, `CANCELLED`, `NO_SHOW`, `COMPLETED` | — terminal |
+| `NO_SHOW`, `CANCELLED`, `COMPLETED` | — terminal |
 
 `CheckInStateMachine`: identical shape to `PaymentStateMachine` — `Map<CheckInStatus, Set<CheckInStatus>>` backed by `EnumMap`, populated in a static block with `EnumSet.of(...)`, `canTransition`/`transition` pair, illegal moves throw `IllegalStateException` → mapped to **409** by `GlobalExceptionHandler` (same convention as every other service), `recordHistory` appends a `CheckInHistory` row in-memory for cascade persistence.
 
@@ -199,7 +199,7 @@ The brief's business rules (§5.8 of the original brief) list transitions but on
 
 ## 4.4 `CheckInHistoryType`
 
-`CHECKIN_OPENED, CHECKED_IN, CLOSED, BOARDED, NO_SHOW, CANCELLED, SEAT_CHANGED, BAGGAGE_ADDED, BOARDING_PASS_ISSUED, BOARDING_PASS_REVOKED`
+`CHECKIN_OPENED, CHECKED_IN, BOARDED, NO_SHOW, CANCELLED, SEAT_CHANGED, BAGGAGE_ADDED, BOARDING_PASS_ISSUED, BOARDING_PASS_REVOKED`
 
 ---
 
@@ -214,7 +214,7 @@ Reproducing the brief's rules 1-7, organized by where each is enforced (payment-
 | Only `CONFIRMED` bookings get a `CheckIn` row at all | Consumer only creates rows on `BookingEvent{type=CONFIRMED}` (§8) — there is structurally no `CheckIn` for a non-confirmed booking. |
 | Seat must be `RESERVED` in inventory | `CheckInValidator`, verified via `GET /api/reservations/booking/{bookingId}` on inventory-service at window-open and at check-in time (not trusted from the snapshot alone). |
 | Flight must not be `CANCELLED`/closed | `CheckInValidator`, verified via a synchronous `FlightServiceClient.getFlight(flightId)` call (flight-service has no Kafka producer yet — see §9.2 for why this is synchronous, not event-driven, in v1). |
-| Window: opens `checkin.window.opens-hours-before-departure` (default 24h) before departure, closes `checkin.window.closes-minutes-before-departure` (default 45m) before | `CheckInValidator`, computed from the snapshotted `departureTime`. The no-show sweep scheduler (§10) is what actually drives `OPEN → CLOSED` at the close boundary — nothing else polls for it. |
+| Window: opens `checkin.window.opens-hours-before-departure` (default 24h) before departure, closes `checkin.window.closes-minutes-before-departure` (default 45m) before | `CheckInValidator`, computed from the snapshotted `departureTime`. The no-show sweep scheduler (§10) is what actually drives `NOT_OPEN/OPEN → NO_SHOW` at the close boundary — nothing else polls for it. |
 
 ## 5.2 Passenger check-in
 
@@ -223,7 +223,7 @@ Reproducing the brief's rules 1-7, organized by where each is enforced (payment-
 | Only booked passengers with a confirmed booking check in | Structural — a `CheckIn` row only exists for a `CONFIRMED` booking's passengers. |
 | Passenger must have a reserved seat | Same inventory check as §5.1. |
 | Cannot check in twice | State machine — `CHECKED_IN` has no self-loop. |
-| Cannot check in after window closes | `CheckInValidator`, same window math as §5.1; also structurally blocked once the sweep has moved the row to `CLOSED` (terminal). |
+| Cannot check in after window closes | `CheckInValidator`, same window math as §5.1; also structurally blocked once the sweep has moved the row to `NO_SHOW` (terminal). |
 | Cannot check in if passport/document data is missing | `documentVerified` flag (§3.1), computed at `CheckIn` creation from whether the snapshotted passenger data included document fields. v1 does **not** validate document authenticity — presence only (§14). |
 | Cannot check in if booking is cancelled/refunded | Consumer transitions the row to `CANCELLED` on `BookingEvent{type=CANCELLED}` (§8); the state machine then structurally blocks `CANCELLED → CHECKED_IN`. |
 
@@ -272,7 +272,7 @@ Reproducing the brief's rules 1-7, organized by where each is enforced (payment-
 | Rule | Enforced by |
 |---|---|
 | Includes all checked-in passengers, excludes cancelled | Query filters `CheckIn.status NOT IN (CANCELLED)` while `OPEN`. |
-| Marks `NO_SHOW` after gate close | The no-show sweep scheduler (§10) — `CHECKED_IN` rows that never reached `BOARDED` by gate-close time move to... **clarification**: the brief's rule reads as "checked-in-but-never-boarded → NO_SHOW", which is unusual (normally NO_SHOW means never checked in at all) but matches this brief's state machine exactly (`CHECKED_IN → NO_SHOW` is a listed transition; there's no `OPEN → NO_SHOW`). A passenger who never checked in at all lands in `CLOSED`, not `NO_SHOW`, under this design (§4.1). |
+| Marks `NO_SHOW` after gate close | The no-show sweep scheduler (§10) — any `NOT_OPEN`/`OPEN`/`CHECKED_IN` row that never reached `BOARDED` by gate-close time moves to `NO_SHOW` (§4.1's resolved semantics: didn't fly, whether or not they checked in). |
 | Includes baggage count/weight | Denormalized counters (§3.5), refreshed on finalize. |
 | Finalized only after gate close or departure | `POST /api/manifests/{flightId}/finalize` (§7) rejects if called before the configured gate-close offset has passed for that flight. |
 | Finalized manifest is read-only | `ManifestStatus.FINALIZED` is terminal; the finalize endpoint and the sweep job both no-op against an already-finalized manifest (idempotent). |
@@ -466,7 +466,7 @@ Config classes mirror the fleet: `JpaAuditingConfig`, `KafkaProducerConfig` (`Ch
 # 15. Known Risks / Open Questions
 
 1. **Migration window split-brain (§11).** Between checkin-service's launch and booking-service's endpoint removal, both `PATCH /api/bookings/.../checkin` and checkin-service's own check-in endpoint could theoretically be called for the same passenger. Mitigation: deprecate booking-service's endpoints immediately (return a `Deprecation` header / log a warning) even before removing them, and point any client at checkin-service from day one — the deprecation period is about not breaking existing callers instantly, not about leaving the door open.
-2. **No-show semantics (§5.7).** This design's `CHECKED_IN → NO_SHOW` (checked in, never boarded) reading, versus the more common industry meaning (never checked in at all), is a direct consequence of following the brief's state machine literally. Worth confirming with the user before implementation — if the intent was closer to the industry-standard meaning, `NO_SHOW` should instead be reachable from `OPEN`/`NOT_OPEN` at gate-close, and `CLOSED` might not need to exist as a separate terminal state at all.
+2. ~~No-show semantics~~ — **resolved**, see §4.1/§5.7: `NO_SHOW` now covers both "checked in, never boarded" and "never checked in at all"; no separate `CLOSED` state.
 3. **Boarding-pass reissue on seat change** creates a `REVOKED` pass with no forwarding pointer to its replacement in the schema as drafted (§3.2/§5.6) — worth adding a `reissuedAsId` self-reference if support needs to trace "what did this old QR turn into" during implementation.
 4. **Snapshot staleness.** `CheckIn`'s flight-context snapshot (§3.1) can drift from live flight-service data (delay, gate reassignment mid-window) since it's only refreshed by explicit calls at specific moments, not continuously. Same trade-off payment-service accepted for fare snapshots (§16.1 of that doc) — accepted here too, for the same reason (avoids a live dependency for every read).
 5. **Sequence-backed boarding-pass numbers under Testcontainers tests** — same caution payment-service's implementation notes flagged for invoice numbers: don't assert absolute generated values in JPA tests.
@@ -500,7 +500,7 @@ Target ~180-220 tests, matching payment-service's pyramid shape and the brief's 
 
 | Layer | Coverage |
 |---|---|
-| Domain unit | State machine golden transition table (incl. the clarified `CLOSED`/broadened-`CANCELLED` rules, §4.1); `BaggageAllowanceCalculator` per class/fare-type incl. excess; `BoardingPassNumberGenerator`/`BoardingPassTokenSigner` (valid sign→verify round trip, tampered-token rejection, expired/already-boarded rejection); `BoardingGroupAssigner`. |
+| Domain unit | State machine golden transition table (incl. the broadened `NO_SHOW`/`CANCELLED` rules, §4.1); `BaggageAllowanceCalculator` per class/fare-type incl. excess; `BoardingPassNumberGenerator`/`BoardingPassTokenSigner` (valid sign→verify round trip, tampered-token rejection, expired/already-boarded rejection); `BoardingGroupAssigner`. |
 | Service + consumer + facade | Window-too-early / window-closed rejection; duplicate check-in rejection; boarding-before-check-in rejection; duplicate boarding rejection; boarding-pass generated exactly once per check-in; seat-change compensation (release+reserve failure paths); baggage-overweight/allowance handling; `BookingEvent CONFIRMED` idempotent replay (duplicate → no-op); `CANCELLED` cascades to every passenger. |
 | JPA — Testcontainers PostgreSQL | Every §3.1.1 DB-enforced invariant: one `CheckIn` per `bookingPassengerId`, one active `BoardingPass` per `CheckIn`, unique `boardingPassNumber`/token/baggage tag, append-only history. |
 | Scheduler | No-show sweep marks the right (and only the right) rows at gate-close; manifest finalization is idempotent and locks data against further mutation; sweep vs. late-check-in race (§15 candidate). |
@@ -512,4 +512,4 @@ Plus the standing fleet checklist: JaCoCo, SonarQube, OpenAPI, Postman collectio
 
 ---
 
-*Design doc — no implementation yet. Mirrors `PAYMENT_SERVICE_MODULE.md`'s structure and rigor per the stated goal of "once that's agreed, implementation becomes straightforward and consistent with the rest of SkyBook." Key open item before coding starts: confirm §15.2's no-show semantics, since it's a literal-reading-of-the-brief judgment call, not a discovered fact.*
+*Design doc — no implementation yet. Mirrors `PAYMENT_SERVICE_MODULE.md`'s structure and rigor per the stated goal of "once that's agreed, implementation becomes straightforward and consistent with the rest of SkyBook."*
