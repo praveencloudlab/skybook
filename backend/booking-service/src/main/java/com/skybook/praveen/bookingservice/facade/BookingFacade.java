@@ -63,7 +63,7 @@ public class BookingFacade {
 
         holdSeatsOrCompensate(booking);
 
-        bookingEventProducer.publishBookingCreated(booking);
+        bookingEventProducer.publishBookingCreated(booking, flight);
 
         return booking;
     }
@@ -75,7 +75,7 @@ public class BookingFacade {
 
         reserveHeldSeatsQuietly(booking);
 
-        bookingEventProducer.publishBookingConfirmed(booking);
+        bookingEventProducer.publishBookingConfirmed(booking, flightOrNull(booking.flightId()));
 
         return booking;
     }
@@ -95,7 +95,7 @@ public class BookingFacade {
         reserveHeldSeatsQuietly(booking);
 
         if (confirmation.transitioned()) {
-            bookingEventProducer.publishBookingConfirmed(booking);
+            bookingEventProducer.publishBookingConfirmed(booking, flightOrNull(booking.flightId()));
         }
 
         return booking;
@@ -116,9 +116,23 @@ public class BookingFacade {
             }
         }
 
-        bookingEventProducer.publishBookingCancelled(booking);
+        bookingEventProducer.publishBookingCancelled(booking, flightOrNull(booking.flightId()));
 
         return booking;
+    }
+
+    /**
+     * Flight context for email enrichment - best-effort by design: an email
+     * without route details beats a confirmation that fails because
+     * flight-service was briefly down.
+     */
+    private FlightDetails flightOrNull(Long flightId) {
+        try {
+            return flightServiceClient.getFlight(flightId);
+        } catch (RuntimeException e) {
+            log.warn("Could not fetch flight {} for event enrichment: {}", flightId, e.getMessage());
+            return null;
+        }
     }
 
     // ---------------------------------------------------------------

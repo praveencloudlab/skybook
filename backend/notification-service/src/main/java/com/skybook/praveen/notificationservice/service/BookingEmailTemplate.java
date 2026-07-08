@@ -11,8 +11,9 @@ import java.math.BigDecimal;
  * fields. Plain inline-CSS HTML - no template engine dependency; email
  * clients ignore external stylesheets anyway.
  *
- * Only called when the event carries structured details (passengers != null);
- * older/lean events fall back to the plain-text message in the consumer.
+ * Degrades gracefully: events without flight context skip the route card;
+ * events without structured details never reach this class (the consumer
+ * falls back to plain text).
  */
 @Component
 public class BookingEmailTemplate {
@@ -45,6 +46,7 @@ public class BookingEmailTemplate {
                           <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">%s</td>
                           <td style="padding:8px 12px;border-top:1px solid #e5e7eb;text-align:center;"><b>%s</b></td>
                           <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">%s · %s</td>
+                          <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">%s</td>
                           <td style="padding:8px 12px;border-top:1px solid #e5e7eb;text-align:right;">%s</td>
                         </tr>
                         """.formatted(
@@ -52,6 +54,7 @@ public class BookingEmailTemplate {
                         escape(nvl(p.getSeatNumber(), "—")),
                         escape(pretty(p.getTravelClass())),
                         escape(pretty(p.getFareType())),
+                        escape(pretty(nvl(p.getCheckInStatus(), "NOT_OPEN"))),
                         money(p.getFare(), event.getCurrency())));
             }
         }
@@ -83,11 +86,13 @@ public class BookingEmailTemplate {
                         </td>
                         <td style="padding:14px 16px;text-align:right;">
                           <div style="color:#57606a;font-size:12px;">FLIGHT</div>
-                          <div style="font-weight:600;">#%s</div>
+                          <div style="font-weight:600;">%s</div>
                           <div style="color:#57606a;font-size:12px;margin-top:4px;">Booked %s</div>
                         </td>
                       </tr>
                     </table>
+
+                    %s
 
                     <h3 style="font-size:14px;margin:22px 0 8px;color:#57606a;text-transform:uppercase;letter-spacing:.04em;">Passengers</h3>
                     <table style="width:100%%;border-collapse:collapse;font-size:14px;border:1px solid #e5e7eb;border-radius:8px;">
@@ -95,6 +100,7 @@ public class BookingEmailTemplate {
                         <td style="padding:8px 12px;">NAME</td>
                         <td style="padding:8px 12px;text-align:center;">SEAT</td>
                         <td style="padding:8px 12px;">CLASS · FARE</td>
+                        <td style="padding:8px 12px;">CHECK-IN</td>
                         <td style="padding:8px 12px;text-align:right;">PRICE</td>
                       </tr>
                       %s
@@ -125,14 +131,53 @@ public class BookingEmailTemplate {
                 escape(nvl(event.getContactName(), "traveler")),
                 escape(nvl(event.getMessage(), "")),
                 escape(nvl(event.getBookingReference(), "—")),
-                event.getFlightId() != null ? event.getFlightId() : "—",
+                escape(event.getFlightNumber() != null ? event.getFlightNumber()
+                        : (event.getFlightId() != null ? "#" + event.getFlightId() : "—")),
                 escape(nvl(event.getBookingDate(), "—")),
+                routeCard(event),
                 passengers,
                 money(event.getTotalFare(), event.getCurrency()),
                 "PAID".equals(event.getPaymentStatus()) ? "#1a7f37" : "#b45309",
                 escape(nvl(event.getPaymentStatus(), "PENDING")),
                 includeQr ? qrBlock() : "",
                 escape(nvl(event.getBookingReference(), "")));
+    }
+
+    /** Route + times, rendered only when the event carries flight context. */
+    private static String routeCard(BookingEvent event) {
+        if (event.getOriginAirportCode() == null || event.getDestinationAirportCode() == null) {
+            return "";
+        }
+        String originCity = AirportCityLookup.cityFor(event.getOriginAirportCode());
+        String destinationCity = AirportCityLookup.cityFor(event.getDestinationAirportCode());
+
+        return """
+                <table style="width:100%%;border-collapse:collapse;margin-top:12px;background:#f6f8fa;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;">
+                  <tr>
+                    <td style="padding:14px 16px;text-align:center;width:33%%;">
+                      <div style="font-size:26px;font-weight:700;letter-spacing:1px;">%s</div>
+                      <div style="color:#57606a;font-size:12px;">%s</div>
+                      <div style="color:#57606a;font-size:12px;">Departs<br>%s</div>
+                    </td>
+                    <td style="padding:14px 8px;text-align:center;color:#0b3d91;font-size:18px;">
+                      ────── ✈ ──────
+                      <div style="color:#57606a;font-size:12px;margin-top:2px;">%s</div>
+                    </td>
+                    <td style="padding:14px 16px;text-align:center;width:33%%;">
+                      <div style="font-size:26px;font-weight:700;letter-spacing:1px;">%s</div>
+                      <div style="color:#57606a;font-size:12px;">%s</div>
+                      <div style="color:#57606a;font-size:12px;">Arrives<br>%s</div>
+                    </td>
+                  </tr>
+                </table>
+                """.formatted(
+                escape(event.getOriginAirportCode()),
+                escape(nvl(originCity, "")),
+                escape(nvl(event.getDepartureTime(), "—")),
+                escape(nvl(event.getFlightNumber(), "")),
+                escape(event.getDestinationAirportCode()),
+                escape(nvl(destinationCity, "")),
+                escape(nvl(event.getArrivalTime(), "—")));
     }
 
     private static String qrBlock() {
@@ -153,7 +198,7 @@ public class BookingEmailTemplate {
         return (currency != null ? currency + " " : "") + amount;
     }
 
-    /** "PREMIUM_ECONOMY" -> "Premium economy" */
+    /** "PREMIUM_ECONOMY" -> "Premium economy", "NOT_OPEN" -> "Not open" */
     private static String pretty(String enumName) {
         if (enumName == null) return "—";
         String s = enumName.replace('_', ' ').toLowerCase();

@@ -25,4 +25,7 @@ public class BookingEventPassenger {
     private String fareType;
 
     private BigDecimal fare;
+
+    /** e.g. "NOT_OPEN", "CHECKED_IN" - snapshot at event time */
+    private String checkInStatus;
 }
