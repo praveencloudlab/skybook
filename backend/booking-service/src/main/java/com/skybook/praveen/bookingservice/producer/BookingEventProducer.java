@@ -77,6 +77,7 @@ public class BookingEventProducer {
                         ? booking.bookingDate().format(EVENT_TIME) : null)
                 .passengers(booking.passengers() == null ? null : booking.passengers().stream()
                         .map(p -> BookingEventPassenger.builder()
+                                .bookingPassengerId(p.id())
                                 .name((p.firstName() + " " + p.lastName()).trim())
                                 .seatNumber(p.seatNumber())
                                 .travelClass(p.travelClass() != null ? p.travelClass().name() : null)
