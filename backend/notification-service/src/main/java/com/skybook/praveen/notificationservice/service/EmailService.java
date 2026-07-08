@@ -45,10 +45,17 @@ public class EmailService {
      * are stripped.
      */
     public void sendHtmlEmail(String to, String subject, String html, String inlineImageCid, byte[] inlineImagePng) {
+        sendHtmlEmail(to, subject, html, inlineImageCid, inlineImagePng, null, null);
+    }
+
+    /** As above, plus an optional file attachment (e.g. the downloadable ticket PDF). */
+    public void sendHtmlEmail(String to, String subject, String html, String inlineImageCid, byte[] inlineImagePng,
+                               String attachmentFilename, byte[] attachmentBytes) {
 
         try {
+            boolean multipart = inlineImagePng != null || attachmentBytes != null;
             MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, inlineImagePng != null, "UTF-8");
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, multipart, "UTF-8");
 
             helper.setTo(to);
             helper.setSubject(subject);
@@ -58,6 +65,10 @@ public class EmailService {
             if (inlineImagePng != null) {
                 helper.addInline(inlineImageCid,
                         new org.springframework.core.io.ByteArrayResource(inlineImagePng), "image/png");
+            }
+            if (attachmentBytes != null) {
+                helper.addAttachment(attachmentFilename,
+                        new org.springframework.core.io.ByteArrayResource(attachmentBytes), "application/pdf");
             }
 
             mailSender.send(mimeMessage);
