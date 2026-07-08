@@ -16,6 +16,7 @@ import com.skybook.praveen.checkinservice.repository.FlightManifestRepository;
 import com.skybook.praveen.checkinservice.service.ManifestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,9 @@ public class ManifestServiceImpl implements ManifestService {
     private final BaggageRepository baggageRepository;
     private final FlightManifestRepository flightManifestRepository;
     private final CheckInValidator validator;
+
+    @Value("${checkin.boarding.gate-closes-minutes-before-departure:20}")
+    private long gateClosesMinutesBeforeDeparture;
 
     @Override
     @Transactional(readOnly = true)
@@ -94,6 +98,30 @@ public class ManifestServiceImpl implements ManifestService {
 
         return FlightManifestMapper.toResponse(saved, counts.checkedInCount(), counts.boardedCount(),
                 counts.noShowCount(), counts.baggageCount(), counts.baggageWeightKg(), counts.passengers());
+    }
+
+    @Override
+    @Transactional
+    public int finalizeDueManifests() {
+
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime departureCutoff = now.plusMinutes(gateClosesMinutesBeforeDeparture);
+
+        List<Long> dueFlightIds = checkInRepository.findDistinctFlightIdByDepartureTimeBefore(departureCutoff);
+
+        int finalizedCount = 0;
+        for (Long flightId : dueFlightIds) {
+
+            FlightManifest existing = flightManifestRepository.findByFlightId(flightId).orElse(null);
+            if (existing != null && existing.getStatus() == ManifestStatus.FINALIZED) {
+                continue;
+            }
+
+            finalizeManifest(flightId, now);
+            finalizedCount++;
+        }
+
+        return finalizedCount;
     }
 
     private FlightManifestResponse buildResponse(FlightManifest manifest, Long flightId) {

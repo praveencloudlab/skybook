@@ -23,4 +23,10 @@ public interface CheckInRepository extends JpaRepository<CheckIn, Long> {
     // pre-boarding status once their flight's departure has passed the
     // configured gate-close cutoff.
     List<CheckIn> findByStatusInAndDepartureTimeBefore(Collection<CheckInStatus> statuses, LocalDateTime cutoff);
+
+    // Manifest finalization sweep (design doc section 5.7/10): every flight
+    // with at least one CheckIn whose gate has closed, regardless of that
+    // CheckIn's own status - a flight is finalizable even if every
+    // passenger ended up CANCELLED/NO_SHOW.
+    List<Long> findDistinctFlightIdByDepartureTimeBefore(LocalDateTime cutoff);
 }
