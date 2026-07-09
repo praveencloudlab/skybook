@@ -26,6 +26,8 @@ public record CheckInResponse(
 
         String passengerName,
 
+        String contactEmail,
+
         String seatNumber,
 
         String travelClass,

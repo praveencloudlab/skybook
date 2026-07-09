@@ -20,6 +20,7 @@ public final class CheckInMapper {
                 checkIn.getDestinationAirportCode(),
                 checkIn.getDepartureTime(),
                 checkIn.getPassengerName(),
+                checkIn.getContactEmail(),
                 checkIn.getSeatNumber(),
                 checkIn.getTravelClass(),
                 checkIn.getFareType(),

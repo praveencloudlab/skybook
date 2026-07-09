@@ -64,6 +64,7 @@ public class CheckInEventProducer {
                 .bookingReference(checkIn.bookingReference())
                 .bookingPassengerId(checkIn.bookingPassengerId())
                 .passengerName(checkIn.passengerName())
+                .contactEmail(checkIn.contactEmail())
                 .flightId(checkIn.flightId())
                 .flightNumber(checkIn.flightNumber())
                 .originAirportCode(checkIn.originAirportCode())

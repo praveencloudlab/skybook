@@ -80,6 +80,7 @@ public class BookingEventConsumer {
                     event.getDestinationAirportCode(),
                     departureTime,
                     passenger.getName(),
+                    event.getContactEmail(),
                     passenger.getSeatNumber(),
                     passenger.getTravelClass(),
                     passenger.getFareType(),

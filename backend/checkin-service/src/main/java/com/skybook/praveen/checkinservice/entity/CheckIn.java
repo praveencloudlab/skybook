@@ -91,6 +91,12 @@ public class CheckIn extends Auditable {
     @Column(name = "passenger_name", nullable = false, updatable = false, length = 200)
     private String passengerName;
 
+    // Snapshotted from BookingEvent.contactEmail at creation - lets
+    // CheckInEventProducer publish it on CheckInEvent so notification-service
+    // can email the boarding pass without a synchronous booking-service call.
+    @Column(name = "contact_email", length = 200, updatable = false)
+    private String contactEmail;
+
     @Column(name = "seat_number", length = 5)
     private String seatNumber;
 
