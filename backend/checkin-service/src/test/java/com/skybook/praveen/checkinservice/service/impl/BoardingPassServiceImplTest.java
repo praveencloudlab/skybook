@@ -89,6 +89,30 @@ class BoardingPassServiceImplTest {
     }
 
     @Test
+    void getActiveForCheckInReturnsTheActivePass() {
+        BoardingPass active = BoardingPass.builder()
+                .id(20L).checkIn(checkIn()).boardingPassNumber("BP-2026-ACTIVE1").token("token")
+                .passengerName("Test Passenger").bookingReference("SBTEST").seatNumber("12B")
+                .status(BoardingPassStatus.ACTIVE).issuedAt(LocalDateTime.now()).build();
+        when(boardingPassRepository.findByCheckInIdAndStatus(1L, BoardingPassStatus.ACTIVE))
+                .thenReturn(Optional.of(active));
+
+        var response = boardingPassService.getActiveForCheckIn(1L);
+
+        assertThat(response.boardingPassNumber()).isEqualTo("BP-2026-ACTIVE1");
+    }
+
+    @Test
+    void getActiveForCheckInThrowsWhenNotCheckedInYet() {
+        when(boardingPassRepository.findByCheckInIdAndStatus(1L, BoardingPassStatus.ACTIVE))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> boardingPassService.getActiveForCheckIn(1L))
+                .isInstanceOf(BoardingPassNotFoundException.class)
+                .hasMessageContaining("not checked in yet");
+    }
+
+    @Test
     void reissueForSeatChangeIsEmptyWhenNoActivePassExists() {
         when(checkInRepository.findById(1L)).thenReturn(Optional.of(checkIn()));
         when(boardingPassRepository.findByCheckInIdAndStatus(1L, BoardingPassStatus.ACTIVE))

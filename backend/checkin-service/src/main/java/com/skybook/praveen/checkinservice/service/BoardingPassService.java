@@ -29,6 +29,14 @@ public interface BoardingPassService {
     BoardingPassResponse getById(Long id);
 
     /**
+     * The current ACTIVE pass for a CheckIn - how a client retrieves the
+     * pass generated as a side effect of PATCH /api/checkins/{id}/checkin
+     * (generation itself has no standalone endpoint). 404 if the passenger
+     * hasn't checked in yet.
+     */
+    BoardingPassResponse getActiveForCheckIn(Long checkInId);
+
+    /**
      * design doc section 6/7 - cryptographic signature check, then confirms
      * the token belongs to a currently ACTIVE pass whose CheckIn is
      * CHECKED_IN (not yet boarded, not revoked/cancelled/no-show). Throws

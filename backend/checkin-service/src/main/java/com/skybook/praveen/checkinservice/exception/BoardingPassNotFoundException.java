@@ -9,4 +9,9 @@ public class BoardingPassNotFoundException extends RuntimeException {
     public static BoardingPassNotFoundException byId(Long id) {
         return new BoardingPassNotFoundException("Boarding pass not found with id: " + id);
     }
+
+    public static BoardingPassNotFoundException byCheckIn(Long checkInId) {
+        return new BoardingPassNotFoundException(
+                "No active boarding pass for check-in id: " + checkInId + " (not checked in yet?)");
+    }
 }

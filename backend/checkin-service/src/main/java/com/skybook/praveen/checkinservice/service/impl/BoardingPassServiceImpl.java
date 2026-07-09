@@ -161,6 +161,14 @@ public class BoardingPassServiceImpl implements BoardingPassService {
 
     @Override
     @Transactional(readOnly = true)
+    public BoardingPassResponse getActiveForCheckIn(Long checkInId) {
+        return BoardingPassMapper.toResponse(
+                boardingPassRepository.findByCheckInIdAndStatus(checkInId, BoardingPassStatus.ACTIVE)
+                        .orElseThrow(() -> BoardingPassNotFoundException.byCheckIn(checkInId)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public BoardingPassVerifyResponse verify(String token) {
 
         var payload = tokenSigner.verify(token);
