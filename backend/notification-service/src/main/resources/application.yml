@@ -35,3 +35,4 @@ skybook:
     topics:
       email-events: skybook.email.events
       booking-events: skybook.booking.events
+      checkin-events: skybook.checkin.events

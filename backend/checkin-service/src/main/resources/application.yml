@@ -1,0 +1,77 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: checkin-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/skybook_checkin
+    username: postgres
+    password: postgres
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  kafka:
+    bootstrap-servers: localhost:9092
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+    consumer:
+      group-id: checkin-service
+      auto-offset-reset: earliest
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+springdoc:
+  api-docs:
+    path: /api-docs
+
+  swagger-ui:
+    path: /swagger-ui.html
+
+  packages-to-scan: com.skybook.praveen.checkinservice.controller
+
+# Synchronous dependencies (design doc section 9): flight status/departure
+# time, seat-reservation lookups and seat-change calls.
+flight-service:
+  base-url: http://localhost:8082
+
+inventory-service:
+  base-url: http://localhost:8084
+
+skybook:
+  kafka:
+    topics:
+      # Consumed - BookingEvent CONFIRMED creates CheckIn rows, CANCELLED cascades.
+      booking-events: skybook.booking.events
+      # Produced - PassengerCheckedIn/Boarded/NoShow, BoardingPassGenerated.
+      checkin-events: skybook.checkin.events
+
+checkin:
+  window:
+    opens-hours-before-departure: 24
+    closes-minutes-before-departure: 45
+  boarding:
+    opens-minutes-before-departure: 45
+    gate-closes-minutes-before-departure: 20
+  baggage:
+    allowance-kg:
+      economy-saver: 15
+      economy-flexi: 20
+      premium-economy: 25
+      business: 32
+    excess-charge-per-kg: 10
+  boarding-pass:
+    # Symmetric HMAC key (design doc section 6) - dev-only default here;
+    # override via CHECKIN_BOARDING_PASS_KEY in any real deployment.
+    signing-key: ${CHECKIN_BOARDING_PASS_KEY:dev-only-insecure-signing-key-change-me}
