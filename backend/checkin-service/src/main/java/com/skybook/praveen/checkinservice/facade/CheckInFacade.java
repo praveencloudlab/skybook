@@ -74,7 +74,7 @@ public class CheckInFacade {
         producer.publishPassengerCheckedIn(updated);
 
         BoardingPassResponse pass = boardingPassService.generate(id);
-        producer.publishBoardingPassGenerated(updated, pass.boardingPassNumber());
+        producer.publishBoardingPassGenerated(updated, pass);
 
         return updated;
     }
@@ -115,7 +115,7 @@ public class CheckInFacade {
         }
 
         boardingPassService.reissueForSeatChange(id)
-                .ifPresent(pass -> producer.publishBoardingPassGenerated(updated, pass.boardingPassNumber()));
+                .ifPresent(pass -> producer.publishBoardingPassGenerated(updated, pass));
 
         return updated;
     }

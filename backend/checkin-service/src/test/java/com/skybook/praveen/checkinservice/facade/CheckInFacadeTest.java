@@ -100,13 +100,14 @@ class CheckInFacadeTest {
         when(inventoryServiceClient.getReservationsForBooking(42L)).thenReturn(List.of());
         CheckInResponse checkedIn = response(CheckInStatus.CHECKED_IN);
         when(checkInService.recordCheckIn(1L)).thenReturn(checkedIn);
-        when(boardingPassService.generate(1L)).thenReturn(boardingPass("BP-2026-AAAAAA"));
+        BoardingPassResponse pass = boardingPass("BP-2026-AAAAAA");
+        when(boardingPassService.generate(1L)).thenReturn(pass);
 
         CheckInResponse result = facade.checkIn(1L);
 
         assertThat(result.status()).isEqualTo(CheckInStatus.CHECKED_IN);
         verify(producer).publishPassengerCheckedIn(checkedIn);
-        verify(producer).publishBoardingPassGenerated(checkedIn, "BP-2026-AAAAAA");
+        verify(producer).publishBoardingPassGenerated(checkedIn, pass);
     }
 
     @Test
@@ -179,11 +180,12 @@ class CheckInFacadeTest {
         when(inventoryServiceClient.reserveSeat(7L, "14C", 42L, 100L)).thenReturn(Optional.empty());
         CheckInResponse updated = response(CheckInStatus.CHECKED_IN);
         when(checkInService.changeSeatNumber(1L, "14C")).thenReturn(updated);
-        when(boardingPassService.reissueForSeatChange(1L)).thenReturn(Optional.of(boardingPass("BP-2026-NEWONE")));
+        BoardingPassResponse reissued = boardingPass("BP-2026-NEWONE");
+        when(boardingPassService.reissueForSeatChange(1L)).thenReturn(Optional.of(reissued));
 
         facade.changeSeat(1L, "14C");
 
-        verify(producer).publishBoardingPassGenerated(updated, "BP-2026-NEWONE");
+        verify(producer).publishBoardingPassGenerated(updated, reissued);
     }
 
     @Test

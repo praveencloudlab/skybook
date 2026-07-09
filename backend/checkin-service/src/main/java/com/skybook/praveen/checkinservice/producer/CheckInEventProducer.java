@@ -1,5 +1,6 @@
 package com.skybook.praveen.checkinservice.producer;
 
+import com.skybook.praveen.checkinservice.dto.response.BoardingPassResponse;
 import com.skybook.praveen.checkinservice.dto.response.CheckInResponse;
 import com.skybook.praveen.common.constants.KafkaTopics;
 import com.skybook.praveen.common.event.CheckInEvent;
@@ -29,9 +30,17 @@ public class CheckInEventProducer {
         publish(base(CheckInEventType.PASSENGER_CHECKED_IN, checkIn).build());
     }
 
-    public void publishBoardingPassGenerated(CheckInResponse checkIn, String boardingPassNumber) {
+    /**
+     * Takes the full BoardingPassResponse (not just the number) - token,
+     * boardingTime and boardingGroup let notification-service render the
+     * QR/pass without a synchronous call back here.
+     */
+    public void publishBoardingPassGenerated(CheckInResponse checkIn, BoardingPassResponse pass) {
         publish(base(CheckInEventType.BOARDING_PASS_GENERATED, checkIn)
-                .boardingPassNumber(boardingPassNumber)
+                .boardingPassNumber(pass.boardingPassNumber())
+                .token(pass.token())
+                .boardingTime(pass.boardingTime())
+                .boardingGroup(pass.boardingGroup())
                 .build());
     }
 
@@ -57,6 +66,8 @@ public class CheckInEventProducer {
                 .passengerName(checkIn.passengerName())
                 .flightId(checkIn.flightId())
                 .flightNumber(checkIn.flightNumber())
+                .originAirportCode(checkIn.originAirportCode())
+                .destinationAirportCode(checkIn.destinationAirportCode())
                 .seatNumber(checkIn.seatNumber())
                 .gate(checkIn.gate())
                 .occurredAt(LocalDateTime.now());
