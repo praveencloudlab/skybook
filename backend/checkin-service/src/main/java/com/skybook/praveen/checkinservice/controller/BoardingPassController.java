@@ -23,6 +23,12 @@ public class BoardingPassController {
         return ResponseEntity.ok(boardingPassService.getById(id));
     }
 
+    /** How a client retrieves the pass PATCH /api/checkins/{id}/checkin generated - there is no standalone "generate" endpoint. */
+    @GetMapping("/checkin/{checkInId}")
+    public ResponseEntity<BoardingPassResponse> getActiveForCheckIn(@PathVariable Long checkInId) {
+        return ResponseEntity.ok(boardingPassService.getActiveForCheckIn(checkInId));
+    }
+
     /** Gate verification (design doc section 6/7) - 422 on any verification failure, not a 200 body. */
     @GetMapping("/verify")
     public ResponseEntity<BoardingPassVerifyResponse> verify(@RequestParam String token) {

@@ -11,7 +11,7 @@
 | **Base package** | `com.skybook.praveen.checkinservice` |
 | **Port** | `8087` (confirmed free — 8080 auth, 8082 flight, 8083 booking, 8084 inventory, 8085 notification, 8086 payment) |
 | **Database** | `skybook_checkin` (PostgreSQL, `ddl-auto: update`) |
-| **Status** | Implemented — full module (enums through controllers) built per §16's build order. 150 tests green across every layer of §17's testing plan: domain, service, facade, consumer, scheduler, WebMvc, JPA/Testcontainers, full-stack Kafka integration (scoped, §18), and concurrency. JaCoCo/SonarQube/OpenAPI/Postman deliverables not yet run for this module. |
+| **Status** | Implemented — full module (enums through controllers) built per §16's build order. 154 tests green across every layer of §17's testing plan: domain, service, facade, consumer, scheduler, WebMvc, JPA/Testcontainers, full-stack Kafka integration (scoped, §18), and concurrency. JaCoCo/SonarQube/OpenAPI/Postman deliverables not yet run for this module. |
 
 Completes the airline lifecycle: `Search → Book → Reserve Seat → Pay → Confirm → **Check-in → Boarding Pass → Board** → Manifest`. Operational rather than transactional — this service is about *what happens at the airport*, not money or inventory truth.
 
@@ -319,6 +319,7 @@ The brief calls for "a signed token or encoded boarding information," scannable 
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/boarding-passes/{id}` | |
+| GET | `/api/boarding-passes/checkin/{checkInId}` | **Added** — generation itself has no standalone endpoint (it's a side effect of `PATCH /api/checkins/{id}/checkin`, §5.3); this is how a client retrieves the pass it just generated, since the check-in response doesn't carry the boarding pass's own id. 404 if not checked in yet. |
 | GET | `/api/boarding-passes/verify` | **Added** — §6. Query param `token`. |
 
 ## Manifests — `/api/manifests`
@@ -511,7 +512,7 @@ Target ~180-220 tests, matching payment-service's pyramid shape and the brief's 
 | Integration | `BookingEvent CONFIRMED`/`CANCELLED` off a real broker → real Postgres → real HTTP reads → `CheckInEvent`s consumed off real Kafka. **Scoped**, not full: `checkIn`/`board`/`changeSeat` need flight-service/inventory-service, which aren't part of this container set — see `AbstractCheckInIntegrationTest`'s Javadoc, and booking-service (identical Feign dependency shape) has no full-stack integration test at all for the same reason. | ✅ Done (scoped) — 3 tests |
 | Concurrency | Duplicate concurrent `CheckIn` creation for the same `bookingPassengerId` (DB unique constraint is the backstop — a genuine duplicate-key violation was observed live, not just theorized); duplicate concurrent check-in transition on the same row. | ✅ Done — 2 tests |
 
-**150 of the targeted ~180-220 tests exist and are green** (§18 has the running total and what each layer found). An earlier draft of this table marked the scheduler row "not written — by design," reasoning the jobs had nothing scheduler-specific to verify; that turned out to be wrong by the fleet's own precedent (`inventory-service`'s `SeatHoldExpiryJobTest` exists for exactly this shape of class), so it was written after all. Docker became reachable partway through this work (confirmed via `docker info`), which unblocked the JPA/integration/concurrency layers and surfaced two real bugs no amount of Mockito-based testing could have caught (§18). The gap to the ~180-220 target is real but the pyramid is now complete top-to-bottom; the remaining count is mostly a matter of more edge cases per layer, not a missing layer.
+**154 of the targeted ~180-220 tests exist and are green** (§18 has the running total and what each layer found). An earlier draft of this table marked the scheduler row "not written — by design," reasoning the jobs had nothing scheduler-specific to verify; that turned out to be wrong by the fleet's own precedent (`inventory-service`'s `SeatHoldExpiryJobTest` exists for exactly this shape of class), so it was written after all. Docker became reachable partway through this work (confirmed via `docker info`), which unblocked the JPA/integration/concurrency layers and surfaced two real bugs no amount of Mockito-based testing could have caught (§18). The gap to the ~180-220 target is real but the pyramid is now complete top-to-bottom; the remaining count is mostly a matter of more edge cases per layer, not a missing layer.
 
 Plus the standing fleet checklist: JaCoCo, SonarQube, OpenAPI, Postman collection — not yet run/generated for this module.
 
@@ -532,7 +533,7 @@ Deviations from and additions to the design, discovered during implementation �
 - **A JPA test bug, not a product bug, in the history-ordering assertion**: within one `@DataJpaTest` transaction, `checkInRepository.findById(...)` returns the same identity-mapped object as the one just saved, whose `history` collection reflects insertion order in memory — `@OrderBy` only applies when Hibernate issues a fresh `SELECT`, not to an already-loaded collection. Fixed to assert via `CheckInHistoryRepository.findByCheckInIdOrderByChangedAtAsc(...)` instead, the same dedicated-query pattern `PaymentJpaTest` already uses for exactly this reason — worth remembering next time rather than re-discovering.
 - **The full-stack Kafka integration test is deliberately scoped**, not a compromise made silently: `CheckInFacade.checkIn`/`board`/`changeSeat` make real synchronous Feign calls to flight-service/inventory-service, which have no place in an isolated `Testcontainers` container set for this module alone. booking-service, which has the identical Feign-dependency shape, has no full-stack integration test at all for the same reason — this module's test stays within the paths that are genuinely self-contained (the `BookingEvent` consumer's pure-DB `CONFIRMED`/`CANCELLED` handling and the read-only REST endpoints) rather than mocking out two other services just to claim full coverage.
 
-## Test suite (150 tests, 0 failures)
+## Test suite (154 tests, 0 failures)
 
 | Layer | Classes | Highlights |
 |---|---|---|

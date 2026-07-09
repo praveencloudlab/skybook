@@ -54,6 +54,22 @@ class BoardingPassControllerTest {
     }
 
     @Test
+    void getActiveForCheckInReturns200() throws Exception {
+        when(boardingPassService.getActiveForCheckIn(1L)).thenReturn(response());
+
+        mockMvc.perform(get("/api/boarding-passes/checkin/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.boardingPassNumber").value("BP-2026-K7M4Z9"));
+    }
+
+    @Test
+    void getActiveForCheckInBeforeCheckInReturns404() throws Exception {
+        when(boardingPassService.getActiveForCheckIn(1L)).thenThrow(BoardingPassNotFoundException.byCheckIn(1L));
+
+        mockMvc.perform(get("/api/boarding-passes/checkin/1")).andExpect(status().isNotFound());
+    }
+
+    @Test
     void verifySucceedsReturns200() throws Exception {
         when(boardingPassService.verify("valid-token")).thenReturn(
                 new BoardingPassVerifyResponse("Test Passenger", "SBTEST", "BA178", "12B", "A12", "3"));
