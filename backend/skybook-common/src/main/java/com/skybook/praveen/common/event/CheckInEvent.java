@@ -34,6 +34,8 @@ public class CheckInEvent {
 
     private String passengerName;
 
+    private String contactEmail;
+
     private Long flightId;
 
     private String flightNumber;

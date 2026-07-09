@@ -40,6 +40,8 @@ public record CreateCheckInRequest(
         @Size(max = 200, message = "passengerName must be at most 200 characters")
         String passengerName,
 
+        String contactEmail,
+
         String seatNumber,
 
         String travelClass,
