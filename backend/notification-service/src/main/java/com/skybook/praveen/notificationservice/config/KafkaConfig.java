@@ -1,6 +1,7 @@
 package com.skybook.praveen.notificationservice.config;
 
 import com.skybook.praveen.common.event.BookingEvent;
+import com.skybook.praveen.common.event.CheckInEvent;
 import com.skybook.praveen.common.event.EmailEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -86,6 +87,39 @@ public class KafkaConfig {
         ConcurrentKafkaListenerContainerFactory<String, BookingEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(bookingEventConsumerFactory());
+        return factory;
+    }
+
+    // ---------------------------------------------------------------
+    // CheckInEvent (skybook.checkin.events) - consumed by CheckInEventConsumer
+    // ---------------------------------------------------------------
+
+    @Bean
+    public ConsumerFactory<String, CheckInEvent> checkInEventConsumerFactory() {
+
+        JsonDeserializer<CheckInEvent> deserializer = new JsonDeserializer<>(CheckInEvent.class);
+        deserializer.addTrustedPackages("com.skybook.praveen.common.event");
+
+        Map<String, Object> config = new HashMap<>();
+
+        config.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        config.put(ConsumerConfig.GROUP_ID_CONFIG, "notification-service");
+        config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        config.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, JsonDeserializer.class);
+        config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+
+        return new DefaultKafkaConsumerFactory<>(
+                config,
+                new StringDeserializer(),
+                deserializer
+        );
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, CheckInEvent> checkInEventContainerFactory() {
+        ConcurrentKafkaListenerContainerFactory<String, CheckInEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(checkInEventConsumerFactory());
         return factory;
     }
 }

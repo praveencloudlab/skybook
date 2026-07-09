@@ -16,6 +16,16 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 public class BookingEventPassenger {
 
+    /**
+     * BookingPassenger.id in booking-service - added for checkin-service,
+     * which keys CheckIn's uniqueness constraint on this (docs/
+     * CHECKIN_SERVICE_MODULE.md section 3.1). Nullable: older/pre-
+     * enrichment events don't carry it - checkin-service's consumer skips
+     * those loudly, same precedent as BookingEvent.bookingId being added
+     * for payment-service.
+     */
+    private Long bookingPassengerId;
+
     private String name;
 
     private String seatNumber;
