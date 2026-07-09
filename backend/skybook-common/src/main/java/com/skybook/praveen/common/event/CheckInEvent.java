@@ -38,10 +38,26 @@ public class CheckInEvent {
 
     private String flightNumber;
 
+    private String originAirportCode;
+
+    private String destinationAirportCode;
+
     private String seatNumber;
 
     /** Set on PASSENGER_CHECKED_IN / BOARDING_PASS_GENERATED. */
     private String boardingPassNumber;
+
+    /**
+     * The signed boarding-pass token (checkin-service's BoardingPassTokenSigner
+     * output) - set on BOARDING_PASS_GENERATED only, so notification-service
+     * can render the same QR without a synchronous call back to checkin-service
+     * (fleet convention: notification-service is purely event-driven).
+     */
+    private String token;
+
+    private LocalDateTime boardingTime;
+
+    private String boardingGroup;
 
     private String gate;
 
