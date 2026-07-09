@@ -1,0 +1,35 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+services:
+  auth-service:
+    base-url: http://localhost:8081
+  flight-service:
+    base-url: http://localhost:8082
+  booking-service:
+    base-url: http://localhost:8083
+  inventory-service:
+    base-url: http://localhost:8084
+  payment-service:
+    base-url: http://localhost:8086
+  checkin-service:
+    base-url: http://localhost:8087
+
+jwt:
+  secret: ${JWT_SECRET}
+
+gateway:
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:3000
+  rate-limit:
+    requests-per-minute: 100
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
