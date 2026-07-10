@@ -23,6 +23,16 @@
              isn't, so it needs to be listed explicitly or Sonar never sees
              integration-test coverage at all. -->
         <sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml,target/site/jacoco-it/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+
+        <!-- SonarCloud coordinates (CI_CD_MODULE.md §7). The org exists
+             (created via GitHub login); the project itself is provisioned
+             automatically by the first CI-based `mvn sonar:sonar` run under
+             this key - no manual UI import needed, which also avoids the
+             Automatic-Analysis-vs-CI-analysis conflict a UI import can
+             enable by default. -->
+        <sonar.organization>praveencloudlab</sonar.organization>
+        <sonar.projectKey>praveencloudlab_skybook</sonar.projectKey>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
     </properties>
 
     <modules>
