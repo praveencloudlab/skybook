@@ -14,6 +14,9 @@ FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /workspace/notification-service/target/*.jar app.jar
+# spring-boot-maven-plugin repackages with a classifier (root pom.xml) so
+# this module's plain jar stays the main artifact for Maven/Failsafe - the
+# executable fat jar is the -exec one, the only jar actually runnable here.
+COPY --from=builder /workspace/notification-service/target/*-exec.jar app.jar
 EXPOSE 8085
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

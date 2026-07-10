@@ -82,6 +82,32 @@
                             <goals>
                                 <goal>repackage</goal>
                             </goals>
+                            <configuration>
+                                <!-- Without a classifier, repackage replaces the
+                                     module's own main artifact with the executable
+                                     fat jar (classes nested under BOOT-INF/classes/,
+                                     only readable via java -jar's custom
+                                     classloader). Failsafe runs in the
+                                     integration-test phase, after package, so it
+                                     picks up that now-unusable fat jar as this
+                                     module's own classpath entry instead of
+                                     target/classes - confirmed via
+                                     `mvn -X`'s classpath dump showing
+                                     payment-service-*.jar instead of target/classes,
+                                     causing NoClassDefFoundError for the project's
+                                     own classes during integration-test discovery
+                                     (found live, CI_CD_MODULE.md implementation).
+                                     Surefire never hit this because it runs in the
+                                     test phase, before package. A classifier keeps
+                                     the plain jar as the main artifact and
+                                     attaches the executable jar separately as
+                                     <artifactId>-<version>-exec.jar - the
+                                     Dockerfiles (feature/dockerization) need their
+                                     COPY line updated from target/*.jar to
+                                     target/*-exec.jar to still pick up the right
+                                     one now that two jars exist. -->
+                                <classifier>exec</classifier>
+                            </configuration>
                         </execution>
                     </executions>
                 </plugin>
@@ -90,7 +116,10 @@
 
         <plugins>
             <!-- Code coverage: report per module at target/site/jacoco/index.html
-                 after `mvn test`. Also feeds SonarQube's coverage metric. -->
+                 (unit) and target/site/jacoco-it/index.html (integration) after
+                 `mvn clean verify`. Also feeds SonarQube's coverage metric via
+                 sonar.coverage.jacoco.xmlReportPaths (both paths, CI_CD_MODULE.md
+                 §6) - no manual exec-file merge needed, Sonar reads both directly. -->
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
@@ -106,6 +135,73 @@
                         <phase>test</phase>
                         <goals>
                             <goal>report</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>prepare-agent-integration</id>
+                        <phase>pre-integration-test</phase>
+                        <goals>
+                            <goal>prepare-agent-integration</goal>
+                        </goals>
+                        <configuration>
+                            <propertyName>failsafeArgLine</propertyName>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>report-integration</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report-integration</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!-- Unit tests only (surefire) vs integration tests only (failsafe) -
+                 CI_CD_MODULE.md §5. Declared here in the real build/plugins list,
+                 not only pluginManagement - pluginManagement alone never triggers
+                 execution unless a module already declares the plugin itself,
+                 which no module does for surefire/failsafe (unlike
+                 spring-boot-maven-plugin above, which every module already
+                 declared for its lombok-exclude config). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.2</version>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*IntegrationTest.java</exclude>
+                    </excludes>
+                    <!-- Windows-only, local-dev-only issue: this checkout is on D:\
+                         while the Maven repo is on C:\, and Surefire/Failsafe's
+                         default manifest-only-jar classpath trick can't handle a
+                         classpath spanning two different drive roots ("'other' has
+                         different root" warning, then a NoClassDefFoundError for
+                         the project's own main classes at test-discovery time on
+                         failsafe specifically). Passing the classpath directly
+                         avoids it; irrelevant on GitHub's Linux runners (single
+                         filesystem root), kept here anyway so `mvn clean verify`
+                         also works for local verification on this machine. -->
+                    <useManifestOnlyJar>false</useManifestOnlyJar>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.5.2</version>
+                <configuration>
+                    <includes>
+                        <include>**/*IntegrationTest.java</include>
+                    </includes>
+                    <argLine>${failsafeArgLine}</argLine>
+                    <useManifestOnlyJar>false</useManifestOnlyJar>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
                         </goals>
                     </execution>
                 </executions>
