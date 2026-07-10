@@ -46,3 +46,6 @@ build/
 *.key
 *.crt
 *.zip
+
+# Claude local session data
+.claude/

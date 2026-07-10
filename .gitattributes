@@ -1,0 +1,20 @@
+# Normalize line endings: store LF in the repo, regardless of local git config
+* text=auto
+
+# Files that must keep specific line endings
+*.sh   text eol=lf
+mvnw   text eol=lf
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+# Binary files — never touch line endings
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.jar  binary
+*.p12  binary
+*.woff binary
+*.woff2 binary
