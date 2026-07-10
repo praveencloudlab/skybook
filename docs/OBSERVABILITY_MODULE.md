@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | Metrics (Prometheus), dashboards (Grafana), centralized logs (Loki), distributed traces (OpenTelemetry → Tempo), correlation propagation across HTTP + Kafka |
 | **Branch** | `feature/observability` |
-| **Status** | Design draft — under review, not yet frozen |
+| **Status** | Frozen (with one review revision: observability dependencies are declared per-service, not via `skybook-common` — §4/§6). Implementation starting per §11. |
 
 Goal: a failure anywhere in Gateway → Booking → Inventory → Payment → Check-in is traceable from one place. Today, each container writes unstructured console logs that die with `docker compose logs`' scrollback, metrics exist only as unexposed Actuator endpoints nobody scrapes, and the gateway's `X-Correlation-Id` is logged exactly once — at the gateway — then ignored by every downstream service.
 
@@ -73,11 +73,11 @@ Confirmed by inspection, not assumed:
                                                         │                      │
    ┌────────────────────────────────────────────────────┴──────────────────────┴───┐
    │  8 × app service, each with:                                                   │
-   │   - micrometer-registry-prometheus (via skybook-common)                        │
+   │   - micrometer-registry-prometheus (declared per service)                      │
    │   - OTel Java agent (-javaagent via JAVA_OPTS): HTTP/JDBC/Kafka auto-          │
    │     instrumentation, traceparent propagation, trace_id/span_id → MDC           │
-   │   - shared JSON logback config (via skybook-common) incl. trace_id, span_id,   │
-   │     and X-Correlation-Id when present                                          │
+   │   - JSON logback config: per-service encoder dep + 3-line include of the       │
+   │     shared base file, incl. trace_id, span_id, X-Correlation-Id when present   │
    └────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -87,7 +87,7 @@ A request's story: gateway assigns `X-Correlation-Id` (existing behavior) and th
 
 # 4. Metrics: Micrometer → Prometheus
 
-- **`micrometer-registry-prometheus` added to `skybook-common`'s pom**, not 8 individual service poms — every service already depends on `skybook-common`, making it transitive fleet-wide in one edit. This is a deliberate use of `skybook-common` as the platform seam (same reasoning as the shared logback config in §6); if a future service must opt out it can exclude the transitive dep, which is cheaper than 8 additions now.
+- **`micrometer-registry-prometheus` declared explicitly in each of the 8 service poms** (version managed by the Spring Boot BOM). The first draft routed it transitively through `skybook-common`; review reversed that — `skybook-common` is a *domain* library (events, exceptions), and smuggling runtime infrastructure in as a hidden transitive dependency couples every consumer invisibly. Eight explicit one-liner declarations keep each service's runtime surface readable in its own pom, the same way each already declares its own actuator/web/kafka starters.
 - `management.endpoints.web.exposure.include` gains `prometheus` in each service's `application.yml` (8 small edits — exposure lists are per-service config, deliberately not centralized).
 - **Prometheus container** (`prom/prometheus`), one static scrape config listing the 8 compose service names — same static-config convention as everything else in this fleet (no service discovery exists, none needed). 15s scrape interval, bind-mounted config at `docker/prometheus/prometheus.yml`, data in `./docker-data/prometheus`.
 - What this buys immediately, with zero custom instrumentation: JVM memory/GC/threads, HTTP server request rates/latencies per endpoint per status, HikariCP pool stats, Kafka consumer lag-adjacent client metrics, Tomcat threads — all standard Spring Boot Micrometer bindings that activate the moment the registry exists.
@@ -103,7 +103,7 @@ A request's story: gateway assigns `X-Correlation-Id` (existing behavior) and th
 
 # 6. Logs: JSON → Promtail → Loki
 
-- **One shared logback config in `skybook-common`** (`src/main/resources/skybook-logback-base.xml`), pulled into each service by a 3-line `logback-spring.xml` doing `<include resource="skybook-logback-base.xml"/>` — the standard logback include mechanism; 8 tiny files, one real config. JSON encoding via **`logstash-logback-encoder`** (added to `skybook-common` alongside the Prometheus registry, same transitive reasoning): timestamp, level, logger, thread, message, stack traces, service name (from `spring.application.name`), `trace_id`/`span_id` (from the agent's MDC), `correlationId` (MDC, present at the gateway).
+- **One shared logback base file in `skybook-common`** (`src/main/resources/skybook-logback-base.xml`), pulled into each service by a 3-line `logback-spring.xml` doing `<include resource="skybook-logback-base.xml"/>` — the standard logback include mechanism; 8 tiny files, one real config. The *resource file* living in `skybook-common` is deliberate and survives the review revision: a classpath XML carries zero dependency coupling — it's inert for any consumer that doesn't both declare the encoder dependency and write the include file. The **`logstash-logback-encoder` dependency itself is declared explicitly in each of the 8 service poms** (review revision, same reasoning as §4 — no hidden runtime infra through the domain library). Encoded fields: timestamp, level, logger, thread, message, stack traces, service name (from `spring.application.name`), `trace_id`/`span_id` (from the agent's MDC), `correlationId` (MDC, present at the gateway).
 - Console (stdout) only — containers must not write log files; Docker's `json-file` driver already persists stdout per container, which is exactly what Promtail reads.
 - **Promtail** with `docker_sd_configs` (Docker socket mounted read-only): discovers every compose container, tails its log file, labels streams with the compose service name, forwards to **Loki** (`grafana/loki`, single binary, filesystem storage in `./docker-data/loki`). Labels kept minimal (service, level) per Loki's own cardinality guidance — `trace_id` is queried by JSON filter expression, never a label.
 - Non-app containers (postgres, kafka…) get collected too, as plain text — free coverage, no special handling.
@@ -148,15 +148,15 @@ A request's story: gateway assigns `X-Correlation-Id` (existing behavior) and th
 - **Agent startup overhead** — the agent adds a few seconds of JVM startup and some memory; healthcheck `start_period` (30s from dockerization) may need bumping. Measured during implementation, not guessed.
 - **Loki/Promtail on Windows Docker Desktop** — Promtail reads container logs through the mounted Docker socket/log paths inside the WSL2 VM; verified empirically in build order step 5 before anything depends on it (the Git Bash `MSYS_NO_PATHCONV` lesson from dockerization applies to any ad hoc debugging here).
 - **Unauthenticated observability backends** — anyone on localhost can read metrics/logs/traces. Same trust model as the rest of the dev compose stack (documented in DOCKERIZATION_MODULE.md §12); Grafana is the only UI surface and it does have auth.
-- **`skybook-common` as the delivery vehicle** makes the Prometheus registry and JSON encoder mandatory-by-default fleet-wide. Deliberate (§4/§6) — but stated plainly: a service can't accidentally opt out, it must exclude the dep explicitly.
+- **Per-service dependency declarations (review revision) trade one edit for eight** — the accepted cost of keeping `skybook-common` a pure domain library. The eight declarations are identical one-liners; drift risk is low and a new service copying any existing pom inherits the pattern.
 
 ---
 
 # 11. Build Order
 
-1. **Metrics pipe first** — Prometheus registry dep in `skybook-common`, `prometheus` exposure in all 8 `application.yml`s, Prometheus container + scrape config. Verify: `docker compose up`, Prometheus targets page shows 8/8 UP, `/actuator/prometheus` returns real JVM/HTTP series. (Full reactor `mvn clean verify` after the pom change, per house rule.)
+1. **Metrics pipe first** — Prometheus registry dep in all 8 service poms, `prometheus` exposure in all 8 `application.yml`s, Prometheus container + scrape config. Verify: `docker compose up`, Prometheus targets page shows 8/8 UP, `/actuator/prometheus` returns real JVM/HTTP series. (Full reactor `mvn clean verify` after the pom changes, per house rule.)
 2. **Grafana + Prometheus datasource + fleet dashboard skeleton** — provisioned from files; verify a fresh volume-wipe still yields a working dashboard.
-3. **Shared JSON logging** — logstash-logback-encoder + base config in `skybook-common`, 8 include-only `logback-spring.xml`s, gateway's one-line correlation-id MDC put. Verify locally: log lines are valid JSON with service name; full test suite still green (tests log JSON too — cosmetic, but confirm nothing asserts on log format).
+3. **Shared JSON logging** — logstash-logback-encoder in all 8 service poms, base config file in `skybook-common`, 8 include-only `logback-spring.xml`s, gateway's one-line correlation-id MDC put. Verify locally: log lines are valid JSON with service name; full test suite still green (tests log JSON too — cosmetic, but confirm nothing asserts on log format).
 4. **Loki + Promtail** — verify in Grafana Explore: logs from all containers, filterable by service label, JSON fields parsed.
 5. **OTel agent + Tempo** — init-volume download, env blocks on all 8 services, Tempo container, Grafana Tempo datasource + logs↔traces links. Verify end-to-end with a real business flow (login → create booking → payment → check-in via the gateway): one trace shows gateway + booking + inventory + flight spans (sync hops) and the Kafka-hop spans into payment/checkin/notification; log lines carry the same `trace_id`.
 6. **README + env.example updates** — Grafana URL/creds, "how to find a request's trace" walkthrough, troubleshooting notes.
