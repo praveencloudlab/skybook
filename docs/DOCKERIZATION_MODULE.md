@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | `docker-compose.yml` + one `Dockerfile` per Spring Boot module + Postgres/Kafka init |
 | **Branch** | `feature/dockerization` |
-| **Status** | Design draft — under review, not yet frozen |
+| **Status** | Frozen. Implementation starting per §13's build order. |
 
 Goal: `docker compose up --build` from a clean clone starts PostgreSQL, Kafka, and all eight Spring Boot services (`api-gateway`, `auth-service`, `flight-service`, `booking-service`, `inventory-service`, `payment-service`, `checkin-service`, `notification-service`), fully wired to each other, with no manual `CREATE DATABASE` or local Kafka install first. Today, per every service's own README/design doc, local dev requires a human to run `CREATE DATABASE skybook_x;` by hand against a local Postgres and have a Kafka broker already listening on `9092` — this branch replaces that with one command.
 
