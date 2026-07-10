@@ -68,6 +68,20 @@
 			<scope>test</scope>
 		</dependency>
 
+		<!-- Testcontainers for the context-load smoke test (versions managed
+		     by the Spring Boot BOM, same as booking/inventory/payment/checkin) -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+
 	</dependencies>
 
 	<build>
