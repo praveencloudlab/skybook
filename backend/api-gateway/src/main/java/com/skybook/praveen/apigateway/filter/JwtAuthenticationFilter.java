@@ -11,6 +11,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.PathContainer;
 import org.springframework.stereotype.Component;
@@ -33,6 +34,14 @@ import java.util.List;
  * "Authorization: Bearer <token>" that GatewayJwtValidator accepts; on
  * success the validated subject is attached as X-Auth-User for downstream
  * services to optionally trust later.
+ *
+ * CORS preflight (OPTIONS) requests also bypass validation unconditionally,
+ * regardless of path - browsers never attach an Authorization header to a
+ * preflight request, so without this every real cross-origin call from a
+ * browser would fail CORS entirely (the preflight itself would 401 before
+ * CorsConfig's headers ever got a chance to apply). Found live: the first
+ * manual CORS test against this filter returned 401 for the preflight
+ * instead of the expected CORS headers.
  */
 @Slf4j
 @Component
@@ -61,7 +70,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
-        if (isPublic(path)) {
+        if (HttpMethod.OPTIONS.matches(request.getMethod()) || isPublic(path)) {
             filterChain.doFilter(request, response);
             return;
         }
