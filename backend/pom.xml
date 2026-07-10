@@ -16,6 +16,13 @@
         <spring.boot.version>3.5.16</spring.boot.version>
         <spring.cloud.version>2025.0.0</spring.cloud.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Relative paths, inherited by every child module and resolved
+             against each module's own target/ - the unit report is at
+             Sonar's auto-detected default location already, but the
+             integration report (report-integration goal, CI_CD_MODULE.md §6)
+             isn't, so it needs to be listed explicitly or Sonar never sees
+             integration-test coverage at all. -->
+        <sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml,target/site/jacoco-it/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
     </properties>
 
     <modules>
