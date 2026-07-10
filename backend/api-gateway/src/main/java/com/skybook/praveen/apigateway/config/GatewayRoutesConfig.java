@@ -1,5 +1,6 @@
 package com.skybook.praveen.apigateway.config;
 
+import com.skybook.praveen.apigateway.filter.DownstreamErrorHandlingFilter;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,6 +37,7 @@ public class GatewayRoutesConfig {
     public RouterFunction<ServerResponse> authServiceRoute(ServicesProperties services) {
         return route("auth-service")
                 .route(path("/api/auth/**"), http(services.getAuthService().getBaseUrl()))
+                .filter(new DownstreamErrorHandlingFilter())
                 .build();
     }
 
@@ -43,6 +45,7 @@ public class GatewayRoutesConfig {
     public RouterFunction<ServerResponse> flightServiceRoute(ServicesProperties services) {
         return route("flight-service")
                 .route(path("/api/flights/**", "/api/flight-schedules/**"), http(services.getFlightService().getBaseUrl()))
+                .filter(new DownstreamErrorHandlingFilter())
                 .build();
     }
 
@@ -50,6 +53,7 @@ public class GatewayRoutesConfig {
     public RouterFunction<ServerResponse> bookingServiceRoute(ServicesProperties services) {
         return route("booking-service")
                 .route(path("/api/bookings/**"), http(services.getBookingService().getBaseUrl()))
+                .filter(new DownstreamErrorHandlingFilter())
                 .build();
     }
 
@@ -58,6 +62,7 @@ public class GatewayRoutesConfig {
         return route("inventory-service")
                 .route(path("/api/reservations/**", "/api/inventory/**", "/api/aircraft/**"),
                         http(services.getInventoryService().getBaseUrl()))
+                .filter(new DownstreamErrorHandlingFilter())
                 .build();
     }
 
@@ -66,6 +71,7 @@ public class GatewayRoutesConfig {
         return route("payment-service")
                 .route(path("/api/payments/**", "/api/refunds/**", "/api/invoices/**"),
                         http(services.getPaymentService().getBaseUrl()))
+                .filter(new DownstreamErrorHandlingFilter())
                 .build();
     }
 
@@ -74,6 +80,7 @@ public class GatewayRoutesConfig {
         return route("checkin-service")
                 .route(path("/api/checkins/**", "/api/boarding-passes/**", "/api/baggage/**", "/api/manifests/**"),
                         http(services.getCheckinService().getBaseUrl()))
+                .filter(new DownstreamErrorHandlingFilter())
                 .build();
     }
 }
