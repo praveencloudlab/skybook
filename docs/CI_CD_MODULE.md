@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | `.github/workflows/ci.yml` + a root-`pom.xml` test-phase split (unit vs. integration) + Sonar wiring |
 | **Branch** | `feature/ci-cd` |
-| **Status** | Frozen. Implementation starting per §14's build order. |
+| **Status** | Implemented and verified per §14/§16 — first real run green. SonarCloud scan step is wired but dormant until the one-time external `SONAR_TOKEN` setup (§7) is done. |
 
 Goal: every push and pull request against `main` automatically proves the project compiles, passes its full test suite, meets a coverage/quality bar, and can still be built into the same Docker images `feature/dockerization` already defined — with no manual step. Today none of this exists (`.github/workflows/` is an empty placeholder), and running the tests or a Sonar scan is something a human does by hand, from memory.
 
@@ -31,6 +31,7 @@ Goal: every push and pull request against `main` automatically proves the projec
 13. [Known Risks / Open Questions](#13-known-risks--open-questions)
 14. [Build Order](#14-build-order)
 15. [Testing / Verification Plan](#15-testing--verification-plan)
+16. [Implementation Notes](#16-implementation-notes)
 
 ---
 
@@ -286,3 +287,29 @@ Notably absent: `JWT_SECRET`, `MAIL_USERNAME`/`MAIL_PASSWORD`, etc. None of the 
 | Docker images build in parallel and match local builds | Confirm the Actions UI shows 8 concurrent matrix jobs, and pull a pushed GHCR image to diff its behavior against the equivalent `docker compose build` image from `feature/dockerization` (e.g. same `/actuator/health` response) |
 | PRs don't trigger image pushes | Open a real draft PR and confirm the `docker-build-push` job is skipped, not just configured to be skipped |
 | Workflow permissions are actually least-privilege | Inspect the run's own permissions summary in the Actions UI (GitHub shows the effective token permissions per job) rather than trusting the YAML alone |
+
+---
+
+# 16. Implementation Notes
+
+Built per §14's order. The pipeline shape survived contact with reality unchanged; the Maven build's internals did not. Four real bugs, every one found by running things rather than reading about them — plus one first-run CI failure that exposed a latent defect predating this branch entirely.
+
+**1. `spring-boot-maven-plugin`'s `repackage` made Failsafe unusable — and the fix rippled into every Dockerfile.** Failsafe runs in the `integration-test` phase, *after* `package`, so it picks up the module's main artifact as its own classpath entry. But `repackage` (added to the root pom in `feature/dockerization`) *replaces* the main artifact with the executable fat jar, whose classes live under `BOOT-INF/classes/` — unreadable as a plain classpath entry. Every integration test failed at discovery with `NoClassDefFoundError` for the module's *own* classes; found via `mvn -X`'s classpath dump showing `payment-service-*.jar` where `target/classes` should have been. Fixed with `<classifier>exec</classifier>` on the repackage execution, keeping the plain jar as the main artifact — which means two jars now exist in every `target/`, so all 8 Dockerfiles' `COPY target/*.jar` had to become `COPY target/*-exec.jar`. Every image rebuilt and re-verified live (login through the rebuilt `api-gateway`/`auth-service` containers) before committing. Surefire never hit any of this because it runs in the `test` phase, before `package`.
+
+**2. An unpinned Failsafe resolved a milestone version with an incompatible JUnit Platform.** With no version specified, `maven-failsafe-plugin` resolved `3.6.0-M1`, whose bundled `junit-platform-launcher` (1.14.4) is incompatible with the project's own resolved platform (1.12.2 via the Spring Boot BOM) — "TestEngine with ID 'junit-jupiter' failed to discover tests", before any test even ran. Both plugins pinned to the same stable `3.5.2`.
+
+**3. Windows-only, local-dev-only: the D:\ checkout vs C:\ Maven repo broke the manifest-only classpath jar.** Surefire/Failsafe's default classpath trick (a manifest-only jar with relative paths) can't span two drive roots — `'other' has different root` in the dumpstream, then the same discovery failure. `useManifestOnlyJar=false` on both plugins; irrelevant on GitHub's Linux runners, kept so `mvn clean verify` also works on this machine.
+
+**4. `actionlint` caught a real workflow bug before the first push.** `secrets` is not a valid context in a step-level `if:` — the conditional SonarCloud step originally checked `secrets.SONAR_TOKEN` directly and would have been rejected by GitHub at parse time. Routed through a job-level `env` var instead. Linting the workflow in a container (`rhysd/actionlint`) before pushing is cheap and caught this in seconds.
+
+**5. The first real CI run failed — and the failure was the whole point of having CI.** Three context-load smoke tests (`FlightServiceApplicationTests`, `BookingServiceApplicationTests`, `CheckInServiceApplicationTests`) were plain `@SpringBootTest` classes inheriting `application.yml`'s `localhost:5432` datasource — a hidden dependency on a locally-running Postgres that predates this branch and had *never* been visible, because the dev machine runs a native Windows PostgreSQL service (`postgresql-x64-18`) that satisfied it even with the compose stack stopped (which is also why the failure could not be reproduced locally on the first attempt). CI's clean runners exposed it on run #1. Fixed by converting all three to the Testcontainers pattern the other half of the fleet already adopted deliberately (inventory's `AbstractPostgresSpringBootTest`, payment's base — whose own comment calls the plain approach "the gap Sprint 4 closed late"): flight and booking get inline PostgreSQL containers (booking's Kafka listener verified empirically to not block context startup without a broker), checkin now extends its existing `AbstractCheckInIntegrationTest` base exactly as payment does. `auth-service`'s context test was already `@Disabled` and `notification-service`'s needs no infra (verified with no local services and no `MAIL_*`/`JWT_SECRET` env vars set) — both untouched.
+
+**Verification actually performed** (§15's checklist, status as of the branch's first green run):
+- Split correctness and no-double-execution: full reactor `mvn clean verify` locally — surefire runs each module's unit tests exactly once, failsafe its integration tests exactly once, per-module totals identical to the pre-branch `mvn test` baseline (e.g. payment-service 109+2=111, matching its own README; api-gateway 18+6=24; checkin 152+3=155).
+- Both JaCoCo reports (`target/site/jacoco/` and `target/site/jacoco-it/`) produced, `failsafeArgLine` wiring confirmed by the loaded `jacoco-it.exec` in the build log.
+- Real workflow runs on real pushes: first run failed (finding #5 — and its `if: always()` artifact upload worked on that failure, 
+  exercising the failed-run path without needing to break a test deliberately), second run fully green: compile ✓, unit+integration tests ✓, 5.2MB report artifact uploaded ✓, SonarCloud correctly *skipped* (no token yet), `docker-build-push` correctly *skipped* (feature-branch push, not `main`).
+- Integration-tests-actually-ran evidence: the three converted context tests run under surefire and would **fail** (not skip) if containers couldn't start — they passed, proving Testcontainers works on the runner; the failsafe ITs use the identical mechanism. (Job logs aren't API-readable without admin credentials, so this is inference from mechanism plus the artifact's failsafe-report contents, stated as such.)
+- Least-privilege permissions and the 8-way matrix are configured per §8/§10 but the matrix hasn't had a real execution yet — it only runs on a push to `main`, i.e. on this branch's merge. Checking the first `main` run's 8 parallel jobs and pulling one GHCR image to compare against the local compose build remains the final §15 item, deliberately left to merge time rather than faked early.
+
+**Still pending, needs the user (not automatable from the repo):** the one-time SonarCloud setup — sign up at sonarcloud.io with the GitHub account, import `praveencloudlab/skybook`, generate a token, add it as the `SONAR_TOKEN` repository secret. The workflow's scan step is already wired and conditional on the secret's presence: it starts running on the very next push after the secret exists, no workflow change needed.
