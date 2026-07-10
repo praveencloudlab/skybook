@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | `docker-compose.yml` + one `Dockerfile` per Spring Boot module + Postgres/Kafka init |
 | **Branch** | `feature/dockerization` |
-| **Status** | Frozen. Implementation starting per §13's build order. |
+| **Status** | Implemented and verified per §13/§14. |
 
 Goal: `docker compose up --build` from a clean clone starts PostgreSQL, Kafka, and all eight Spring Boot services (`api-gateway`, `auth-service`, `flight-service`, `booking-service`, `inventory-service`, `payment-service`, `checkin-service`, `notification-service`), fully wired to each other, with no manual `CREATE DATABASE` or local Kafka install first. Today, per every service's own README/design doc, local dev requires a human to run `CREATE DATABASE skybook_x;` by hand against a local Postgres and have a Kafka broker already listening on `9092` — this branch replaces that with one command.
 
@@ -32,6 +32,7 @@ Goal: `docker compose up --build` from a clean clone starts PostgreSQL, Kafka, a
 12. [Known Risks / Open Questions](#12-known-risks--open-questions)
 13. [Build Order](#13-build-order)
 14. [Testing / Verification Plan](#14-testing--verification-plan)
+15. [Implementation Notes](#15-implementation-notes)
 
 ---
 
@@ -306,3 +307,25 @@ This branch is infrastructure configuration, not application code — there's no
 | Kafka event flow works | An action that produces an event consumed by another container (e.g. a booking confirmation triggering `notification-service`) is observed to actually happen, not just "the topic exists" |
 | Data survives a restart | `docker compose restart <service>` (not `down -v`) keeps existing rows/messages |
 | Reset path works | Deleting `./docker-data/` and re-running `--build` gets back to a clean, fully-working state |
+
+---
+
+# 15. Implementation Notes
+
+Built per §13's order. The design held up structurally, but four real problems only surfaced once containers were actually wired together and run - each is the kind of thing this doc's own philosophy says to confirm empirically rather than assume:
+
+**1. `mvn package` never produced a runnable jar, in any of the 8 services - found on the very first Docker build attempt.** This project doesn't inherit from `spring-boot-starter-parent` (only imports the `spring-boot-dependencies` BOM), so nothing auto-binds the `spring-boot-maven-plugin`'s `repackage` goal to the `package` phase the way `starter-parent` normally would. Every service's own docs only ever documented `mvn spring-boot:run` (which doesn't need repackaging), so this had never been hit before. `flight-service`'s first Docker build produced a 62KB plain jar with no `Main-Class` - `docker run` failed with `no main manifest attribute, in app.jar`. Fixed once, in `backend/pom.xml`'s `pluginManagement`, binding `repackage` for every module that already declares the plugin (all 8 services did, for their lombok-exclude config) - no per-service edits needed. Verified: every service's jar now carries `Main-Class`/`Start-Class`/`Spring-Boot-Version` in its manifest and is 50-60MB (a real fat jar).
+
+**2. Maven's reactor validates every declared `<module>` directory exists, regardless of `-pl`/`-am` scoping.** The design's Dockerfile template originally `COPY`d only `pom.xml`, `skybook-common`, and the target service into the build context - Maven refused to even parse the root POM ("Child module /workspace/auth-service ... does not exist") because the reactor pom lists all 9 modules. Fixed by copying the whole `backend/` directory into every build context instead (still only *builds* `skybook-common` + the target module via `-pl -am`; the other 7 directories just need to exist for Maven's own validation, they're never compiled). `.dockerignore` keeps this cheap - build context is ~1.3MB per service, not gigabytes, since `target/` is excluded.
+
+**3. Postgres's first-ever cold start runs a temporary bootstrap server, which raced with `depends_on: condition: service_healthy`.** On a truly first run (empty `./docker-data/postgres`), the official image starts a *temporary* single-use Postgres instance to run `docker-entrypoint-initdb.d/*` scripts, shuts it down, then starts the real server - observed to take up to ~19 seconds end-to-end. The `pg_isready` healthcheck succeeded against the *temporary* server (it's a real, if short-lived, Postgres instance - nothing distinguishes it from the outside), so Compose released `depends_on` and started every DB-owning service while Postgres was mid-restart. Every one of them crashed with `HikariPool.checkFailFast()` throwing on `Connection refused` - a hard, eager failure at pool construction time. Rather than chase healthcheck timing heuristics (which can't reliably tell "temporary" from "real" Postgres from the outside), fixed at the source of the actual crash: every DB-owning service gets `SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"` in `docker-compose.yml`, which disables Hikari's eager fail-fast check. Connections are then established lazily on first real use (Flyway/Hibernate), with HikariCP's normal retry-with-backoff up to `connection-timeout` (default 30s) - comfortably longer than Postgres's one-time restart window. Verified: a from-scratch `docker compose up --build` against a deleted `./docker-data/` now brings every service to `healthy` with no crashes.
+
+**4. `notification-service` could never report healthy with placeholder SMTP credentials.** Actuator auto-configures a `MailHealthIndicator` once `spring-boot-starter-mail` is on the classpath, which actually opens a connection to `smtp.gmail.com` as part of `/actuator/health`. With the test `.env`'s placeholder Gmail credentials, this indicator reported `DOWN`, which Spring Boot's default health aggregation rolled up into the whole service being `DOWN` - even though Kafka consumption (the thing this service actually does) had nothing to do with SMTP. Fixed with `management.health.mail.enabled: false` in `notification-service`'s `application.yml`, so mail connectivity is no longer part of the container's own liveness signal (a developer without working Gmail credentials still gets a fully-`healthy` platform; email sends will just fail, which is the correct scope for a health check that answers "is the app up," not "can it currently reach Gmail").
+
+**Verification actually performed**, beyond the checklist in §14:
+- Real end-to-end round trip through the live stack: `POST /api/auth/register` → `POST /api/auth/login` → `GET /api/flights` through `api-gateway` returns 401 with no token and 200 with the token issued by `auth-service` - proving `JWT_SECRET` is correctly shared between the two containers via `.env`.
+- Kafka: confirmed via `kafka-topics.sh --list` that all four topics (`skybook.payment.events`, `skybook.booking.events`, `skybook.checkin.events`, `skybook.email.events`) exist, and via `payment-service`'s own logs that its consumer (`groupId=payment-service`) subscribed successfully with `bootstrap.servers=[kafka:9092]` - confirming the env-var override resolved correctly.
+- Restarted `auth-service` mid-session and confirmed the user registered earlier could still log in afterward - Postgres data survives a container restart (bind mount, not an ephemeral layer).
+- Full reactor `mvn test` (all 9 modules) re-run after every source change in this branch (the plugin binding, the three Actuator additions, the `SecurityConfig` change, the mail health-indicator disable) - zero regressions, same test counts as before this branch.
+
+**One environment-specific note, not a code issue:** on Windows with Git Bash, `docker run`/`docker exec` mangle absolute paths passed as arguments (including inside `-v host:container` mount specs), silently turning a single-file bind mount into an empty directory. `docker compose` itself is unaffected (compose file paths aren't shell arguments). Documented in the root README's troubleshooting section since it cost real debugging time during this branch's manual verification, even though it doesn't affect `docker compose up` itself.

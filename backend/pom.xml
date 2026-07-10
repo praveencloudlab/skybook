@@ -63,6 +63,28 @@
                         <parameters>true</parameters>
                     </configuration>
                 </plugin>
+
+                <!-- This project doesn't inherit from spring-boot-starter-parent (only
+                     imports the spring-boot-dependencies BOM), so nothing auto-binds
+                     repackage to the package phase the way starter-parent normally would.
+                     Every service already declares this plugin for its lombok-exclude
+                     config; this pluginManagement entry makes `mvn package` actually
+                     produce a runnable fat jar everywhere, once, instead of a per-service
+                     fix - found because `mvn package` had never been asked to produce a
+                     runnable jar before (every service's own docs only ever document
+                     `mvn spring-boot:run`, which doesn't need repackaging). -->
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring.boot.version}</version>
+                    <executions>
+                        <execution>
+                            <goals>
+                                <goal>repackage</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
             </plugins>
         </pluginManagement>
 
