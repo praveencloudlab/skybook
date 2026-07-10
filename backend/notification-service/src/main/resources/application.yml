@@ -36,3 +36,18 @@ skybook:
       email-events: skybook.email.events
       booking-events: skybook.booking.events
       checkin-events: skybook.checkin.events
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  health:
+    # Actuator auto-configures a mail health indicator that actually opens
+    # an SMTP connection - a bad/placeholder Gmail app password (or no
+    # network route to smtp.gmail.com at all) would then permanently mark
+    # this service DOWN even though the app itself is fine, since Kafka
+    # consumption doesn't depend on SMTP being reachable. Found live: the
+    # container never went healthy in Compose with a placeholder password.
+    mail:
+      enabled: false
