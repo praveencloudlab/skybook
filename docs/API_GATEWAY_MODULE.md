@@ -11,7 +11,7 @@
 | **Base package** | `com.skybook.praveen.apigateway` |
 | **Port** | `8080` (freed up by giving auth-service an explicit port — see the load-bearing finding below) |
 | **Database** | None — stateless routing layer, no persistence |
-| **Status** | Design complete. Implementation starting per §9's build order. |
+| **Status** | Implemented and tested per §12's build order (steps 1-9 complete). |
 
 Single public entry point for every SkyBook service. Today, a client (Postman, a future web/mobile front end) has to know 6 different ports and there is no consistent security, CORS, or logging story across them. The gateway collapses that to one host:port, one place where JWT is actually enforced, and one place to add cross-cutting concerns without touching seven codebases.
 
@@ -36,6 +36,7 @@ Single public entry point for every SkyBook service. Today, a client (Postman, a
 11. [Known Risks / Open Questions](#11-known-risks--open-questions)
 12. [Build Order](#12-build-order)
 13. [Testing Plan](#13-testing-plan)
+14. [Implementation Notes](#14-implementation-notes)
 
 ---
 
@@ -279,3 +280,23 @@ server:
 | End-to-end | A full JWT-protected round trip: login via gateway → `/api/auth/login` → token → call a protected route via the gateway → 200 from the real downstream service | Manual verification against the live services already running locally (same style used throughout this project's other modules), documented in Implementation Notes once run |
 
 No JPA/Testcontainers layer — this module has no database. No Kafka layer — this module doesn't touch Kafka either (it's pure HTTP routing).
+
+---
+
+# 14. Implementation Notes
+
+Built per §12's order; every step matched the design with one real deviation, found only once tests exercised it end-to-end.
+
+**Downstream-unreachable detection needed `ResourceAccessException`, not `ConnectException`.** `DownstreamErrorHandlingFilter` originally caught `java.net.ConnectException` per the design's assumption about how a connection failure would surface. An integration test that pointed a route at a closed port proved that assumption wrong: `spring-cloud-starter-gateway-server-webmvc`'s `http()` route proxies through Spring's `RestClient`, which wraps every I/O failure (refused/reset/timeout) in `org.springframework.web.client.ResourceAccessException` — the filter's original catch clause was dead code, and every downstream outage would have surfaced as a raw 500 instead of the intended 502. Fixed by catching `ResourceAccessException` instead; covered by `GatewayRoutingIntegrationTest.unreachableDownstreamServiceReturns502`.
+
+**Test suite (§13), implemented as designed:**
+
+| Layer | Test class | Notes |
+|---|---|---|
+| Routing + JWT + CORS + error handling, end-to-end | `GatewayRoutingIntegrationTest` | `@SpringBootTest(RANDOM_PORT)` against a stub `com.sun.net.httpserver.HttpServer` standing in for downstream services (no WireMock dependency existed in this repo, and the JDK's own HTTP server is enough) — no separate WireMock layer added. `@DynamicPropertySource` wires `services.*.base-url` to the stub's random port and one deliberately-closed port for the 502 case. |
+| JWT filter | `JwtAuthenticationFilterTest` | Unit test against the filter directly with a mocked `GatewayJwtValidator`; covers OPTIONS bypass, public-path bypass, missing/malformed header, invalid token, and the `X-Auth-User` header attached on success. |
+| JWT validator | `GatewayJwtValidatorTest` | Unit test signing tokens with `jjwt` directly (same APIs auth-service uses) — valid, expired, wrong-secret, and malformed cases. |
+| Rate limiter | `FixedWindowRateLimiterTest` | Unit test against `FixedWindowRateLimiter` directly; per-key independence and eviction of stale windows verified by constructing a `Window` record instance via reflection (mutating an existing record's final field is blocked by the JVM — construction isn't). |
+| Logging filter | `RequestLoggingFilterTest` | Unit test asserting correlation-id generation/reuse/blank-handling and that the header is still set when the chain throws — not log-output scraping, per the design's own note. |
+
+24 tests, all green (`mvn -pl api-gateway test`). No CORS-config-class-level unit test was added separately — `GatewayRoutingIntegrationTest`'s CORS preflight assertions exercise `CorsConfig` for real, which the design's own testing plan already called for ("MockMvc/RestTemplate against a running test instance").
