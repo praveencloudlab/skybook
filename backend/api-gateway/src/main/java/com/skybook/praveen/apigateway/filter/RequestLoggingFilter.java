@@ -5,6 +5,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -45,6 +46,13 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         }
         response.setHeader(CORRELATION_ID_HEADER, correlationId);
 
+        // Links the business-facing correlation id to the OTel trace at its
+        // origin: the shared JSON log layout (skybook-logback-base.xml)
+        // whitelists this MDC key, so every gateway log line carries both
+        // correlationId and the agent-injected trace_id side by side
+        // (OBSERVABILITY_MODULE.md §5).
+        MDC.put("correlationId", correlationId);
+
         long start = System.currentTimeMillis();
         try {
             filterChain.doFilter(request, response);
@@ -52,6 +60,7 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
             long latencyMs = System.currentTimeMillis() - start;
             log.info("{} {} -> {} ({} ms) [{}]",
                     request.getMethod(), request.getRequestURI(), response.getStatus(), latencyMs, correlationId);
+            MDC.remove("correlationId");
         }
     }
 }

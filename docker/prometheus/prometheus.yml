@@ -1,0 +1,32 @@
+# Static scrape config - one target per compose service, same
+# static-config-over-service-discovery convention as the rest of the fleet
+# (OBSERVABILITY_MODULE.md §4). Targets are compose service names, resolvable
+# on the compose network only.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: skybook-services
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ['api-gateway:8080']
+        labels: { service: api-gateway }
+      - targets: ['auth-service:8081']
+        labels: { service: auth-service }
+      - targets: ['flight-service:8082']
+        labels: { service: flight-service }
+      - targets: ['booking-service:8083']
+        labels: { service: booking-service }
+      - targets: ['inventory-service:8084']
+        labels: { service: inventory-service }
+      - targets: ['notification-service:8085']
+        labels: { service: notification-service }
+      - targets: ['payment-service:8086']
+        labels: { service: payment-service }
+      - targets: ['checkin-service:8087']
+        labels: { service: checkin-service }
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
