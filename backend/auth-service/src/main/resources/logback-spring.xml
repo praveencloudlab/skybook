@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- JSON logging: all real config lives in skybook-logback-base.xml
+     (skybook-common) - OBSERVABILITY_MODULE.md §6. -->
+<configuration>
+    <springProperty scope="context" name="SERVICE_NAME" source="spring.application.name" defaultValue="unknown"/>
+    <include resource="skybook-logback-base.xml"/>
+</configuration>

@@ -1,0 +1,36 @@
+# Promtail with Docker service discovery (OBSERVABILITY_MODULE.md §6):
+# discovers every container on the compose network via the mounted Docker
+# socket and tails its json-file log. Labels kept deliberately minimal
+# (Loki cardinality guidance): compose service name + detected level.
+# trace_id etc. are queried via `| json` filter expressions, never labels.
+server:
+  http_listen_port: 9080
+
+positions:
+  filename: /positions/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+    relabel_configs:
+      # Only this compose project's containers.
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        regex: skybook
+        action: keep
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: service
+      - target_label: job
+        replacement: docker
+    pipeline_stages:
+      # App containers emit JSON lines - lift level out as a label when
+      # parseable; non-JSON lines (postgres, kafka...) pass through untouched.
+      - json:
+          expressions:
+            level: level
+      - labels:
+          level:

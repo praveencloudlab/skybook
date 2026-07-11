@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared logback base (OBSERVABILITY_MODULE.md §6): JSON logs to stdout only,
+  one field layout for the whole fleet. Included by each service's 3-line
+  logback-spring.xml via <include resource="skybook-logback-base.xml"/>.
+
+  This file living in skybook-common carries no dependency coupling - it is
+  inert unless a service both declares logstash-logback-encoder in its own
+  pom (per-service, by design-review decision) and writes the include file.
+
+  trace_id/span_id arrive in the MDC from the OpenTelemetry agent's logback
+  instrumentation; correlationId is put there by the gateway's
+  RequestLoggingFilter. includeMdcKeyName whitelists exactly those - any
+  other MDC use stays out of the log schema.
+-->
+<included>
+    <appender name="JSON_CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>trace_id</includeMdcKeyName>
+            <includeMdcKeyName>span_id</includeMdcKeyName>
+            <includeMdcKeyName>correlationId</includeMdcKeyName>
+            <customFields>{"service":"${SERVICE_NAME:-unknown}"}</customFields>
+            <!-- Without this, SERVICE_NAME (a logback context property, set
+                 by each service's springProperty) is ALSO emitted as its own
+                 field, duplicating the "service" custom field above. -->
+            <includeContext>false</includeContext>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="JSON_CONSOLE"/>
+    </root>
+</included>
