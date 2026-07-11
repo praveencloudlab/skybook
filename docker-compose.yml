@@ -62,11 +62,22 @@ services:
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWT_SECRET: ${JWT_SECRET}
+      JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
+      OTEL_SERVICE_NAME: auth-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+    volumes:
+      - otel-agent:/otel:ro
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      otel-agent:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
       interval: 10s
@@ -83,9 +94,20 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_flight
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
+      JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
+      OTEL_SERVICE_NAME: flight-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+    volumes:
+      - otel-agent:/otel:ro
     depends_on:
       postgres:
         condition: service_healthy
+      otel-agent:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
       interval: 10s
@@ -105,11 +127,22 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       FLIGHT_SERVICE_BASE_URL: http://flight-service:8082
       INVENTORY_SERVICE_BASE_URL: http://inventory-service:8084
+      JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
+      OTEL_SERVICE_NAME: booking-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+    volumes:
+      - otel-agent:/otel:ro
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      otel-agent:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
       interval: 10s
@@ -128,11 +161,22 @@ services:
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       FLIGHT_SERVICE_BASE_URL: http://flight-service:8082
+      JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
+      OTEL_SERVICE_NAME: inventory-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+    volumes:
+      - otel-agent:/otel:ro
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      otel-agent:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
       interval: 10s
@@ -150,9 +194,20 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MAIL_USERNAME: ${MAIL_USERNAME}
       MAIL_PASSWORD: ${MAIL_PASSWORD}
+      JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
+      OTEL_SERVICE_NAME: notification-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+    volumes:
+      - otel-agent:/otel:ro
     depends_on:
       kafka:
         condition: service_healthy
+      otel-agent:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
       interval: 10s
@@ -170,11 +225,22 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_payment
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
+      OTEL_SERVICE_NAME: payment-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+    volumes:
+      - otel-agent:/otel:ro
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      otel-agent:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8086/actuator/health"]
       interval: 10s
@@ -195,11 +261,22 @@ services:
       FLIGHT_SERVICE_BASE_URL: http://flight-service:8082
       INVENTORY_SERVICE_BASE_URL: http://inventory-service:8084
       CHECKIN_BOARDING_PASS_KEY: ${CHECKIN_BOARDING_PASS_KEY:-dev-only-insecure-signing-key-change-me}
+      JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
+      OTEL_SERVICE_NAME: checkin-service
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+    volumes:
+      - otel-agent:/otel:ro
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      otel-agent:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8087/actuator/health"]
       interval: 10s
@@ -221,6 +298,18 @@ services:
       SERVICES_INVENTORY_SERVICE_BASE_URL: http://inventory-service:8084
       SERVICES_PAYMENT_SERVICE_BASE_URL: http://payment-service:8086
       SERVICES_CHECKIN_SERVICE_BASE_URL: http://checkin-service:8087
+      JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
+      OTEL_SERVICE_NAME: api-gateway
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+    volumes:
+      - otel-agent:/otel:ro
+    depends_on:
+      otel-agent:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
       interval: 10s
@@ -230,3 +319,105 @@ services:
     # No depends_on the app services themselves - DownstreamErrorHandlingFilter
     # already turns "downstream not up yet" into a clean 502 instead of the
     # gateway needing them up first (API_GATEWAY_MODULE.md's own design).
+
+  # ---------------- Observability (OBSERVABILITY_MODULE.md) ----------------
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./docker/prometheus:/etc/prometheus:ro
+      - ./docker-data/prometheus:/prometheus
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  loki:
+    image: grafana/loki:3.4.2
+    command: -config.file=/etc/loki/loki.yml
+    volumes:
+      - ./docker/loki:/etc/loki:ro
+      - ./docker-data/loki:/loki
+    ports:
+      - "3100:3100"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  promtail:
+    image: grafana/promtail:3.4.2
+    command: -config.file=/etc/promtail/promtail.yml
+    volumes:
+      - ./docker/promtail:/etc/promtail:ro
+      - ./docker-data/promtail:/positions
+      # Read-only Docker socket + container log files - how docker_sd
+      # discovers containers and tails their json-file logs.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  tempo:
+    image: grafana/tempo:2.7.1
+    command: -config.file=/etc/tempo/tempo.yml
+    user: root # local-filesystem writes into the bind mount
+    volumes:
+      - ./docker/tempo:/etc/tempo:ro
+      # NOT /tempo - that's the Tempo binary itself in this image (its
+      # entrypoint); mounting a directory over it fails with a confusing
+      # "not a directory" error pointing at the host path.
+      - ./docker-data/tempo:/var/tempo
+    ports:
+      - "3200:3200"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3200/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # One-shot: downloads the pinned OTel Java agent into the shared volume the
+  # app services mount read-only at /otel (OBSERVABILITY_MODULE.md §5) -
+  # images stay untouched, the version is pinned in exactly one place.
+  otel-agent:
+    image: curlimages/curl:8.12.1
+    user: root # the named volume is root-owned; the image's default curl_user can't write to it
+    command: ["sh", "-c", "test -f /otel/opentelemetry-javaagent-2.14.0.jar || curl -fsSL -o /otel/opentelemetry-javaagent-2.14.0.jar https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.14.0/opentelemetry-javaagent.jar"]
+    volumes:
+      - otel-agent:/otel
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./docker-data/grafana:/var/lib/grafana
+    ports:
+      # 3001, not Grafana's default 3000 - the gateway's CORS config reserves
+      # localhost:3000 as a future frontend dev origin (OBSERVABILITY_MODULE.md §8).
+      - "3001:3000"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  otel-agent:

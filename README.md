@@ -24,6 +24,7 @@ Copy `env.example` to `.env` (gitignored) and fill in:
 | `JWT_SECRET` | Yes | Must be identical across `auth-service` and `api-gateway` — anything else and every token the gateway validates will look forged. |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | Yes, for `notification-service` to send email | Gmail SMTP app password, not your normal password. If you don't need email, the service still starts fine; sends will just fail. |
 | `CHECKIN_BOARDING_PASS_KEY` | No | Falls back to a dev-only default if unset. |
+| `GRAFANA_ADMIN_PASSWORD` | No | Grafana admin login; defaults to `admin` if unset. |
 
 ### Checking on it
 
@@ -32,6 +33,21 @@ docker compose ps                 # every service should show (healthy)
 docker compose logs -f <service>  # tail one service's logs
 curl http://localhost:8080/actuator/health   # gateway
 ```
+
+### Observability
+
+The stack ships its own monitoring (see [`docs/OBSERVABILITY_MODULE.md`](docs/OBSERVABILITY_MODULE.md)):
+
+| What | Where |
+|---|---|
+| **Grafana** (dashboards, logs, traces — start here) | http://localhost:3001 — `admin` / `$GRAFANA_ADMIN_PASSWORD` |
+| Prometheus (raw metrics, scrape targets) | http://localhost:9090 |
+| Loki (log store; use Grafana Explore to query) | http://localhost:3100 |
+| Tempo (trace store; use Grafana Explore to query) | http://localhost:3200 |
+
+Every service logs JSON to stdout (collected by Promtail into Loki), exposes `/actuator/prometheus` (scraped by Prometheus), and runs under the OpenTelemetry Java agent (traces into Tempo, `traceparent` propagated automatically across HTTP and Kafka hops).
+
+**To find what happened to a specific request:** open Grafana → Explore → Loki, query `{service="api-gateway"}` and filter (by path, by your `X-Correlation-Id` value, by `level="ERROR"`...). Every JSON log line carries a `trace_id` — click it to jump into the Tempo waterfall showing that exact request's path through every service it touched, with per-hop latency. The "SkyBook Fleet" dashboard (SkyBook folder) has fleet-wide request rate, error rate, p95 latency, JVM heap, and a live error-log panel.
 
 ### Resetting
 
@@ -56,3 +72,9 @@ Check the `*_BASE_URL` environment variables in `docker-compose.yml` — they mu
 
 **Windows/Git Bash specifically: a bind mount silently ends up empty, or `docker run`/`docker exec` fails with a mangled path like `C:/Program Files/Git/...`.**
 Git Bash auto-converts anything that looks like a POSIX path in command arguments, including inside `-v host:container` mount specs and container-internal paths passed to `docker exec`. Prefix the command with `MSYS_NO_PATHCONV=1` when running `docker` directly from Git Bash. `docker compose` itself isn't affected (paths in `docker-compose.yml` aren't shell arguments), only ad hoc `docker run`/`docker exec` invocations are.
+
+**`tempo` fails to start with `not a directory ... Are you trying to mount a directory onto a file` pointing at the *host* path.**
+Misleading error — the problem is the *container-side* path, not the host one: in the `grafana/tempo` image, `/tempo` is the Tempo **binary** (its entrypoint), so mounting a data directory there collides with a file that already exists in the image. The compose file mounts data at `/var/tempo` for exactly this reason; if you change it, don't change it back to `/tempo`.
+
+**Traces aren't appearing in Tempo/Grafana.**
+Check any app service's first log lines for the `otel.javaagent` banner (agent attached) and for exporter warnings. The agent defaults to `http/protobuf` on port 4318; this stack explicitly sets `OTEL_EXPORTER_OTLP_PROTOCOL=grpc` to match Tempo's `4317` receiver — if you see a "port is likely incorrect for protocol" warning, those two env vars have drifted apart.

@@ -41,7 +41,11 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        include: health,info,metrics,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
   health:
     # Actuator auto-configures a mail health indicator that actually opens
     # an SMTP connection - a bad/placeholder Gmail app password (or no

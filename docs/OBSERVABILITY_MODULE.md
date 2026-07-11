@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | Metrics (Prometheus), dashboards (Grafana), centralized logs (Loki), distributed traces (OpenTelemetry → Tempo), correlation propagation across HTTP + Kafka |
 | **Branch** | `feature/observability` |
-| **Status** | Frozen (with one review revision: observability dependencies are declared per-service, not via `skybook-common` — §4/§6). Implementation starting per §11. |
+| **Status** | Implemented and verified live per §12 — metrics, logs, and traces all confirmed with real requests. See §13 Implementation Notes. |
 
 Goal: a failure anywhere in Gateway → Booking → Inventory → Payment → Check-in is traceable from one place. Today, each container writes unstructured console logs that die with `docker compose logs`' scrollback, metrics exist only as unexposed Actuator endpoints nobody scrapes, and the gateway's `X-Correlation-Id` is logged exactly once — at the gateway — then ignored by every downstream service.
 
@@ -175,3 +175,25 @@ A request's story: gateway assigns `X-Correlation-Id` (existing behavior) and th
 | Clean-clone bar preserved | Wipe `./docker-data` + `docker compose up --build` → Grafana at :3001 works with provisioned datasources/dashboard, no manual clicks |
 | No test regressions | Full reactor `mvn clean verify` after every pom/logback change |
 | CI unaffected | The existing GitHub Actions run stays green (observability containers are compose-only; tests don't need them) |
+
+---
+
+# 13. Implementation Notes
+
+Built per §11's order. The architecture survived contact intact; three container-level details did not, all found by starting things rather than reading about them:
+
+**1. `grafana/tempo`'s `/tempo` is the binary, not a data directory.** The first data mount (`./docker-data/tempo:/tempo`) collided with the image's own entrypoint executable and failed with `not a directory ... Are you trying to mount a directory onto a file` — an error whose message points at the *host* path, which sent debugging down exactly the wrong hole first (VM mount-cache theories, container recreation) before a throwaway `alpine` mount of the same host path proved the host side was fine and the destination was the problem. Data now mounts at `/var/tempo`, matching Tempo's own examples. Added to the root README's troubleshooting section because the error message actively misdirects.
+
+**2. YAML folded scalars bite when continuation lines are indented deeper.** The `otel-agent` one-shot downloader's `command: >` had its `curl` arguments indented past the first line for readability — which folded-scalar semantics treat as *literal* newlines, so `sh -c` received a three-line script whose second line was `curl` with no URL and whose third was the URL as a standalone command (`exit 127`). Rewritten in exec form (`command: ["sh", "-c", "..."]`) on one line. Second one-shot bug right after: `curlimages/curl` runs as a non-root user that can't write to a root-owned named volume (`curl` exit 23) — fixed with `user: root` on the one-shot only.
+
+**3. OTel agent 2.x defaults to `http/protobuf` (port 4318), not gRPC.** The agent warned at startup that the configured `http://tempo:4317` endpoint looked wrong for the default protocol — it would have posted HTTP protobuf at Tempo's gRPC receiver and every span export would have failed quietly after that one warning line. Fixed with an explicit `OTEL_EXPORTER_OTLP_PROTOCOL: grpc` in every service's env block. Also in the README's troubleshooting notes.
+
+One cosmetic catch: `LogstashEncoder` emits logback *context properties* as fields by default, so `SERVICE_NAME` (the springProperty each service sets for the include file) appeared alongside the intended `service` custom field in every log line — silenced with `includeContext=false` in the shared base config.
+
+**Verification actually performed** (§12's checklist):
+- Prometheus `/targets`: 9/9 UP (8 services + self). Real `http_server_requests_seconds_*` series confirmed incrementing after gateway traffic.
+- Logs: every app container emits valid JSON with `service`, `level`, `trace_id`, `span_id`; Loki query by `{service="api-gateway"}` plus text filter found the exact request; the gateway line carries `correlationId` (sent as `X-Correlation-Id: obs-verify-001`) and `trace_id` side by side — the two id spaces linked at origin as designed.
+- Traces: a real `GET /api/flights` through the gateway produced one Tempo trace containing spans from **both** `api-gateway` and `flight-service` — `traceparent` propagation across the proxied hop confirmed live. JDBC spans (`SELECT skybook_payment` etc.) and Kafka-consumer-side traces from payment/auth services appear in Tempo's search, confirming the agent's JDBC and Kafka instrumentation is active; a full cross-service *Kafka-hop* trace (booking event → payment consumer within one trace) wasn't exercised because the dev database had no seeded flights to complete a real booking against — the instrumentation mechanism is identical to the verified HTTP hop, but stating plainly that this specific assertion ran on mechanism, not on an observed trace. Natural to close out during `feature/e2e-certification`, whose seeded full-journey flows are exactly this scenario.
+- Grafana: all three datasources and the SkyBook Fleet dashboard present via API on a fresh provisioned start; logs↔traces derived-field navigation configured.
+- Full reactor `mvn clean verify` green after all pom/logback changes (metrics deps run and logging run separately) — zero test regressions.
+- CI: unaffected by design (observability containers are compose-only); confirmed by the branch's own green runs.
