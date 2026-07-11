@@ -1,0 +1,38 @@
+# File-provisioned datasources (OBSERVABILITY_MODULE.md §7) - a fresh
+# `docker compose up` yields a working Grafana with zero manual clicks.
+# Loki -> Tempo: the trace_id JSON field on any log line becomes a link into
+# the Tempo waterfall; Tempo -> Loki: a span links back to that trace's logs.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      derivedFields:
+        - name: trace_id
+          datasourceUid: tempo
+          matcherType: label
+          matcherRegex: trace_id
+          url: '$${__value.raw}'
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: '-5m'
+        spanEndTimeShift: '5m'
+        filterByTraceID: true

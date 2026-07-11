@@ -58,6 +58,15 @@
                 <scope>import</scope>
             </dependency>
 
+            <!-- Not managed by the Spring Boot BOM; version centralized here,
+                 the dependency itself is declared per service
+                 (OBSERVABILITY_MODULE.md §6, design-review decision). -->
+            <dependency>
+                <groupId>net.logstash.logback</groupId>
+                <artifactId>logstash-logback-encoder</artifactId>
+                <version>8.1</version>
+            </dependency>
+
             <dependency>
                 <groupId>org.springframework.cloud</groupId>
                 <artifactId>spring-cloud-dependencies</artifactId>
