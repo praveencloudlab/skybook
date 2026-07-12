@@ -5,6 +5,18 @@ spring:
   application:
     name: booking-service
 
+  cloud:
+    openfeign:
+      client:
+        config:
+          # Fleet default (RESILIENCE_MODULE.md section 4): all inter-service
+          # calls are small-payload CRUD between co-located containers -
+          # anything slower IS a failure. Overrides Feign's 10s connect /
+          # 60s read defaults.
+          default:
+            connect-timeout: 2000
+            read-timeout: 5000
+
   datasource:
     url: jdbc:postgresql://localhost:5432/skybook_booking
     username: postgres
