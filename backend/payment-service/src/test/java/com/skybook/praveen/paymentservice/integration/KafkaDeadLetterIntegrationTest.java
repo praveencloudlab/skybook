@@ -86,7 +86,9 @@ class KafkaDeadLetterIntegrationTest extends AbstractPaymentIntegrationTest {
     /** Both tests share the DLT topic - poll until a record MATCHING this test's payload appears. */
     private ConsumerRecord<String, String> awaitDltRecord(String expectedValueFragment) {
         try (KafkaConsumer<String, String> consumer = dltConsumer()) {
-            Instant deadline = Instant.now().plusSeconds(30);
+            // 60s, not 30s: covers retry backoff (3s) + rebalances + slow CI
+            // runners; passing runs exit as soon as the record shows up.
+            Instant deadline = Instant.now().plusSeconds(60);
             while (Instant.now().isBefore(deadline)) {
                 ConsumerRecords<String, String> polled = consumer.poll(Duration.ofMillis(500));
                 for (ConsumerRecord<String, String> record : polled) {
