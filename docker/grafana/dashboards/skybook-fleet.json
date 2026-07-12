@@ -59,10 +59,51 @@
       ]
     },
     {
+      "id": 6,
+      "title": "Circuit breaker state (1 = state active)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "resilience4j_circuitbreaker_state{state=~\"open|half_open\"} == 1",
+          "legendFormat": "{{service}}/{{name}} {{state}}"
+        }
+      ],
+      "description": "Empty when all breakers are closed (healthy). A series appearing here means a breaker left CLOSED."
+    },
+    {
+      "id": 7,
+      "title": "Retry calls by outcome (/s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (service, name, kind) (rate(resilience4j_retry_calls_total[5m]))",
+          "legendFormat": "{{service}}/{{name}} {{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Bulkhead available slots",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "resilience4j_bulkhead_available_concurrent_calls",
+          "legendFormat": "{{service}}/{{name}}"
+        }
+      ],
+      "description": "Sits at max (10) when idle; sustained 0 = saturated, callers are being rejected."
+    },
+    {
       "id": 5,
       "title": "Recent errors (all services)",
       "type": "logs",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 24 },
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
