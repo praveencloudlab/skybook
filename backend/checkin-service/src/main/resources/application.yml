@@ -65,6 +65,56 @@ flight-service:
 inventory-service:
   base-url: http://localhost:8084
 
+# RESILIENCE_MODULE.md §5-§7. All thresholds are reasoned defaults, expected
+# to be re-tuned against the Grafana dashboards once real load data exists.
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 2
+        # 4xx (FeignClientException) deliberately NOT recorded - a 404/409
+        # proves the downstream is up; only 5xx/timeouts/connect failures
+        # indicate ill-health.
+        record-exceptions:
+          - feign.RetryableException
+          - feign.FeignException.FeignServerException
+        register-health-indicator: true
+    instances:
+      flight:
+        base-config: default
+      inventory:
+        base-config: default
+  retry:
+    configs:
+      reads:
+        max-attempts: 3
+        wait-duration: 200ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+        retry-exceptions:
+          - feign.RetryableException
+          - feign.FeignException.FeignServerException
+    instances:
+      flight-read:
+        base-config: reads
+      inventory-read:
+        base-config: reads
+  bulkhead:
+    configs:
+      default:
+        max-concurrent-calls: 10
+        max-wait-duration: 100ms
+    instances:
+      flight:
+        base-config: default
+      inventory:
+        base-config: default
+
 skybook:
   kafka:
     topics:
