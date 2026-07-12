@@ -3,6 +3,8 @@ package com.skybook.praveen.checkinservice.client;
 import com.skybook.praveen.checkinservice.exception.InventoryServiceUnavailableException;
 import com.skybook.praveen.checkinservice.exception.SeatUnavailableException;
 import feign.FeignException;
+import io.github.resilience4j.bulkhead.BulkheadFullException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -16,6 +18,11 @@ import java.util.Optional;
  * a reservation on seat change (reserve the new seat, then cancel the old
  * one - no hold step, inventory-service reserves directly from AVAILABLE
  * when no hold exists, same as booking-service's "reserveDirect" path).
+ *
+ * Domain boundary of the two-bean resilience split (RESILIENCE_MODULE.md
+ * §5): CallNotPermittedException (open circuit) and BulkheadFullException
+ * (saturation) translate to the same InventoryServiceUnavailableException
+ * callers already handle.
  */
 @Slf4j
 @Component
@@ -24,24 +31,34 @@ public class InventoryServiceClient {
 
     private static final String NO_INVENTORY_MARKER = "Flight inventory not found";
 
-    private final InventoryServiceFeignClient feignClient;
+    private final ResilientInventoryClient resilientClient;
 
     /**
-     * Never throws - the GET endpoint has no flight/inventory lookup of its
-     * own, so an empty list means either "no reservations" or "no inventory
-     * tracked for this flight at all." Either way, callers treat an empty
-     * list as "nothing to validate against" (booking-service's same
-     * hold-if-exists graceful-degradation policy, applied here to reads).
+     * Reads propagate unavailability as the domain exception (they gate
+     * check-in eligibility - failing open would let passengers check in
+     * against unverified seats); an empty list still means "nothing to
+     * validate against," same graceful-degradation policy as before.
      */
     public List<SeatReservationDetails> getReservationsForBooking(Long bookingId) {
-        return feignClient.getReservationsByBooking(bookingId);
+        try {
+            return resilientClient.getReservationsByBooking(bookingId);
+
+        } catch (CallNotPermittedException | BulkheadFullException fastFail) {
+            log.warn("inventory-service reservations lookup rejected without attempt ({}), booking {}",
+                    fastFail.getClass().getSimpleName(), bookingId);
+            throw new InventoryServiceUnavailableException(bookingId, fastFail);
+
+        } catch (FeignException unreachable) {
+            log.error("Could not reach inventory-service for reservations of booking {}", bookingId, unreachable);
+            throw new InventoryServiceUnavailableException(bookingId, unreachable);
+        }
     }
 
     /** Optional.empty() = the flight has no inventory record - proceed without reserving. */
     public Optional<SeatReservationDetails> reserveSeat(Long flightId, String seatNumber,
                                                          Long bookingId, Long bookingPassengerId) {
         try {
-            return Optional.of(feignClient.reserveSeat(
+            return Optional.of(resilientClient.reserveSeat(
                     InventorySeatCall.reserve(flightId, seatNumber, bookingId, bookingPassengerId)));
 
         } catch (FeignException.NotFound notFound) {
@@ -54,6 +71,11 @@ public class InventoryServiceClient {
         } catch (FeignException.Conflict conflict) {
             throw new SeatUnavailableException(flightId, seatNumber, "already held or reserved");
 
+        } catch (CallNotPermittedException | BulkheadFullException fastFail) {
+            log.warn("inventory-service reserve rejected without attempt ({}), seat {} flight {}",
+                    fastFail.getClass().getSimpleName(), seatNumber, flightId);
+            throw new InventoryServiceUnavailableException(flightId, fastFail);
+
         } catch (FeignException unreachable) {
             log.error("Could not reach inventory-service to reserve seat {} on flight {}",
                     seatNumber, flightId, unreachable);
@@ -64,9 +86,9 @@ public class InventoryServiceClient {
     /** Compensation/cleanup for the old seat on a successful seat change - never throws. */
     public void cancelReservationQuietly(Long flightId, String seatNumber, Long bookingId, String reason) {
         try {
-            feignClient.cancelReservation(InventorySeatCall.cancel(flightId, seatNumber, bookingId, reason));
+            resilientClient.cancelReservation(InventorySeatCall.cancel(flightId, seatNumber, bookingId, reason));
             log.info("Cancelled reservation of seat {} flight {} ({})", seatNumber, flightId, reason);
-        } catch (FeignException e) {
+        } catch (FeignException | CallNotPermittedException | BulkheadFullException e) {
             log.warn("Could not cancel reservation of seat {} flight {} ({}): {}",
                     seatNumber, flightId, reason, e.getMessage());
         }

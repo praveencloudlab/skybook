@@ -66,7 +66,15 @@ public class PaymentEventProducer {
     }
 
     private void publish(PaymentEvent event) {
-        kafkaTemplate.send(KafkaTopics.PAYMENT_EVENTS, event);
+        // Async but no longer fire-and-forget: broker-side failures now log
+        // at ERROR into the centralized pipeline (RESILIENCE_MODULE.md §10).
+        kafkaTemplate.send(KafkaTopics.PAYMENT_EVENTS, event)
+                .whenComplete((result, ex) -> {
+                    if (ex != null) {
+                        log.error("Failed to publish {} event for payment {} to {}",
+                                event.getType(), event.getPaymentReference(), KafkaTopics.PAYMENT_EVENTS, ex);
+                    }
+                });
         log.info("Published {} event for payment {} (booking {})",
                 event.getType(), event.getPaymentReference(), event.getBookingReference());
     }

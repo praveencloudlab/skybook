@@ -32,7 +32,11 @@ class InventoryServiceClientTest {
 
     @BeforeEach
     void setUp() {
-        client = new InventoryServiceClient(feignClient);
+        // Plain construction, no Spring proxies: the resilient bean is a
+        // pass-through here, so these tests keep exercising exactly the
+        // wrapper's translation logic they always did. Aspect behavior
+        // (breaker/bulkhead/retry) is covered by ResilientClientBehaviorTest.
+        client = new InventoryServiceClient(new ResilientInventoryClient(feignClient));
     }
 
     private static Request dummyRequest() {
