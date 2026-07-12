@@ -84,9 +84,13 @@ class FeignTimeoutIntegrationTest {
                 .isInstanceOf(FlightServiceUnavailableException.class);
 
         Duration elapsed = Duration.between(start, Instant.now());
+        // Nominal: 3 retry attempts x 5s read timeout + 0.6s backoff = ~15.6s.
+        // The upper bound leaves generous headroom for loaded CI runners
+        // (20s proved too tight there - only ~4s slack) while still being
+        // far below the 60s-PER-ATTEMPT default this test guards against.
         assertThat(elapsed)
                 .as("a hung flight-service must fail within the configured window, not Feign's 60s default")
-                .isLessThan(Duration.ofSeconds(20))
+                .isLessThan(Duration.ofSeconds(40))
                 .isGreaterThanOrEqualTo(Duration.ofSeconds(4)); // proves the 5s read timeout is what fired, not an instant connect failure
     }
 }
