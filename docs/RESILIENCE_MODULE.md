@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | Timeouts, circuit breakers, controlled retries, bulkheads, fallbacks on every synchronous Feign path; Kafka consumer retry policy + dead-letter topics; producer send-failure visibility |
 | **Branch** | `feature/resilience` |
-| **Status** | Frozen after design review (four corrections applied: AOP two-bean split, bounded Kafka backoff, DLT partition invariant, deterministic timeout tests). Implementation starting per §14. |
+| **Status** | Implemented and verified live per §14 step 8 - breaker open/fast-fail/recovery and poison-pill-to-DLT all observed against the running stack. See §16 Implementation Notes. |
 
 Goal: a slow or dead dependency degrades the caller *predictably* — bounded latency, fast failure, no thread-pool exhaustion, no silently dropped Kafka messages. Today none of that is true: a hanging flight-service holds a booking-service thread for **60 seconds** (Feign's default read timeout, configured nowhere), every failed call is retried by nobody or by everybody-at-once, and a poison Kafka message is retried 10 times in a tight loop and then **silently discarded** (spring-kafka's default), gone forever.
 
@@ -302,3 +302,24 @@ All five `XEventProducer` classes: the ignored `send()` future gains a `whenComp
 | Poison pill | Unparseable JSON goes to DLT, consumer keeps consuming subsequent records | Integration test publishing raw garbage bytes to the topic |
 | Producer visibility | Failed send logs at ERROR | Unit test with a failing mock template future |
 | End-to-end degradation | Full §14-step-8 manual scenario against the live compose stack | Documented run in Implementation Notes, with the Grafana evidence |
+
+---
+
+# 16. Implementation Notes
+
+Built per §14's order. The two-bean split from the design review held up exactly as promised — the behavior tests it demanded all passed first run. Three findings, one design-doc correction, and a live verification worth recording:
+
+**1. The DLT suffix is `-dlt`, not `.DLT`.** The design doc stated spring-kafka's default DLT naming as `<topic>.DLT`; this spring-kafka version's actual default is `<topic>-dlt` — found empirically when the DLT integration test sat watching `skybook.dlt-test.events.DLT` for 30 seconds while the recoverer's `UNKNOWN_TOPIC` warning plainly named `skybook.dlt-test.events-dlt`. Framework default kept (the doc's own convention-over-invention reasoning); every reference in code comments uses `-dlt`.
+
+**2. A stale `skybook-common` in the local Maven repo silently disabled all logging during test debugging.** Running `mvn -pl payment-service verify` *without* `-am` resolved `skybook-common` from `~/.m2` — a snapshot installed before the observability branch added `skybook-logback-base.xml` — so logback found no config and dropped every log line, which cost a debugging round-trip on the DLT test (no listener evidence, no recoverer evidence, nothing). Worth remembering fleet-wide: on this reactor, per-module builds need `-am` or a fresh `mvn install`.
+
+**3. `record-exceptions` as a positive-only list beats record-plus-ignore.** The design sketched `record-exceptions: [FeignException] + ignore-exceptions: [FeignClientException]`; the implementation lists only what counts as failure (`RetryableException`, `FeignException.FeignServerException`) — anything unlisted (all 4xx) counts as success, which is exactly the intent with one less list to keep coherent.
+
+**Live degradation verification** (§14 step 8, against the compose stack):
+- flight-service stopped, valid create-booking traffic through the gateway: attempt 1 failed in 4.7s (3 retry attempts against the dead host), attempt 2 in 699ms, attempts 3-6 in **78ms flat** — breaker OPEN after the failure threshold (failureRate 100%, failedCalls 5, notPermittedCalls 5 on `/actuator/circuitbreakers`), every fast failure a clean 5xx through the gateway. inventory's breaker stayed CLOSED throughout (never called — flight validation fails first), confirming per-dependency isolation.
+- flight-service restarted: after the 10s open window, half-open probes succeeded and the breaker returned to CLOSED. The post-restart responses were 404s (empty flight table) — which also live-confirmed that 4xx traffic does not re-trip the breaker.
+- Poison pill (`this is not valid json {{{`) published to the real `skybook.booking.events`: appeared in `skybook.booking.events-dlt` three times — once per consumer group (payment, checkin, notification), each having independently failed deserialization and dead-lettered it — and all three consumers kept consuming. Before this branch, that record would have permanently wedged all three.
+
+**Test coverage added:** `FeignTimeoutIntegrationTest` (read timeout bounds a hung downstream at ~5s, lower-bound asserted so an instant connect failure can't fake a pass), `ResilientClientBehaviorTest` (8 tests: breaker open/fail-fast/no-leak, 4xx-don't-trip, read-retry exactly 3×, writes exactly once, open-breaker-suppresses-retries, quiet-compensation semantics), `KafkaDeadLetterIntegrationTest` (bounded 3-delivery retry then DLT with exception headers; poison pill straight to DLT), producer failure-path test (failing future → ERROR log, nothing thrown). Full reactor `mvn clean verify` green after every increment.
+
+**Deferred items unchanged from §12** — most notably write-retry enablement still gated on inventory-service certifying hold/reserve idempotency, and the transactional outbox for producer atomicity.
