@@ -75,7 +75,15 @@ public class CheckInEventProducer {
     }
 
     private void publish(CheckInEvent event) {
-        kafkaTemplate.send(KafkaTopics.CHECKIN_EVENTS, event);
+        // Async but no longer fire-and-forget: broker-side failures now log
+        // at ERROR into the centralized pipeline (RESILIENCE_MODULE.md §10).
+        kafkaTemplate.send(KafkaTopics.CHECKIN_EVENTS, event)
+                .whenComplete((result, ex) -> {
+                    if (ex != null) {
+                        log.error("Failed to publish {} event for check-in {} to {}",
+                                event.getType(), event.getCheckInId(), KafkaTopics.CHECKIN_EVENTS, ex);
+                    }
+                });
         log.info("Published {} event for check-in {} (booking {})",
                 event.getType(), event.getCheckInId(), event.getBookingReference());
     }
