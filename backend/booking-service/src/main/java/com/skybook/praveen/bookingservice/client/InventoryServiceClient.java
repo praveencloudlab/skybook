@@ -3,6 +3,8 @@ package com.skybook.praveen.bookingservice.client;
 import com.skybook.praveen.bookingservice.exception.InventoryServiceUnavailableException;
 import com.skybook.praveen.bookingservice.exception.SeatUnavailableException;
 import feign.FeignException;
+import io.github.resilience4j.bulkhead.BulkheadFullException;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -15,10 +17,17 @@ import java.util.Optional;
  * legal - holds are skipped, signaled by Optional.empty(). A flight WITH
  * inventory enforces seat availability - conflicts become 409s.
  *
+ * Domain boundary of the two-bean resilience split (RESILIENCE_MODULE.md
+ * §5): delegates to ResilientInventoryClient (aspects against raw Feign
+ * exceptions) and additionally translates CallNotPermittedException (open
+ * circuit) and BulkheadFullException (saturation) into the same
+ * InventoryServiceUnavailableException callers already handle.
+ *
  * The *Quietly variants are for compensation/cleanup paths where the
  * primary operation (cancellation, payment-driven confirmation) must not
  * fail because inventory cleanup hiccupped - failures are logged, never
- * thrown.
+ * thrown; an open circuit there just logs like any other failure (the
+ * SeatHoldExpiryJob sweep remains the self-healing backstop).
  */
 @Slf4j
 @Component
@@ -27,12 +36,12 @@ public class InventoryServiceClient {
 
     private static final String NO_INVENTORY_MARKER = "Flight inventory not found";
 
-    private final InventoryServiceFeignClient feignClient;
+    private final ResilientInventoryClient resilientClient;
 
     /** Optional.empty() = the flight has no inventory record - proceed without a hold. */
     public Optional<InventoryHoldDetails> holdSeat(Long flightId, String seatNumber, Long bookingId) {
         try {
-            return Optional.of(feignClient.holdSeat(InventorySeatCall.hold(flightId, seatNumber, bookingId)));
+            return Optional.of(resilientClient.holdSeat(InventorySeatCall.hold(flightId, seatNumber, bookingId)));
 
         } catch (FeignException.NotFound notFound) {
             if (notFound.contentUTF8().contains(NO_INVENTORY_MARKER)) {
@@ -47,6 +56,11 @@ public class InventoryServiceClient {
         } catch (FeignException.Conflict conflict) {
             throw new SeatUnavailableException(flightId, seatNumber, "already held or reserved");
 
+        } catch (CallNotPermittedException | BulkheadFullException fastFail) {
+            log.warn("inventory-service hold rejected without attempt ({}), seat {} flight {}",
+                    fastFail.getClass().getSimpleName(), seatNumber, flightId);
+            throw new InventoryServiceUnavailableException(flightId, fastFail);
+
         } catch (FeignException unreachable) {
             log.error("Could not reach inventory-service to hold seat {} on flight {}",
                     seatNumber, flightId, unreachable);
@@ -57,7 +71,7 @@ public class InventoryServiceClient {
     public Optional<InventoryReservationDetails> reserveSeat(Long flightId, String seatNumber,
                                                              Long bookingId, Long bookingPassengerId) {
         try {
-            return Optional.of(feignClient.reserveSeat(
+            return Optional.of(resilientClient.reserveSeat(
                     InventorySeatCall.reserve(flightId, seatNumber, bookingId, bookingPassengerId)));
 
         } catch (FeignException.NotFound notFound) {
@@ -70,6 +84,11 @@ public class InventoryServiceClient {
         } catch (FeignException.Conflict conflict) {
             throw new SeatUnavailableException(flightId, seatNumber, "already reserved");
 
+        } catch (CallNotPermittedException | BulkheadFullException fastFail) {
+            log.warn("inventory-service reserve rejected without attempt ({}), seat {} flight {}",
+                    fastFail.getClass().getSimpleName(), seatNumber, flightId);
+            throw new InventoryServiceUnavailableException(flightId, fastFail);
+
         } catch (FeignException unreachable) {
             log.error("Could not reach inventory-service to reserve seat {} on flight {}",
                     seatNumber, flightId, unreachable);
@@ -80,9 +99,9 @@ public class InventoryServiceClient {
     /** Compensation/cleanup - never throws. */
     public void releaseHoldQuietly(Long flightId, String seatNumber, Long bookingId, String reason) {
         try {
-            feignClient.releaseHold(InventorySeatCall.release(flightId, seatNumber, bookingId, reason));
+            resilientClient.releaseHold(InventorySeatCall.release(flightId, seatNumber, bookingId, reason));
             log.info("Released hold on seat {} flight {} ({})", seatNumber, flightId, reason);
-        } catch (FeignException e) {
+        } catch (FeignException | CallNotPermittedException | BulkheadFullException e) {
             log.warn("Could not release hold on seat {} flight {} ({}): {}",
                     seatNumber, flightId, reason, e.getMessage());
         }
@@ -91,9 +110,9 @@ public class InventoryServiceClient {
     /** Cleanup on booking cancellation - never throws. */
     public void cancelReservationQuietly(Long flightId, String seatNumber, Long bookingId, String reason) {
         try {
-            feignClient.cancelReservation(InventorySeatCall.release(flightId, seatNumber, bookingId, reason));
+            resilientClient.cancelReservation(InventorySeatCall.release(flightId, seatNumber, bookingId, reason));
             log.info("Cancelled reservation of seat {} flight {} ({})", seatNumber, flightId, reason);
-        } catch (FeignException e) {
+        } catch (FeignException | CallNotPermittedException | BulkheadFullException e) {
             log.warn("Could not cancel reservation of seat {} flight {} ({}): {}",
                     seatNumber, flightId, reason, e.getMessage());
         }
