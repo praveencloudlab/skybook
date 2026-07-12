@@ -58,7 +58,15 @@ public class InventoryEventProducer {
                 .details(details)
                 .build();
 
-        kafkaTemplate.send(KafkaTopics.INVENTORY_EVENTS, event);
+        // Async but no longer fire-and-forget: broker-side failures now log
+        // at ERROR into the centralized pipeline (RESILIENCE_MODULE.md §10).
+        kafkaTemplate.send(KafkaTopics.INVENTORY_EVENTS, event)
+                .whenComplete((result, ex) -> {
+                    if (ex != null) {
+                        log.error("Failed to publish {} event for flight {} seat {} to {}",
+                                type, flightId, seatNumber, KafkaTopics.INVENTORY_EVENTS, ex);
+                    }
+                });
 
         log.info("Published {} event for flight {} seat {}", type, flightId, seatNumber);
     }

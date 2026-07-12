@@ -103,7 +103,15 @@ public class BookingEventProducer {
                             ? flight.arrivalTime().format(EVENT_TIME) : null);
         }
 
-        kafkaTemplate.send(KafkaTopics.BOOKING_EVENTS, event.build());
+        // Async but no longer fire-and-forget: broker-side failures now log
+        // at ERROR into the centralized pipeline (RESILIENCE_MODULE.md §10).
+        kafkaTemplate.send(KafkaTopics.BOOKING_EVENTS, event.build())
+                .whenComplete((result, ex) -> {
+                    if (ex != null) {
+                        log.error("Failed to publish {} event for booking {} to {}",
+                                type, booking.bookingReference(), KafkaTopics.BOOKING_EVENTS, ex);
+                    }
+                });
 
         log.info("Published {} event for booking {}", type, booking.bookingReference());
     }
