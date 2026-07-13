@@ -20,6 +20,21 @@ management:
     web:
       exposure:
         include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        # Registers the livenessState/readinessState contributors everywhere,
+        # not only in-cluster - without this, the explicit groups below fail
+        # Boot startup validation in tests and compose.
+        enabled: true
+      group:
+        # Explicit probe-group membership (KUBERNETES_MODULE.md section 7) -
+        # Boot's default readiness does NOT include the db indicator.
+        # Liveness never includes external deps (restart storms).
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,db
   metrics:
     distribution:
       percentiles-histogram:

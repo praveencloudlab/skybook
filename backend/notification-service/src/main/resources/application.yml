@@ -42,6 +42,23 @@ management:
     web:
       exposure:
         include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        # Registers the livenessState/readinessState contributors everywhere,
+        # not only in-cluster - without this, the explicit groups below fail
+        # Boot startup validation in tests and compose.
+        enabled: true
+      group:
+        # No DB here - readiness carries only the application's own state
+        # (KUBERNETES_MODULE.md section 7). Kafka is deliberately excluded:
+        # the resilience branch's consumer retries + DLTs make a broker
+        # outage degraded async processing, not unavailability. Mail health
+        # is already disabled entirely (dockerization finding).
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState
   metrics:
     distribution:
       percentiles-histogram:
