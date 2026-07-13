@@ -1,0 +1,83 @@
+# Single-replica Postgres StatefulSet (KUBERNETES_MODULE.md §5) - same
+# dev-grade single-node topology as compose, k8s-idiomatic form.
+#
+# Init semantics (§12, design-review addition): the init ConfigMap mounted at
+# /docker-entrypoint-initdb.d runs ONLY when the PVC's data directory is
+# empty. Editing it + kubectl apply does NOT rerun it against existing data -
+# use migrations/manual SQL, or deliberately delete the dev PVC.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: skybook
+spec:
+  clusterIP: None # headless - stable pod DNS for the StatefulSet
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      name: pg
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: skybook
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef: { name: skybook-secrets, key: POSTGRES_USER }
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: skybook-secrets, key: POSTGRES_PASSWORD }
+            # postgres image quirk: with a mounted data volume, PGDATA must
+            # be a subdirectory or initdb refuses the lost+found dir.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          resources:
+            requests: { memory: "256Mi", cpu: "100m" }
+            limits: { memory: "512Mi" }
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi

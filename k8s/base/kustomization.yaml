@@ -1,0 +1,68 @@
+# SkyBook on Kubernetes (KUBERNETES_MODULE.md) - apply with:
+#   kubectl apply -k k8s/base
+# One-time setup first: cp k8s/secrets.env.example k8s/secrets.env and fill in.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: skybook
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: skybook
+    includeSelectors: false
+
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - kafka.yaml
+  - auth-service.yaml
+  - flight-service.yaml
+  - booking-service.yaml
+  - inventory-service.yaml
+  - payment-service.yaml
+  - checkin-service.yaml
+  - notification-service.yaml
+  - api-gateway.yaml
+  - prometheus.yaml
+  - grafana.yaml
+  - loki.yaml
+  - tempo.yaml
+  - alloy.yaml
+
+configMapGenerator:
+  - name: postgres-init
+    files:
+      - config/init-databases.sql
+  - name: prometheus-config
+    files:
+      - config/prometheus.yml
+  - name: loki-config
+    files:
+      - config/loki.yml
+  - name: tempo-config
+    files:
+      - config/tempo.yml
+  - name: alloy-config
+    files:
+      - config/alloy.alloy
+  - name: grafana-datasources
+    files:
+      - config/grafana/provisioning/datasources/datasources.yml
+  - name: grafana-dashboard-provider
+    files:
+      - config/grafana/provisioning/dashboards/dashboards.yml
+  - name: grafana-dashboards
+    files:
+      - config/grafana/dashboards/skybook-fleet.json
+
+secretGenerator:
+  # k8s/base/secrets.env is gitignored (its own explicit entry - the .env.*
+  # patterns do NOT match it); the tracked template is
+  # k8s/base/secrets.env.example. Lives INSIDE this directory because
+  # kustomize refuses generator files outside the kustomization root.
+  - name: skybook-secrets
+    envs:
+      - secrets.env
+
+generatorOptions:
+  disableNameSuffixHash: true # deployments reference fixed names; dev cluster, no rollout-on-config-change needed

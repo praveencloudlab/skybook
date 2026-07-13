@@ -1,0 +1,73 @@
+# Grafana Alloy DaemonSet (KUBERNETES_MODULE.md §5/§10) - the supported
+# replacement for EOL'd Promtail (design-review correction). Uses the
+# Kubernetes API tailing path (loki.source.kubernetes), so it needs pod
+# get/list/watch plus pods/log read - no hostPath privilege needed beyond
+# what the API grants.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alloy
+  namespace: skybook
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: skybook-alloy
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [pods/log]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: skybook-alloy
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: skybook-alloy
+subjects:
+  - kind: ServiceAccount
+    name: alloy
+    namespace: skybook
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alloy
+  namespace: skybook
+spec:
+  selector:
+    matchLabels:
+      app: alloy
+  template:
+    metadata:
+      labels:
+        app: alloy
+    spec:
+      serviceAccountName: alloy
+      containers:
+        - name: alloy
+          image: grafana/alloy:v1.8.1
+          args:
+            - run
+            - /etc/alloy/alloy.alloy
+            - --storage.path=/var/lib/alloy
+          volumeMounts:
+            - name: config
+              mountPath: /etc/alloy
+              readOnly: true
+            - name: storage
+              mountPath: /var/lib/alloy
+          resources:
+            requests: { memory: "128Mi", cpu: "50m" }
+            limits: { memory: "256Mi" }
+      volumes:
+        - name: config
+          configMap:
+            name: alloy-config
+        - name: storage
+          emptyDir: {}

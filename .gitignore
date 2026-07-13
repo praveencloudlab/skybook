@@ -49,3 +49,8 @@ build/
 
 # Claude local session data
 .claude/
+
+# Kubernetes secrets source (k8s/base/secrets.env.example is the tracked
+# template) - explicit entry: the .env/.env.* patterns above do NOT match
+# a file named secrets.env.
+k8s/base/secrets.env

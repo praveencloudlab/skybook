@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkin-service
+  namespace: skybook
+spec:
+  type: ClusterIP
+  selector:
+    app: checkin-service
+  ports:
+    - port: 8087
+      name: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkin-service
+  namespace: skybook
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: checkin-service
+  template:
+    metadata:
+      labels:
+        app: checkin-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: /actuator/prometheus
+        prometheus.io/port: "8087"
+    spec:
+      initContainers:
+        - name: otel-agent
+          image: ghcr.io/praveencloudlab/skybook-otel-agent:2.14.0
+          volumeMounts:
+            - name: otel
+              mountPath: /target
+      containers:
+        - name: checkin-service
+          image: ghcr.io/praveencloudlab/skybook-checkin-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8087
+          envFrom:
+            - configMapRef:
+                name: checkin-service-config
+          env:
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                secretKeyRef: { name: skybook-secrets, key: POSTGRES_USER }
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: skybook-secrets, key: POSTGRES_PASSWORD }
+            - name: CHECKIN_BOARDING_PASS_KEY
+              valueFrom:
+                secretKeyRef: { name: skybook-secrets, key: CHECKIN_BOARDING_PASS_KEY }
+          volumeMounts:
+            - name: otel
+              mountPath: /otel
+              readOnly: true
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8087 }
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8087 }
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8087 }
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests: { memory: "384Mi", cpu: "150m" }
+            limits: { memory: "768Mi" }
+      volumes:
+        - name: otel
+          emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: checkin-service-config
+  namespace: skybook
+data:
+  SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_checkin
+  SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
+  SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  FLIGHT_SERVICE_BASE_URL: http://flight-service:8082
+  INVENTORY_SERVICE_BASE_URL: http://inventory-service:8084
+  JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
+  OTEL_SERVICE_NAME: checkin-service
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
+  OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_METRICS_EXPORTER: none
+  OTEL_LOGS_EXPORTER: none
