@@ -1,0 +1,56 @@
+// Grafana Alloy log pipeline (KUBERNETES_MODULE.md §10) - Promtail's
+// supported successor (Promtail EOL 2026-03-02, design-review catch).
+// Same shape: discover skybook pods -> tail /var/log/pods -> parse the
+// JSON app logs -> push to Loki with namespace/pod/container labels.
+
+discovery.kubernetes "pods" {
+  role = "pod"
+  namespaces {
+    names = ["skybook"]
+  }
+}
+
+discovery.relabel "pod_logs" {
+  targets = discovery.kubernetes.pods.targets
+
+  rule {
+    source_labels = ["__meta_kubernetes_namespace"]
+    target_label  = "namespace"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_name"]
+    target_label  = "pod"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_container_name"]
+    target_label  = "container"
+  }
+  rule {
+    source_labels = ["__meta_kubernetes_pod_label_app"]
+    target_label  = "service"
+  }
+}
+
+loki.source.kubernetes "pods" {
+  targets    = discovery.relabel.pod_logs.output
+  forward_to = [loki.process.parse.receiver]
+}
+
+loki.process "parse" {
+  // App containers emit JSON - lift level out as a label when parseable;
+  // non-JSON lines (postgres, kafka...) pass through untouched, same
+  // policy as the compose Promtail config.
+  stage.json {
+    expressions = { level = "level" }
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

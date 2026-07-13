@@ -103,3 +103,37 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/skybook-${{ matrix.service }}:${{ github.sha }}
             ghcr.io/${{ github.repository_owner }}/skybook-${{ matrix.service }}:latest
+
+  # OTel agent carrier image (KUBERNETES_MODULE.md §5): the pinned agent jar
+  # as an immutable OCI artifact for the k8s initContainer - its own job, not
+  # a matrix contortion, because it has a different build context and a
+  # version-pinned tag. Version here must match docker/otel-agent/Dockerfile's
+  # OTEL_AGENT_VERSION ARG when bumping.
+  docker-build-push-otel-agent:
+    name: Docker build & push (otel-agent)
+    needs: build-and-verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/otel-agent
+          file: ./docker/otel-agent/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/skybook-otel-agent:2.14.0
+            ghcr.io/${{ github.repository_owner }}/skybook-otel-agent:latest
