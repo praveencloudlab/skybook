@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | Free auto-assignment + paid seat selection; per-seat surcharge pricing by attribute; cabin-aware assignment; enforced at booking **and** check-in; original fare breakdown persisted per passenger |
 | **Branch** | `feature/seat-selection` |
-| **Status** | Frozen after three review rounds. R1: persisted breakdown, atomic inventory auto-hold, deferred paid check-in upgrades, availability-not-fares, listed-vs-charged, exit-row≠extra-legroom, refund policy. R2: explicit migration not ddl-auto, per-flight lock, USD-only, chargedSeatAssignmentMode rename, exhaustion + cabin-relative front rows. **R3 (this pass): auto-assignment moves from the createBooking call site into BookingFacade's draft→hold→finalize flow (seat_number nullable in draft); one shared pessimistic flight-lock for manual AND auto holds; SeatPricingPolicy takes CabinPricingContext + deterministic ordering tuple; Flyway (not a scripts/seed script) as the real migration mechanism; entitlement-ceiling check-in rule.** Implementation per §14 (step 1 re-opened for Flyway). |
+| **Status** | **Frozen at 10/10 after four review rounds.** R1: persisted breakdown, atomic inventory auto-hold, deferred paid check-in upgrades, availability-not-fares, listed-vs-charged, exit-row≠extra-legroom, refund policy. R2: explicit migration not ddl-auto, per-flight lock, USD-only, chargedSeatAssignmentMode rename, exhaustion + cabin-relative front rows. R3: auto-assignment moves into BookingFacade's draft→hold→finalize flow (seat_number nullable in draft); shared pessimistic flight-lock for manual AND auto holds; SeatPricingPolicy takes CabinPricingContext + deterministic ordering tuple; Flyway as the migration mechanism; entitlement-ceiling check-in rule. **R4: Flyway V1-baseline + V2-delta pair with `baseline-version: 1` and `ddl-auto: validate` (fresh-DB bootstrap fixed); BookingPayment created at finalization, not draft (fare/total/payment invariant at publish); CheckIn persists `seatSurchargeEntitlement`+`currency` snapshotted from the extended BookingEventPassenger (legacy null ⇒ 0); manual hold gains `travelClass`+`bookingPassengerId` (symmetric contracts, SeatHold persists the passenger id); §13 Flyway contradiction removed.** Implementation per §14. |
 
 Goal: model seats the way real airlines do. A passenger who doesn't care gets a
 low-demand seat **auto-assigned for free**; a passenger who wants a specific
@@ -206,16 +206,30 @@ The fix reuses the facade orchestration the codebase already has (`createBooking
 ```
 BookingFacade.createBooking
   → bookingService.createDraftBooking(...)          [tx commit: booking + passenger IDs exist,
-                                                     seat_number NULL, fare = baseFare only]
+                                                     seat_number NULL, fare = baseFare only,
+                                                     NO BookingPayment yet]
   → for each passenger: inventory hold (manual OR atomic auto)  [outside any booking tx]
         → collect SeatAssignmentResult{ seatNumber, listedSurcharge,
                                         chargedSurcharge, mode }
-  → bookingService.finalizeSeatAssignments(...)      [tx commit: seat_number, seatSurcharge,
-                                                     chargedSeatAssignmentMode, fare = base + charged]
-  → publish BookingCreated
+  → bookingService.finalizeSeatAssignments(...)      [ONE tx commit that synchronizes ALL
+                                                     money fields: per-passenger seat_number,
+                                                     seatSurcharge, chargedSeatAssignmentMode,
+                                                     fare = base + charged; Booking.totalFare;
+                                                     and CREATES BookingPayment(PENDING,
+                                                     finalTotal, USD)]
+  → publish BookingCreated                           [event carries the FINAL totals]
 On any failure: release already-held seats → cancel the draft booking → rethrow.
 ```
 
+- **`BookingPayment` is created at finalization, not at draft** (review round 4,
+  correction #2). Today `createBooking` builds the payment snapshot inline with
+  `.amount(totalFare)` — in a draft flow that amount would go stale the moment a
+  surcharge lands. Rather than "create then patch," the draft stage creates **no**
+  payment snapshot; `finalizeSeatAssignments` computes the final total and creates
+  `BookingPayment(PENDING, finalTotal, USD)` in the same transaction that writes
+  the seat/fare fields. Invariant, stated for tests: at `BookingCreated` publish
+  time, `sum(passenger.fare) = Booking.totalFare = BookingPayment.amount` —
+  payment-service's auto-created Payment (from the event) then matches too.
 - **`booking_passengers.seat_number` becomes nullable** for the draft stage (it is
   `nullable=false` today) — a column change in the same migration as §8.
 - The `SeatAssignmentStrategy` interface still has value as the manual-vs-auto
@@ -270,8 +284,22 @@ the lock's job.
 When the passenger supplies a seat number:
 
 - Validated: exists on the aircraft, AVAILABLE, and its `seatType` matches the
-  passenger's booked `travelClass` (§7).
-- Held via the existing `/hold` path, whose response now carries
+  passenger's booked `travelClass` (§7). **For inventory to enforce that rule it
+  must be told the travel class** (review round 4, correction #4) — today's
+  `HoldSeatRequest` is only `{flightId, seatNumber, bookingId}`, so cabin
+  validation at hold time was impossible as drafted. The manual and auto hold
+  contracts become symmetrical:
+
+  ```
+  MANUAL /hold          : { flightId, seatNumber, bookingId, bookingPassengerId, travelClass }
+  AUTO   /holds/auto    : { flightId,             bookingId, bookingPassengerId, travelClass }
+  ```
+
+  Inventory owns the authoritative cabin validation on **both** paths.
+- **`SeatHold` persists `bookingPassengerId`** (today it stores only `bookingId`) —
+  a natural correlation/idempotency key: one passenger, one active hold; a retried
+  hold for the same passenger is recognizable rather than duplicated.
+- Held via the `/hold` path, whose response now carries
   `{assignmentMode: MANUAL, listedSurcharge, chargedSurcharge}` with
   `chargedSurcharge == listedSurcharge`.
 - A chosen *standard middle economy* seat is `chargedSurcharge: 0.00` — so "I want
@@ -307,21 +335,34 @@ surcharge *actually paid* (an auto window physically worth $12 but charged $0):
 | `currency` | ISO-4217; **`USD` in v1** (see below) |
 | `fare` (existing) | all-in total = `baseFare + seatSurcharge` |
 
-- **Schema change is a real Flyway migration, run automatically at startup (review
-  round 3, correction #4).** `ddl-auto` never runs data transforms and rejects
-  adding `NOT NULL` to a populated table; a hand-run script under `scripts/seed`
-  has **no execution mechanism** in CI / Compose / Kubernetes — a new NOT-NULL
-  entity against a populated DB with an un-run backfill would fail on startup. So
-  this branch **introduces Flyway in booking-service** (the dependency already
-  exists in auth-service; Flyway runs *before* Hibernate, then `ddl-auto: update`
-  sees a matching schema and no-ops). Migration
-  `V1__add_booking_passenger_fare_breakdown.sql`, idempotent, `baseline-on-migrate:
-  true` (the existing ddl-auto schema becomes the baseline):
-  `ALTER ADD (nullable) + DROP NOT NULL on seat_number → UPDATE backfill
-  (baseFare=fare, seatSurcharge=0, chargedSeatAssignmentMode='MANUAL',
-  currency='USD') → ALTER SET NOT NULL on the four new columns`. The interim
-  `scripts/seed/booking_breakdown_backfill.sql` from step 1 is superseded by this
-  and removed. (Flyway fleet-wide is a natural follow-up branch, §12.)
+- **Schema change is a real Flyway migration — with a baseline-plus-delta pair,
+  not a lone V1 delta (review round 4, correction #1).** `ddl-auto` never runs
+  data transforms and rejects adding `NOT NULL` to a populated table; a hand-run
+  script under `scripts/seed` has no execution mechanism in CI/Compose/K8s. But a
+  lone `V1__add_columns.sql` also fails on a **fresh** database: Flyway runs
+  *before* Hibernate, so V1 would ALTER a `booking_passengers` table that doesn't
+  exist yet. So booking-service gets:
+
+  ```
+  V1__baseline_booking_schema.sql          # full CREATE TABLEs (bookings,
+                                           # booking_passengers, passengers,
+                                           # booking_payments, history...)
+  V2__add_booking_passenger_fare_breakdown.sql   # ALTER ADD (nullable) + DROP
+                                           # NOT NULL on seat_number → UPDATE
+                                           # backfill (baseFare=fare,
+                                           # seatSurcharge=0, mode='MANUAL',
+                                           # currency='USD') → SET NOT NULL
+  ```
+
+  With `baseline-on-migrate: true` + **`baseline-version: 1`** an *existing*
+  Hibernate-created database is adopted as V1 (V1 skipped, V2 runs); a *fresh*
+  database runs V1 then V2. Both paths converge on the same schema — the
+  "runs automatically in Compose/CI/K8s" claim is then true universally.
+  booking-service moves to **`ddl-auto: validate`** (Flyway owns the schema;
+  Hibernate only checks it). The dependency pattern (`flyway-core` +
+  `flyway-database-postgresql`) already exists in auth-service. The interim
+  `scripts/seed/booking_breakdown_backfill.sql` is superseded and removed.
+  (Flyway fleet-wide is a natural follow-up branch, §12.)
 - **Currency: SkyBook v1 supports `USD` only (review round 2, correction #3).**
   Every existing booking/payment row is already USD (`DEFAULT_CURRENCY="USD"`), so
   booking, payment, invoice, and seat-pricing config are all USD; the persisted
@@ -359,6 +400,24 @@ scoping it out. So v1:
 - **Rejected:** any change whose target listed surcharge **exceeds** the
   entitlement ceiling, with a clear response:
   > *"Paid seat upgrades must be completed through Manage Booking."*
+
+**Where check-in reads the ceiling from (review round 4, correction #3):**
+checkin-service deliberately snapshots booking data from `BookingEvent CONFIRMED`
+and must NOT gain a synchronous booking-service dependency. But its `CheckIn`
+entity has no surcharge field and `BookingEventPassenger` carries only the total
+`fare` — so both sides of the pipe gain fields:
+
+- `BookingEventPassenger` (shared, `skybook-common`) gains `baseFare`,
+  `seatSurcharge`, `chargedSeatAssignmentMode`, `currency` (additive — this is the
+  §10 breakdown-preservation change).
+- `CheckIn` gains `seatSurchargeEntitlement` (`BigDecimal`) + `currency`, populated
+  from `BookingEventPassenger.seatSurcharge` when the CONFIRMED event creates the
+  check-in row. Nullable, additive columns — checkin's `ddl-auto: update` handles
+  them without a migration.
+- `changeSeat()` compares the target's listed surcharge against
+  `checkIn.seatSurchargeEntitlement`. **Legacy rows** (check-ins created before
+  this branch, or from events without the new fields): `null` entitlement is
+  treated as **0** — only free seats reachable, the conservative default.
 
 Paid check-in upgrades + the payment saga + a payment-service supplemental-charge
 operation are a **separate future design** (§12).
@@ -435,13 +494,14 @@ inventory.
 
 # 13. Known Risks / Open Questions
 
-- **Backfill of existing bookings** — the new `BookingPassenger` columns are added
-  by an **explicit SQL migration** (not `ddl-auto`, §8), backfilling
-  `seatSurcharge=0`, `chargedSeatAssignmentMode='MANUAL'`, `baseFare=fare`,
-  `currency='USD'`, then setting `NOT NULL`. Shipped in
-  `scripts/seed/booking_breakdown_backfill.sql`. The lack of a migration tool is
-  the standing argument for adopting **Flyway** (auth-service already has the
-  dependency with zero migrations) — deferred to its own branch.
+- **Backfill of existing bookings** — handled by the Flyway V1-baseline + V2-delta
+  pair (§8): existing databases are baselined at V1 and V2 backfills
+  (`baseFare=fare`, `seatSurcharge=0`, `chargedSeatAssignmentMode='MANUAL'`,
+  `currency='USD'`, then `SET NOT NULL`); fresh databases run V1 then V2. The
+  earlier `scripts/seed/booking_breakdown_backfill.sql` is superseded and removed
+  (round-4 cleanup of a round-2/round-3 contradiction: §8 and this section
+  previously disagreed about whether Flyway was in-branch or deferred — it is
+  **in this branch**, for booking-service; fleet-wide rollout stays deferred, §12).
 - **Currency is decided, not open: USD only in v1** (§8). Every existing row is
   already USD; booking, payment, invoice, and seat-pricing config are all USD.
   Multi-currency is a Pricing-Service-era concern. The only remaining *convention*
@@ -460,13 +520,19 @@ inventory.
 
 # 14. Build Order
 
-1. **Persisted breakdown via Flyway** (§8) — introduce Flyway in booking-service,
-   `V1__add_booking_passenger_fare_breakdown.sql` (adds the four columns, drops
-   NOT NULL on `seat_number` for the draft stage, backfills, sets NOT NULL);
-   `baseline-on-migrate: true`. **Supersedes the interim
+1. **Persisted breakdown via Flyway, baseline + delta** (§8, round-4 shape) —
+   introduce Flyway in booking-service with the migration **pair**:
+   `V1__baseline_booking_schema.sql` (full CREATE TABLEs, so a fresh database
+   bootstraps without Hibernate) and
+   `V2__add_booking_passenger_fare_breakdown.sql` (adds the four columns, drops
+   NOT NULL on `seat_number` for the draft stage, backfills, sets NOT NULL).
+   Config: `baseline-on-migrate: true`, **`baseline-version: 1`** (existing
+   Hibernate-created DBs adopt V1 and run only V2), and booking-service moves to
+   **`ddl-auto: validate`**. **Supersedes the interim
    `scripts/seed/booking_breakdown_backfill.sql` shipped in the first pass — remove
-   it.** Verify existing bookings still read/refund; migration runs in
-   Compose/CI/K8s automatically.
+   it.** Verify BOTH paths: an existing populated DB (baseline+V2) and a fresh
+   empty DB (V1+V2) converge on the same schema; existing bookings still
+   read/refund; migration runs in Compose/CI/K8s automatically.
 2. **`SeatPricingPolicy` in inventory** (§4) — `(seat, CabinPricingContext)` →
    listed-surcharge, `max` composition, config-driven; surface `listedSurcharge`
    on the seat map; unit-tested (highest-tier + cabin-relative front-row).
@@ -502,6 +568,10 @@ inventory.
 | Persisted breakdown | `baseFare`+`seatSurcharge`+`mode`+`currency` stored; response/invoice/event breakdown correct; refund reads persisted total, not recomputed |
 | Cabin rules | FIRST on an A320 flight → clear "no First cabin"; ECONOMY ticket can't take a BUSINESS seat — at booking **and** check-in |
 | Check-in v1 | downgrade/same → allowed, no refund; upgrade → rejected with the Manage-Booking message; cross-cabin → rejected |
-| Concurrency | two atomic auto-assigns racing the last seat → one wins, one gets the next preference (no double-book) |
+| Concurrency | two atomic auto-assigns racing the last seat → **different seats, no rollback-only error, counts correct**; auto vs MANUAL hold racing the same seat → serialized by the shared flight lock |
+| Migration (round 4) | fresh empty DB → V1+V2 produce the full schema; existing populated DB → baselined at 1, only V2 runs, backfill correct; both converge on the identical schema (`ddl-auto: validate` passes on each) |
+| Payment invariant (round 4) | at `BookingCreated` publish: `sum(passenger.fare) = Booking.totalFare = BookingPayment.amount`; no payment row exists during the draft stage |
+| Entitlement snapshot (round 4) | CONFIRMED event with breakdown fields → `CheckIn.seatSurchargeEntitlement` populated; event without them (legacy) → entitlement null ⇒ treated as 0 (only free seats reachable at check-in) |
+| Manual-hold cabin enforcement (round 4) | manual `/hold` with `travelClass=ECONOMY` on a BUSINESS seat → rejected by inventory; `bookingPassengerId` persisted on the hold |
 | End-to-end (gateway, seeded flight) | (a) no seat → free middle economy; (b) choose 1A on the 777 → First base fare + window surcharge, persisted; (c) FIRST on an A320 flight → rejected |
 | Regression | full reactor `mvn clean verify` green; existing booking/refund tests updated for the now-optional seat + persisted breakdown |
