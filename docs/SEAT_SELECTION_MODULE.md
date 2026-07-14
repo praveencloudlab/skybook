@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | Free auto-assignment + paid seat selection; per-seat surcharge pricing by attribute; cabin-aware assignment; enforced at booking **and** check-in; original fare breakdown persisted per passenger |
 | **Branch** | `feature/seat-selection` |
-| **Status** | Frozen after two review rounds (round 1: persisted breakdown, atomic inventory auto-hold, deferred paid check-in upgrades, availability-not-fares, listed-vs-charged, exit-row-not-extra-legroom, explicit refund policy; round 2: explicit SQL migration not ddl-auto, pessimistic per-flight locking for auto-hold, USD-only v1 currency, chargedSeatAssignmentMode rename, exhaustion + cabin-relative front-row rules). Implementation in progress per §14. |
+| **Status** | Frozen after three review rounds. R1: persisted breakdown, atomic inventory auto-hold, deferred paid check-in upgrades, availability-not-fares, listed-vs-charged, exit-row≠extra-legroom, refund policy. R2: explicit migration not ddl-auto, per-flight lock, USD-only, chargedSeatAssignmentMode rename, exhaustion + cabin-relative front rows. **R3 (this pass): auto-assignment moves from the createBooking call site into BookingFacade's draft→hold→finalize flow (seat_number nullable in draft); one shared pessimistic flight-lock for manual AND auto holds; SeatPricingPolicy takes CabinPricingContext + deterministic ordering tuple; Flyway (not a scripts/seed script) as the real migration mechanism; entitlement-ceiling check-in rule.** Implementation per §14 (step 1 re-opened for Flyway). |
 
 Goal: model seats the way real airlines do. A passenger who doesn't care gets a
 low-demand seat **auto-assigned for free**; a passenger who wants a specific
@@ -74,11 +74,14 @@ fares (review correction #4).
 
 Confirmed by reading the code, not assumed:
 
-1. **The auto-assignment seam already exists and is deliberately empty.**
-   `SeatAssignmentStrategy` is an interface; `ManualSeatAssignmentStrategy`
-   rejects a blank seat with *"automatic seat assignment isn't implemented yet"*.
-   `BookingServiceImpl` already depends on the interface — so this is a new
-   `@Component` + delegation, not a call-site refactor.
+1. **The auto-assignment seam exists but the call site must move** (corrected in
+   round 3). `SeatAssignmentStrategy` is an interface; `ManualSeatAssignmentStrategy`
+   rejects a blank seat. But it's called *inside* `BookingServiceImpl.createBooking`'s
+   transaction, before the passenger is saved — so it has no IDs to hand inventory,
+   returns only a `String`, and can't host Feign I/O. Auto-assignment therefore
+   moves out of `createBooking` into `BookingFacade`'s post-commit hold step
+   (§5.1) — a real flow change, not just a new bean. This is the review's mandatory
+   correction.
 2. **Seat categories and attributes are already modeled.** `AircraftSeat` carries
    `seatType` (ECONOMY / PREMIUM_ECONOMY / BUSINESS / FIRST), `position` (WINDOW /
    MIDDLE / AISLE), `exitRow` (boolean), `rowNumber`. **There is no
@@ -140,8 +143,21 @@ currency — §8; matches every existing booking/payment row).
 # 4. Seat Surcharge — Where It's Computed & How It Composes
 
 **Decision: a config-driven `SeatPricingPolicy` inside inventory-service** — not a
-new Pricing Service, not hard-coded in booking. It's a pure function of the
-seat's attributes, driven by `inventory.seat-pricing.*` in `application.yml`.
+new Pricing Service, not hard-coded in booking. It is a pure function of the
+seat's attributes **plus its cabin context** (review round 3, correction #3),
+driven by `inventory.seat-pricing.*` in `application.yml`:
+
+```java
+BigDecimal calculateListedSurcharge(AircraftSeat seat, CabinPricingContext cabin);
+
+public record CabinPricingContext(int firstCabinRow, int frontRowCount) {}
+```
+
+`rowNumber` alone cannot decide "front of cabin" — on the 777, Business is rows
+3–8, so `3A` is a front-of-cabin seat but `rowNumber=3` doesn't say so. The
+policy needs the cabin's first row: `frontOfCabin = seat.rowNumber() <
+cabin.firstCabinRow() + cabin.frontRowCount()`. Inventory derives the context
+from the flight's seat map (min row per `seatType`) before calling the policy.
 
 **Composition — highest applicable tier, NOT additive** (review correction #5).
 A seat is priced at the **single most valuable applicable tier**, the way
@@ -171,45 +187,79 @@ into silently summing them.
 
 ---
 
-# 5. Auto-Assignment (Free, Atomic in Inventory)
+# 5. Auto-Assignment, the Booking Flow, and Locking
 
-**Selection and hold are one atomic operation inside inventory** (review
-correction #2) — the owner of availability, locking, and pricing.
+## 5.1 The flow must be draft → hold/assign → finalize (review round 3, correction #1)
 
-- New endpoint: **`POST /api/inventory/flights/{flightId}/holds/auto`**
-  ```json
-  { "bookingId": 123, "bookingPassengerId": 456, "travelClass": "ECONOMY" }
-  ```
-  Inventory orders available in-cabin candidates by the **low-demand preference**
-  (standard middle → aisle → window → front-of-cabin rows; **exit rows always
-  excluded** while exit-row eligibility is deferred, §12), **atomically holds the
-  first available**, and returns:
-  ```json
-  { "seatNumber": "18E", "assignmentMode": "AUTO",
-    "listedSurcharge": 0.00, "chargedSurcharge": 0.00 }
-  ```
-- **Locking algorithm (review round 2, correction #2).** A uniqueness violation
-  alone is unusable for "advance to the next candidate" — once Postgres raises it
-  the JPA transaction is rollback-only and cannot continue. Because
-  `aircraft_seats` is the *aircraft's* map (shared by every flight on that
-  airframe), row-locking a seat there would lock it across all of that aircraft's
-  flights. So the lock is taken on the **single `flight_inventory` row for the
-  flight** — pessimistic write lock (`SELECT … FOR UPDATE`) — which serializes
-  concurrent auto-holds *per flight*: acquire the row lock → compute the flight's
-  available seats (aircraft map minus this flight's active holds/reservations) →
-  order by preference → insert the hold + decrement counts → commit. No
-  catch-the-unique-violation-and-retry inside a doomed transaction.
-- **Always free** — `chargedSurcharge` is `0.00` regardless of which physical seat
-  the algorithm lands on (even if only front-of-cabin seats remain). "Front of
-  cabin" means the first rows **of the passenger's cabin** (e.g. Business rows 3–8
-  on the 777), not global aircraft row numbers.
-- **Exhaustion.** If the only seats left in the cabin are exit rows (excluded) or
-  none remain, inventory returns a clear `NoSeatAvailableException` /
-  "no assignable seat" rather than seating an ineligible passenger.
-- Booking's `AutoSeatAssignmentStrategy` **delegates** to this endpoint rather than
-  querying a seat list and choosing itself — eliminating the query-then-hold race.
-  The strategy still occupies the existing `SeatAssignmentStrategy` seam; it just
-  calls inventory for the atomic select-and-hold.
+**The original claim that the `SeatAssignmentStrategy` call site stays untouched
+was wrong** — verified against the code. `BookingServiceImpl.createBooking()` is
+`@Transactional`, builds an **unsaved** `BookingPassenger` (IDENTITY id → no id
+yet), and calls `resolveSeatNumber(...)` *before* `save`. But the atomic auto-hold
+needs `bookingId` + `bookingPassengerId`, which don't exist yet; the strategy
+returns only a `String` (can't carry surcharge/mode); and calling inventory there
+would put Feign I/O **inside the booking DB transaction** — exactly what
+`BookingFacade` (deliberately **not** `@Transactional`) exists to avoid.
+
+The fix reuses the facade orchestration the codebase already has (`createBooking`
+→ commit → `holdSeatsOrCompensate` → publish):
+
+```
+BookingFacade.createBooking
+  → bookingService.createDraftBooking(...)          [tx commit: booking + passenger IDs exist,
+                                                     seat_number NULL, fare = baseFare only]
+  → for each passenger: inventory hold (manual OR atomic auto)  [outside any booking tx]
+        → collect SeatAssignmentResult{ seatNumber, listedSurcharge,
+                                        chargedSurcharge, mode }
+  → bookingService.finalizeSeatAssignments(...)      [tx commit: seat_number, seatSurcharge,
+                                                     chargedSeatAssignmentMode, fare = base + charged]
+  → publish BookingCreated
+On any failure: release already-held seats → cancel the draft booking → rethrow.
+```
+
+- **`booking_passengers.seat_number` becomes nullable** for the draft stage (it is
+  `nullable=false` today) — a column change in the same migration as §8.
+- The `SeatAssignmentStrategy` interface still has value as the manual-vs-auto
+  *decision*, but the seat is no longer resolved inside `createBooking`; resolution
+  moves to the facade's hold step where the IDs and the inventory result exist.
+
+## 5.2 Atomic auto-hold endpoint (inventory owns select-and-hold)
+
+- **`POST /api/inventory/flights/{flightId}/holds/auto`**
+  `{ "bookingId": 123, "bookingPassengerId": 456, "travelClass": "ECONOMY" }`
+  → inventory orders candidates by a **deterministic tuple** (review round 3,
+  correction #3), not overlapping categories:
+  1. exclude exit rows (eligibility deferred, §12)
+  2. non-front-of-cabin before front-of-cabin
+  3. MIDDLE before AISLE before WINDOW
+  4. tie-break by (rowNumber, seatNumber) for determinism
+  — atomically holds the first, returns
+  `{ seatNumber, assignmentMode: AUTO, listedSurcharge, chargedSurcharge: 0.00 }`.
+- **Always free** — `chargedSurcharge = 0.00` regardless of the physical seat
+  landed on. "Front of cabin" is relative to the **cabin's** first row (§4).
+- **Exhaustion** — if only exit rows remain (excluded) or none, inventory returns a
+  clear `NoSeatAvailableException`, never seats an ineligible passenger.
+
+## 5.3 One shared flight-level lock for BOTH manual and auto holds (review round 3, correction #2)
+
+A pessimistic lock on auto-hold *alone* serializes AUTO↔AUTO but **not
+AUTO↔MANUAL** — the manual `holdSeat()` path today uses only
+`FlightInventoryRepository.findByFlightId(...)` + `@Version` optimistic locking, so
+a manual selector and an auto-assign can inspect the same seat as available
+concurrently. Both paths must take the **same** flight-level pessimistic lock:
+
+```java
+@Lock(LockModeType.PESSIMISTIC_WRITE)
+@Query("select fi from FlightInventory fi where fi.flightId = :flightId")
+Optional<FlightInventory> findByFlightIdForUpdate(Long flightId);
+```
+
+`holdSeat()` **and** `autoHoldSeat()` acquire this before any availability check.
+**Policy decision (stated, not left implicit):** every operation that mutates the
+`available/held/reserved/blocked` counters (whose invariant is
+`available + held + reserved + blocked = total`) uses this **pessimistic**
+flight-level lock — we do not mix pessimistic auto with optimistic manual on the
+same aggregate. `@Version` stays as a second line of defence, but serialization is
+the lock's job.
 - Concurrency test (§15) proves: two simultaneous auto-holds on the same flight →
   **different seats**, **no rollback-only error**, inventory counts still correct.
 
@@ -257,14 +307,21 @@ surcharge *actually paid* (an auto window physically worth $12 but charged $0):
 | `currency` | ISO-4217; **`USD` in v1** (see below) |
 | `fare` (existing) | all-in total = `baseFare + seatSurcharge` |
 
-- **Schema change is an explicit SQL migration, NOT `ddl-auto` (review round 2,
-  correction #1).** `ddl-auto: update` adds columns but never runs data transforms,
-  and Postgres rejects adding a `NOT NULL` column to a populated table outright.
-  The migration is `ALTER (nullable) → UPDATE backfill (baseFare=fare,
-  seatSurcharge=0, chargedSeatAssignmentMode='MANUAL', currency='USD') → ALTER SET
-  NOT NULL` — shipped as [`scripts/seed/booking_breakdown_backfill.sql`](../scripts/seed/booking_breakdown_backfill.sql).
-  (This is the strongest argument yet for adopting Flyway; noted for a future
-  branch, §12.)
+- **Schema change is a real Flyway migration, run automatically at startup (review
+  round 3, correction #4).** `ddl-auto` never runs data transforms and rejects
+  adding `NOT NULL` to a populated table; a hand-run script under `scripts/seed`
+  has **no execution mechanism** in CI / Compose / Kubernetes — a new NOT-NULL
+  entity against a populated DB with an un-run backfill would fail on startup. So
+  this branch **introduces Flyway in booking-service** (the dependency already
+  exists in auth-service; Flyway runs *before* Hibernate, then `ddl-auto: update`
+  sees a matching schema and no-ops). Migration
+  `V1__add_booking_passenger_fare_breakdown.sql`, idempotent, `baseline-on-migrate:
+  true` (the existing ddl-auto schema becomes the baseline):
+  `ALTER ADD (nullable) + DROP NOT NULL on seat_number → UPDATE backfill
+  (baseFare=fare, seatSurcharge=0, chargedSeatAssignmentMode='MANUAL',
+  currency='USD') → ALTER SET NOT NULL on the four new columns`. The interim
+  `scripts/seed/booking_breakdown_backfill.sql` from step 1 is superseded by this
+  and removed. (Flyway fleet-wide is a natural follow-up branch, §12.)
 - **Currency: SkyBook v1 supports `USD` only (review round 2, correction #3).**
   Every existing booking/payment row is already USD (`DEFAULT_CURRENCY="USD"`), so
   booking, payment, invoice, and seat-pricing config are all USD; the persisted
@@ -287,14 +344,21 @@ release old → compensate on any failure) plus a supplemental-charge operation 
 payment-service. That is its own design; half-building it here is worse than
 scoping it out. So v1:
 
-- **Allowed:** change to a seat whose charged surcharge is **≤** the passenger's
-  persisted `seatSurcharge` (including same-price and downgrades). Cabin
-  compatibility still enforced (§7).
+- **The persisted `seatSurcharge` is an *entitlement ceiling*, not the current
+  seat's price** (review round 3 clarification). It is the amount originally
+  **paid**, and a free seat change never lowers it. Example: paid $30 for an
+  exit-row seat → voluntarily move to a $0 seat (no refund) → later move to a $15
+  front seat is **allowed**, because the target ($15) is ≤ the $30 entitlement.
+  So implementation compares the target seat's listed surcharge against the
+  **persisted `seatSurcharge`**, and a free downgrade does **not** overwrite that
+  field (nor `chargedSeatAssignmentMode`) — a future dev must not compare against
+  the *current* seat's surcharge.
+- **Allowed:** target listed surcharge **≤** persisted `seatSurcharge` (same-price,
+  downgrades, and re-upgrades within the ceiling). Cabin compatibility enforced (§7).
 - **No refund** on a voluntary downgrade (documented simplification).
-- **Rejected:** any change requiring *additional* payment, with a clear response:
+- **Rejected:** any change whose target listed surcharge **exceeds** the
+  entitlement ceiling, with a clear response:
   > *"Paid seat upgrades must be completed through Manage Booking."*
-- The comparison uses the **persisted** `seatSurcharge` (§8) vs the target seat's
-  listed surcharge — not a recomputation of the old seat's price.
 
 Paid check-in upgrades + the payment saga + a payment-service supplemental-charge
 operation are a **separate future design** (§12).
@@ -363,6 +427,9 @@ inventory.
   unrestricted in v1.
 - **Group/family seat-adjacency** in auto-assign; **interactive-selection holds**
   (holding a seat while a user browses) — frontend-era concerns.
+- **Flyway fleet-wide** — this branch introduces Flyway in booking-service only
+  (§8); rolling it across the other services (retiring `ddl-auto: update`) is a
+  natural dedicated follow-up, not bundled here.
 
 ---
 
@@ -393,16 +460,25 @@ inventory.
 
 # 14. Build Order
 
-1. **Persisted breakdown** (§8) — add the `BookingPassenger` columns + backfill;
-   verify existing bookings still read/refund correctly. Foundation for the rest.
-2. **`SeatPricingPolicy` in inventory** (§4) — attribute→listed-surcharge, `max`
-   composition, config-driven; surface `listedSurcharge` on the seat map;
-   unit-tested (incl. the "highest tier, not additive" rule).
-3. **Atomic auto-hold endpoint** (§5) — `POST /holds/auto`; preference ordering +
-   atomic hold + `chargedSurcharge=0`; concurrency test.
-4. **`AutoSeatAssignmentStrategy`** delegating to the atomic endpoint; booking
-   omit-seat → free auto seat end-to-end.
-5. **Manual-selection surcharge + fare assembly** (§3/§6/§8) — booking persists
+1. **Persisted breakdown via Flyway** (§8) — introduce Flyway in booking-service,
+   `V1__add_booking_passenger_fare_breakdown.sql` (adds the four columns, drops
+   NOT NULL on `seat_number` for the draft stage, backfills, sets NOT NULL);
+   `baseline-on-migrate: true`. **Supersedes the interim
+   `scripts/seed/booking_breakdown_backfill.sql` shipped in the first pass — remove
+   it.** Verify existing bookings still read/refund; migration runs in
+   Compose/CI/K8s automatically.
+2. **`SeatPricingPolicy` in inventory** (§4) — `(seat, CabinPricingContext)` →
+   listed-surcharge, `max` composition, config-driven; surface `listedSurcharge`
+   on the seat map; unit-tested (highest-tier + cabin-relative front-row).
+3. **Atomic auto-hold + shared flight lock** (§5) — `findByFlightIdForUpdate`
+   (`PESSIMISTIC_WRITE`) adopted by **both** `holdSeat` and the new
+   `POST /holds/auto`; deterministic ordering tuple; concurrency test proving
+   AUTO↔MANUAL and AUTO↔AUTO both serialize (different seats, no rollback-only,
+   counts correct).
+4. **Draft → hold → finalize flow in `BookingFacade`** (§5.1) — `createDraftBooking`
+   (seat null) → per-passenger inventory hold (manual/auto) → `finalizeSeatAssignments`;
+   compensation on failure. Booking omit-seat → free auto seat end-to-end.
+5. **Manual-selection surcharge + fare assembly** (§3/§6/§8) — finalize persists
    base + charged surcharge + mode; response breakdown.
 6. **Cabin availability + booking quote** (§7/§11) — inventory `/cabins`
    (availability only) + booking `/quote` (assembles fares); clear "no such cabin"
