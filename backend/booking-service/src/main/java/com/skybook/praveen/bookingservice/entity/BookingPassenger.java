@@ -2,6 +2,7 @@ package com.skybook.praveen.bookingservice.entity;
 
 import com.skybook.praveen.bookingservice.enums.CheckInStatus;
 import com.skybook.praveen.bookingservice.enums.FareType;
+import com.skybook.praveen.bookingservice.enums.SeatAssignmentMode;
 import com.skybook.praveen.bookingservice.enums.TravelClass;
 import com.skybook.praveen.common.entity.Auditable;
 import jakarta.persistence.CascadeType;
@@ -81,6 +82,28 @@ public class BookingPassenger extends Auditable {
     @Column(name = "seat_number", nullable = false, length = 5)
     private String seatNumber;
 
+    // Immutable fare breakdown (SEAT_SELECTION_MODULE.md §8). Persisted, never
+    // recomputed from current config: refunds, invoices and check-in seat-change
+    // comparisons read these, so an old booking always shows what it actually
+    // charged. fare (below) stays the all-in total = baseFare + seatSurcharge.
+
+    /** Cabin base fare at booking time (FareCalculator output). */
+    @Column(name = "base_fare", nullable = false)
+    private BigDecimal baseFare;
+
+    /** The surcharge actually CHARGED: 0 for an AUTO seat, the seat's listed surcharge for a MANUAL one. */
+    @Column(name = "seat_surcharge", nullable = false)
+    private BigDecimal seatSurcharge;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "seat_assignment_mode", nullable = false, length = 10)
+    private SeatAssignmentMode seatAssignmentMode;
+
+    /** ISO-4217 of baseFare/seatSurcharge/fare - aligned with the booking's payment currency. */
+    @Column(nullable = false, length = 3)
+    private String currency;
+
+    /** All-in total = baseFare + seatSurcharge. What payment/refund/invoice bill against (unchanged). */
     @Column(nullable = false)
     private BigDecimal fare;
 
@@ -92,6 +115,21 @@ public class BookingPassenger extends Auditable {
     public void prePersist() {
         if (checkInStatus == null) {
             checkInStatus = CheckInStatus.NOT_OPEN;
+        }
+        // Self-backfilling defaults so any code path (or a pre-breakdown row
+        // being re-persisted) stays consistent: no surcharge, manual, base
+        // equals the total. New bookings set these explicitly.
+        if (seatSurcharge == null) {
+            seatSurcharge = BigDecimal.ZERO;
+        }
+        if (seatAssignmentMode == null) {
+            seatAssignmentMode = SeatAssignmentMode.MANUAL;
+        }
+        if (baseFare == null) {
+            baseFare = fare;
+        }
+        if (currency == null) {
+            currency = "USD";
         }
     }
 }
