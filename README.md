@@ -34,6 +34,15 @@ docker compose logs -f <service>  # tail one service's logs
 curl http://localhost:8080/actuator/health   # gateway
 ```
 
+### Sample data
+
+The stack ships with a year of bookable flights (30 routes, daily departures,
+today → +12 months) plus a fleet, seat maps, and per-flight inventory — enough
+to search and book end to end out of the box. See
+[`docs/SEED_DATA.md`](docs/SEED_DATA.md) for the routes, fleet, the full
+[`scripts/seed/flights.json`](scripts/seed/flights.json), and a one-command
+re-seed (`bash scripts/seed/seed.sh`) if you ever wipe the data volume.
+
 ### Observability
 
 The stack ships its own monitoring (see [`docs/OBSERVABILITY_MODULE.md`](docs/OBSERVABILITY_MODULE.md)):
