@@ -90,7 +90,7 @@ public class BookingServiceImpl implements BookingService {
                     .fareType(detail.fareType())
                     .baseFare(baseFare)
                     .seatSurcharge(seatSurcharge)
-                    .seatAssignmentMode(SeatAssignmentMode.MANUAL)
+                    .chargedSeatAssignmentMode(SeatAssignmentMode.MANUAL)
                     .currency(DEFAULT_CURRENCY)
                     .fare(fare)
                     .checkInStatus(CheckInStatus.NOT_OPEN)
