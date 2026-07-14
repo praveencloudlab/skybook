@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | Free auto-assignment + paid seat selection; per-seat surcharge pricing by attribute; cabin-aware assignment; enforced at booking **and** check-in; original fare breakdown persisted per passenger |
 | **Branch** | `feature/seat-selection` |
-| **Status** | **Frozen at 10/10 after four review rounds.** R1: persisted breakdown, atomic inventory auto-hold, deferred paid check-in upgrades, availability-not-fares, listed-vs-charged, exit-row≠extra-legroom, refund policy. R2: explicit migration not ddl-auto, per-flight lock, USD-only, chargedSeatAssignmentMode rename, exhaustion + cabin-relative front rows. R3: auto-assignment moves into BookingFacade's draft→hold→finalize flow (seat_number nullable in draft); shared pessimistic flight-lock for manual AND auto holds; SeatPricingPolicy takes CabinPricingContext + deterministic ordering tuple; Flyway as the migration mechanism; entitlement-ceiling check-in rule. **R4: Flyway V1-baseline + V2-delta pair with `baseline-version: 1` and `ddl-auto: validate` (fresh-DB bootstrap fixed); BookingPayment created at finalization, not draft (fare/total/payment invariant at publish); CheckIn persists `seatSurchargeEntitlement`+`currency` snapshotted from the extended BookingEventPassenger (legacy null ⇒ 0); manual hold gains `travelClass`+`bookingPassengerId` (symmetric contracts, SeatHold persists the passenger id); §13 Flyway contradiction removed.** Implementation per §14. |
+| **Status** | **Frozen after five review rounds — final; redesigning stops here per the reviewer's own instruction.** R5: real `DRAFT` booking status + `DRAFT→CREATED` finalization + stale-draft sweep + **V3 check-constraint migration** (self-audit: the V1 baseline's status CHECK would reject DRAFT at the DB); defined hold-idempotency semantics under the flight lock (replay-safe, 409 on conflicting manual re-request); inventory authoritatively enforces check-in cabin + surcharge ceiling via an extended reserve contract (travelClass + maxAllowedSurcharge) with new-reservation compensation on local failure; Payment/Invoice gain baseFareTotal/seatSurchargeTotal aggregates with `fareBreakdown` untouched; the String `SeatAssignmentStrategy` contract is deleted, not repurposed. Earlier rounds: | R1: persisted breakdown, atomic inventory auto-hold, deferred paid check-in upgrades, availability-not-fares, listed-vs-charged, exit-row≠extra-legroom, refund policy. R2: explicit migration not ddl-auto, per-flight lock, USD-only, chargedSeatAssignmentMode rename, exhaustion + cabin-relative front rows. R3: auto-assignment moves into BookingFacade's draft→hold→finalize flow (seat_number nullable in draft); shared pessimistic flight-lock for manual AND auto holds; SeatPricingPolicy takes CabinPricingContext + deterministic ordering tuple; Flyway as the migration mechanism; entitlement-ceiling check-in rule. **R4: Flyway V1-baseline + V2-delta pair with `baseline-version: 1` and `ddl-auto: validate` (fresh-DB bootstrap fixed); BookingPayment created at finalization, not draft (fare/total/payment invariant at publish); CheckIn persists `seatSurchargeEntitlement`+`currency` snapshotted from the extended BookingEventPassenger (legacy null ⇒ 0); manual hold gains `travelClass`+`bookingPassengerId` (symmetric contracts, SeatHold persists the passenger id); §13 Flyway contradiction removed.** Implementation per §14. |
 
 Goal: model seats the way real airlines do. A passenger who doesn't care gets a
 low-demand seat **auto-assigned for free**; a passenger who wants a specific
@@ -231,10 +231,42 @@ On any failure: release already-held seats → cancel the draft booking → reth
   time, `sum(passenger.fare) = Booking.totalFare = BookingPayment.amount` —
   payment-service's auto-created Payment (from the event) then matches too.
 - **`booking_passengers.seat_number` becomes nullable** for the draft stage (it is
-  `nullable=false` today) — a column change in the same migration as §8.
-- The `SeatAssignmentStrategy` interface still has value as the manual-vs-auto
-  *decision*, but the seat is no longer resolved inside `createBooking`; resolution
-  moves to the facade's hold step where the IDs and the inventory result exist.
+  `nullable=false` today) — a column change in the same migration as §8. Postgres
+  treats NULLs as distinct under `uk_flight_seat (flight_id, seat_number)`, so
+  concurrent drafts on the same flight don't collide (verified semantics, not
+  assumed).
+- **The `String resolveSeatNumber(...)` strategy contract is retired, not
+  repurposed** (review round 5, smaller cleanup). Seat resolution now happens in
+  the facade's hold step, so keeping an interface whose signature promises
+  something else invites misuse. `SeatAssignmentStrategy` +
+  `ManualSeatAssignmentStrategy` are **deleted**; the facade decides the mode
+  directly (blank `seatNumber` ⇒ AUTO, non-blank ⇒ MANUAL) and inventory's hold
+  response is the authoritative resolution.
+
+## 5.1a Draft lifecycle: a real `DRAFT` status (review round 5, correction #1)
+
+The multi-transaction flow creates a state the current machine doesn't model: a
+committed booking with `seat_number = NULL` and no payment. Today's enum starts
+at `CREATED`, `prePersist` defaults to it, and `CREATED → CONFIRMED` is legal —
+so a JVM crash between draft-commit and finalize would leave an orphan that the
+back-office `confirmBooking()` could confirm **with no seat and no payment**.
+Fix, in full:
+
+- `BookingStatus` gains **`DRAFT`** (first value); `createDraftBooking` sets it
+  explicitly. Transitions added to `BookingStateMachine`:
+  `DRAFT → CREATED` (finalize) and `DRAFT → CANCELLED` (assignment failure or
+  sweep). `CONFIRMED` remains reachable **only from `CREATED`** — the orphan
+  window closes structurally, not by convention.
+- `BookingCreated` publishes **only after `DRAFT → CREATED`** (finalize commit).
+- **Stale-draft sweep**: a scheduled job (same pattern as inventory's
+  `SeatHoldExpiryJob`) cancels `DRAFT` bookings older than a configured TTL
+  (default 15 min, matching the hold TTL) — inventory holds already expire on
+  their own; this keeps booking's table from accumulating permanent orphans.
+- **V3 migration required** (self-audit catch, same class as round 5's findings):
+  the V1 baseline carries
+  `bookings_booking_status_check CHECK (booking_status IN ('CREATED','CONFIRMED','CANCELLED','COMPLETED'))`
+  — without `V3__add_draft_booking_status.sql` (drop + re-add the check including
+  `DRAFT`), every draft insert fails at the database regardless of the enum.
 
 ## 5.2 Atomic auto-hold endpoint (inventory owns select-and-hold)
 
@@ -297,8 +329,18 @@ When the passenger supplies a seat number:
 
   Inventory owns the authoritative cabin validation on **both** paths.
 - **`SeatHold` persists `bookingPassengerId`** (today it stores only `bookingId`) —
-  a natural correlation/idempotency key: one passenger, one active hold; a retried
-  hold for the same passenger is recognizable rather than duplicated.
+  and the idempotency it enables is **defined behavior, not an implication of the
+  column existing** (review round 5, correction #2). Under the shared flight lock,
+  every hold request first looks up the passenger's active hold
+  (`findByFlightInventoryIdAndBookingPassengerIdAndStatus(…, ACTIVE)`, backed by an
+  index on `(flight_inventory_id, booking_passenger_id, status)`), then:
+
+  | Existing ACTIVE hold for this passenger? | Behavior |
+  |---|---|
+  | none | create the hold |
+  | yes, same requested seat (MANUAL replay) | return the existing hold — idempotent |
+  | yes, AUTO retry | return the existing auto-assigned hold — idempotent |
+  | yes, but a *different* manually requested seat | **409 Conflict** — an explicit release/change flow is required, never a silent second hold |
 - Held via the `/hold` path, whose response now carries
   `{assignmentMode: MANUAL, listedSurcharge, chargedSurcharge}` with
   `chargedSurcharge == listedSurcharge`.
@@ -414,10 +456,39 @@ entity has no surcharge field and `BookingEventPassenger` carries only the total
   from `BookingEventPassenger.seatSurcharge` when the CONFIRMED event creates the
   check-in row. Nullable, additive columns — checkin's `ddl-auto: update` handles
   them without a migration.
-- `changeSeat()` compares the target's listed surcharge against
-  `checkIn.seatSurchargeEntitlement`. **Legacy rows** (check-ins created before
-  this branch, or from events without the new fields): `null` entitlement is
-  treated as **0** — only free seats reachable, the conservative default.
+- **Legacy rows** (check-ins created before this branch, or from events without
+  the new fields): `null` entitlement is treated as **0** — only free seats
+  reachable, the conservative default.
+
+**Where the ceiling is *enforced* (review round 5, correction #3):** check-in
+owns the entitlement, but only **inventory** knows the target seat's current
+listed surcharge and cabin — so the enforcement point is the reservation call,
+not a check-in-side comparison against data it doesn't have. The direct-reserve
+contract (used by `changeSeat`) is extended:
+
+```
+{ flightId, seatNumber, bookingId, bookingPassengerId,
+  travelClass, maxAllowedSurcharge }        # check-in passes
+                                            # maxAllowedSurcharge = seatSurchargeEntitlement
+```
+
+Inventory, under the same shared flight lock as every other seat mutation:
+find seat → verify `seatType == travelClass` → compute current listed surcharge
+→ verify `listedSurcharge <= maxAllowedSurcharge` → reserve → return the
+`listedSurcharge`. Ownership stays clean: check-in owns *what the passenger is
+entitled to*, inventory owns *what the seat costs and which cabin it's in*.
+
+**Compensation (round-5 catch, verified in the current code):** today's
+`CheckInFacade.changeSeat()` reserves the new seat and then updates the local
+check-in row with **no rollback if that update throws** — the new seat stays
+reserved and the old one active. Fixed:
+
+```
+reserve new seat → local changeSeatNumber() fails
+  → cancelReservationQuietly(NEW seat)   # compensate
+  → rethrow original failure
+(old seat is only cancelled AFTER the local update succeeds — unchanged)
+```
 
 Paid check-in upgrades + the payment saga + a payment-service supplemental-charge
 operation are a **separate future design** (§12).
@@ -437,11 +508,23 @@ operation are a **separate future design** (§12).
 - The alternative (**seat surcharge as a non-refundable ancillary**) is
   deliberately **deferred** (§12): it needs a separate ancillary line item in
   payment/invoice and a distinct refund path.
-- **Breakdown preservation:** the booking/payment events and the invoice must
-  carry the seat-fee component, not a single unexplained total. The persisted
-  breakdown (§8) is the source; `BookingEvent`, the payment fare snapshot, and the
-  invoice line items surface `baseFare` + `seatSurcharge` separately. (This is the
-  one place existing event/invoice DTOs gain fields — additive.)
+- **Breakdown preservation — matched to the actual models (review round 5,
+  correction #4).** The current `Invoice` has no line items (only
+  `subtotal/taxAmount/discount/grandTotal/currency`), and `Payment.fareBreakdown`
+  is a purpose-built `FARETYPE:amount;…` string that `RefundCalculator` parses —
+  **its format must not change in this branch** or refunds break while the design
+  claims they're untouched. So, no invented line-item subsystem:
+
+  - `Payment` gains two **nullable additive** aggregate snapshots:
+    `baseFareTotal = Σ passenger.baseFare` and
+    `seatSurchargeTotal = Σ passenger.seatSurcharge`, populated from the extended
+    `BookingEventPassenger` fields when the CREATED event builds the payment.
+  - `Invoice` snapshots the same two fields alongside its existing columns:
+    `subtotal / baseFareTotal / seatSurchargeTotal / taxAmount / discount /
+    grandTotal` — an honest breakdown without an `InvoiceLineItem` subsystem.
+  - `fareBreakdown` stays byte-for-byte as-is, feeding `RefundCalculator` exactly
+    as today. Legacy payments/invoices have `null` aggregates (pre-branch rows) —
+    displayed as "breakdown unavailable," never fabricated.
 
 ---
 
@@ -541,18 +624,29 @@ inventory.
    `POST /holds/auto`; deterministic ordering tuple; concurrency test proving
    AUTO↔MANUAL and AUTO↔AUTO both serialize (different seats, no rollback-only,
    counts correct).
-4. **Draft → hold → finalize flow in `BookingFacade`** (§5.1) — `createDraftBooking`
-   (seat null) → per-passenger inventory hold (manual/auto) → `finalizeSeatAssignments`;
-   compensation on failure. Booking omit-seat → free auto seat end-to-end.
+4. **Draft → hold → finalize flow in `BookingFacade`** (§5.1/§5.1a) —
+   `V3__add_draft_booking_status.sql` (replace the status CHECK constraint to
+   admit DRAFT) + `DRAFT` in the enum/state machine; `createDraftBooking`
+   (DRAFT, seat null, **no payment row**) → per-passenger inventory hold
+   (manual/auto, idempotent per §6's table) → `finalizeSeatAssignments`
+   (fares + totals + `BookingPayment` created + `DRAFT→CREATED`) → publish;
+   compensation on failure (release holds → `DRAFT→CANCELLED`); stale-draft
+   sweep job; **delete `SeatAssignmentStrategy`/`ManualSeatAssignmentStrategy`**
+   (facade decides mode from blank/non-blank). Booking omit-seat → free auto
+   seat end-to-end.
 5. **Manual-selection surcharge + fare assembly** (§3/§6/§8) — finalize persists
    base + charged surcharge + mode; response breakdown.
 6. **Cabin availability + booking quote** (§7/§11) — inventory `/cabins`
    (availability only) + booking `/quote` (assembles fares); clear "no such cabin"
    error.
-7. **Check-in contained-v1 rule** (§9) — allow ≤-surcharge changes with cabin
-   check, reject upgrades with the Manage-Booking message.
-8. **Refund/invoice breakdown preservation** (§10) — events/invoice carry the
-   seat-fee component; confirm refund uses the persisted total.
+7. **Check-in contained-v1 rule** (§9) — extended reserve contract
+   (`travelClass` + `maxAllowedSurcharge`), inventory enforces cabin + ceiling
+   under the shared lock and returns the listed surcharge; `changeSeat`
+   compensation (cancel the NEW reservation if the local update fails);
+   entitlement snapshot consumed from the event.
+8. **Refund/invoice breakdown preservation** (§10) — `Payment.baseFareTotal`/
+   `seatSurchargeTotal` + `Invoice` snapshots of the same; `fareBreakdown`
+   byte-identical; confirm refund uses the persisted total.
 9. **Design doc → implemented + Implementation Notes**, house pattern.
 
 ---
@@ -573,5 +667,9 @@ inventory.
 | Payment invariant (round 4) | at `BookingCreated` publish: `sum(passenger.fare) = Booking.totalFare = BookingPayment.amount`; no payment row exists during the draft stage |
 | Entitlement snapshot (round 4) | CONFIRMED event with breakdown fields → `CheckIn.seatSurchargeEntitlement` populated; event without them (legacy) → entitlement null ⇒ treated as 0 (only free seats reachable at check-in) |
 | Manual-hold cabin enforcement (round 4) | manual `/hold` with `travelClass=ECONOMY` on a BUSINESS seat → rejected by inventory; `bookingPassengerId` persisted on the hold |
+| Draft lifecycle (round 5) | crash window simulated: a committed DRAFT cannot be confirmed (`DRAFT→CONFIRMED` rejected by the state machine); finalize → `CREATED` and only then is `BookingCreated` published; sweep cancels a TTL-expired DRAFT; V3 constraint allows DRAFT inserts |
+| Hold idempotency (round 5) | replayed MANUAL hold (same seat) → same hold returned, counts unchanged; AUTO retry → existing hold returned; different manual seat with an active hold → 409 |
+| Check-in ceiling enforcement (round 5) | reserve with `maxAllowedSurcharge` below the target's listed surcharge → rejected by inventory; at the ceiling → allowed; new-seat reservation compensated (cancelled) when the local check-in update throws |
+| Payment/Invoice aggregates (round 5) | payment + invoice carry `baseFareTotal`/`seatSurchargeTotal` matching the event sums; `fareBreakdown` string byte-identical to pre-branch format; legacy rows show null aggregates |
 | End-to-end (gateway, seeded flight) | (a) no seat → free middle economy; (b) choose 1A on the 777 → First base fare + window surcharge, persisted; (c) FIRST on an A320 flight → rejected |
 | Regression | full reactor `mvn clean verify` green; existing booking/refund tests updated for the now-optional seat + persisted breakdown |
