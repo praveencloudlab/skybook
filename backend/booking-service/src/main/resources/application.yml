@@ -24,8 +24,17 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      # Flyway owns the schema (SEAT_SELECTION_MODULE.md §8, review round 4);
+      # Hibernate only verifies entity/DB alignment at startup.
+      ddl-auto: validate
     show-sql: true
+
+  flyway:
+    # Existing Hibernate-created databases are adopted as version 1 (the V1
+    # baseline is skipped there, only V2+ runs); a fresh database runs V1+V2.
+    # Both converge on the identical schema - which ddl-auto: validate proves.
+    baseline-on-migrate: true
+    baseline-version: 1
 
   kafka:
     bootstrap-servers: localhost:9092
