@@ -47,7 +47,7 @@ public final class BookingMapper {
                 bookingPassenger.getSeatNumber(),
                 bookingPassenger.getBaseFare(),
                 bookingPassenger.getSeatSurcharge(),
-                bookingPassenger.getSeatAssignmentMode(),
+                bookingPassenger.getChargedSeatAssignmentMode(),
                 bookingPassenger.getCurrency(),
                 bookingPassenger.getFare(),
                 bookingPassenger.getCheckInStatus()

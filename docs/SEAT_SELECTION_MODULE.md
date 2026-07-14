@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | Free auto-assignment + paid seat selection; per-seat surcharge pricing by attribute; cabin-aware assignment; enforced at booking **and** check-in; original fare breakdown persisted per passenger |
 | **Branch** | `feature/seat-selection` |
-| **Status** | Frozen after design review (seven corrections applied — persisted breakdown, atomic inventory auto-hold, deferred paid check-in upgrades, inventory returns availability-not-fares, listed-vs-charged surcharge, exit-row-not-extra-legroom, explicit refund policy). Implementation starting per §13. |
+| **Status** | Frozen after two review rounds (round 1: persisted breakdown, atomic inventory auto-hold, deferred paid check-in upgrades, availability-not-fares, listed-vs-charged, exit-row-not-extra-legroom, explicit refund policy; round 2: explicit SQL migration not ddl-auto, pessimistic per-flight locking for auto-hold, USD-only v1 currency, chargedSeatAssignmentMode rename, exhaustion + cabin-relative front-row rules). Implementation in progress per §14. |
 
 Goal: model seats the way real airlines do. A passenger who doesn't care gets a
 low-demand seat **auto-assigned for free**; a passenger who wants a specific
@@ -57,7 +57,7 @@ codebase already built:
   seat has a non-zero listed price); a *chosen* seat → charged = its listed
   surcharge.
 - **Persisted breakdown** (review correction #1) — each `BookingPassenger` stores
-  `baseFare`, `seatSurcharge` (the amount actually charged), `seatAssignmentMode`,
+  `baseFare`, `seatSurcharge` (the amount actually charged), `chargedSeatAssignmentMode`,
   `currency`, and the all-in `fare`. Refunds, invoices, and check-in comparisons
   read the **persisted** values — historical charges are never recomputed from
   current inventory config.
@@ -122,7 +122,7 @@ surcharge values per seat**:
 ```
 
 - **listedSurcharge** — what the seat *is worth* by its attributes (a window is
-  £12 whether or not anyone paid it). Shown on the seat map.
+  $12 whether or not anyone paid it). Shown on the seat map.
 - **chargedSurcharge** — what this passenger *actually paid*: `0` for an
   auto-assigned seat (even if it happens to be a window), the listed amount for a
   chosen seat. This is what gets **persisted** (§8) and drives refunds/invoices.
@@ -132,9 +132,8 @@ chargedSurcharge: 0.00}`; a manually chosen 12A returns `{assignmentMode: MANUAL
 listedSurcharge: 12.00, chargedSurcharge: 12.00}`. Booking persists
 `chargedSurcharge` as the passenger's `seatSurcharge`.
 
-All amounts are `BigDecimal`, `HALF_UP`, scale 2, in the booking's currency
-(§8's `currency` field — aligned with the existing payment currency, not
-independently asserted here).
+All amounts are `BigDecimal`, `HALF_UP`, scale 2, in **USD** (v1's single
+currency — §8; matches every existing booking/payment row).
 
 ---
 
@@ -150,14 +149,14 @@ airlines actually sell a seat as one category:
 
 | Applicable attribute (highest wins) | Listed surcharge (config) |
 |---|---|
-| Exit row | £30 |
-| Front-of-cabin (first N rows of the cabin) | £15 |
-| Window (standard) | £12 |
-| Aisle (standard) | £8 |
-| Standard middle economy | £0 (the free auto-assign pool) |
+| Exit row | $30 |
+| Front-of-cabin (first N rows of the cabin) | $15 |
+| Window (standard) | $12 |
+| Aisle (standard) | $8 |
+| Standard middle economy | $0 (the free auto-assign pool) |
 
-A window *and* exit-row seat is charged **£30** (the exit-row tier), not
-£12 + £30. This is `max(applicable tiers)`, stated so implementation can't drift
+A window *and* exit-row seat is charged **$30** (the exit-row tier), not
+$12 + $30. This is `max(applicable tiers)`, stated so implementation can't drift
 into silently summing them.
 
 - Surcharge is **derived at read time**, not stored on `aircraft_seats` — re-pricing
@@ -182,22 +181,37 @@ correction #2) — the owner of availability, locking, and pricing.
   { "bookingId": 123, "bookingPassengerId": 456, "travelClass": "ECONOMY" }
   ```
   Inventory orders available in-cabin candidates by the **low-demand preference**
-  (standard middle → aisle → window; exit-row and front rows excluded — those are
-  revenue seats kept for paying selectors), **atomically holds the first
-  available**, and returns:
+  (standard middle → aisle → window → front-of-cabin rows; **exit rows always
+  excluded** while exit-row eligibility is deferred, §12), **atomically holds the
+  first available**, and returns:
   ```json
   { "seatNumber": "18E", "assignmentMode": "AUTO",
     "listedSurcharge": 0.00, "chargedSurcharge": 0.00 }
   ```
+- **Locking algorithm (review round 2, correction #2).** A uniqueness violation
+  alone is unusable for "advance to the next candidate" — once Postgres raises it
+  the JPA transaction is rollback-only and cannot continue. Because
+  `aircraft_seats` is the *aircraft's* map (shared by every flight on that
+  airframe), row-locking a seat there would lock it across all of that aircraft's
+  flights. So the lock is taken on the **single `flight_inventory` row for the
+  flight** — pessimistic write lock (`SELECT … FOR UPDATE`) — which serializes
+  concurrent auto-holds *per flight*: acquire the row lock → compute the flight's
+  available seats (aircraft map minus this flight's active holds/reservations) →
+  order by preference → insert the hold + decrement counts → commit. No
+  catch-the-unique-violation-and-retry inside a doomed transaction.
 - **Always free** — `chargedSurcharge` is `0.00` regardless of which physical seat
-  the algorithm lands on (even if only window seats remain).
+  the algorithm lands on (even if only front-of-cabin seats remain). "Front of
+  cabin" means the first rows **of the passenger's cabin** (e.g. Business rows 3–8
+  on the 777), not global aircraft row numbers.
+- **Exhaustion.** If the only seats left in the cabin are exit rows (excluded) or
+  none remain, inventory returns a clear `NoSeatAvailableException` /
+  "no assignable seat" rather than seating an ineligible passenger.
 - Booking's `AutoSeatAssignmentStrategy` **delegates** to this endpoint rather than
   querying a seat list and choosing itself — eliminating the query-then-hold race.
   The strategy still occupies the existing `SeatAssignmentStrategy` seam; it just
   calls inventory for the atomic select-and-hold.
-- Concurrency: the atomic hold + the `(flightId, seatNumber)` unique constraint
-  mean two racing auto-assigns can't get the same seat; inventory advances to the
-  next preference internally. Covered by a concurrency test (§15).
+- Concurrency test (§15) proves: two simultaneous auto-holds on the same flight →
+  **different seats**, **no rollback-only error**, inventory counts still correct.
 
 ---
 
@@ -233,19 +247,30 @@ When the passenger supplies a seat number:
 **The review's #1 point.** `BookingPassenger` gains persisted, immutable-at-charge
 fields — the total alone is insufficient because config changes, an old booking
 must still show its original breakdown, and check-in comparisons need the
-surcharge *actually paid* (an auto window physically worth £12 but charged £0):
+surcharge *actually paid* (an auto window physically worth $12 but charged $0):
 
 | New field on `BookingPassenger` | Meaning |
 |---|---|
 | `baseFare` | cabin base fare at booking time (`FareCalculator` output) |
 | `seatSurcharge` | the **charged** surcharge (0 for AUTO, listed for MANUAL) |
-| `seatAssignmentMode` | `AUTO` / `MANUAL` |
-| `currency` | the fare currency (aligned with the booking's payment currency) |
+| `chargedSeatAssignmentMode` | `AUTO` / `MANUAL` — how the *original charge* was computed. Named with `charged`/`original` intent (review round 2) so a later free seat change never overwrites the historical pricing explanation. |
+| `currency` | ISO-4217; **`USD` in v1** (see below) |
 | `fare` (existing) | all-in total = `baseFare + seatSurcharge` |
 
-- Schema change via Hibernate `ddl-auto: update` (additive columns; existing rows
-  get sensible backfill defaults — `seatSurcharge=0`, `seatAssignmentMode=MANUAL`,
-  `baseFare=fare`).
+- **Schema change is an explicit SQL migration, NOT `ddl-auto` (review round 2,
+  correction #1).** `ddl-auto: update` adds columns but never runs data transforms,
+  and Postgres rejects adding a `NOT NULL` column to a populated table outright.
+  The migration is `ALTER (nullable) → UPDATE backfill (baseFare=fare,
+  seatSurcharge=0, chargedSeatAssignmentMode='MANUAL', currency='USD') → ALTER SET
+  NOT NULL` — shipped as [`scripts/seed/booking_breakdown_backfill.sql`](../scripts/seed/booking_breakdown_backfill.sql).
+  (This is the strongest argument yet for adopting Flyway; noted for a future
+  branch, §12.)
+- **Currency: SkyBook v1 supports `USD` only (review round 2, correction #3).**
+  Every existing booking/payment row is already USD (`DEFAULT_CURRENCY="USD"`), so
+  booking, payment, invoice, and seat-pricing config are all USD; the persisted
+  `currency` is `"USD"`. Multi-currency moves to the future Pricing Service. (The
+  reviewer suggested GBP; USD chosen instead to match the data already on disk —
+  the surcharge examples elsewhere read as USD.)
 - **Refunds, invoices, and seat-change comparisons read these persisted values**,
   never recompute from current inventory config. This is the invariant the whole
   correction rests on.
@@ -309,7 +334,7 @@ Additive; ownership boundaries corrected per review #4.
 | `GET /api/inventory/flights/{id}/cabins` (new) | **availability only** — `{travelClass, totalSeats, availableSeats}`, **no fares** | inventory |
 | `POST /api/bookings/quote` (new) | assembles fare options: inventory cabin availability **+** booking base fare (`FareCalculator`, incl. FareType) **+** seat surcharge options → "Economy from X, Business from Y" | booking |
 | `PATCH /api/checkins/{id}/seat` | applies the contained-v1 rule (§9) | check-in |
-| Booking response / events / invoice | gain `baseFare` + `seatSurcharge` + `seatAssignmentMode` breakdown alongside the all-in `fare` | booking |
+| Booking response / events / invoice | gain `baseFare` + `seatSurcharge` + `chargedSeatAssignmentMode` breakdown alongside the all-in `fare` | booking |
 
 **Inventory never returns a fare.** The `/cabins` endpoint reports seats; the
 booking `/quote` endpoint is the only place cabin availability, base fare, and
@@ -343,14 +368,18 @@ inventory.
 
 # 13. Known Risks / Open Questions
 
-- **Backfill of existing bookings** — the new `BookingPassenger` columns need
-  sane defaults for rows created before this branch (`seatSurcharge=0`,
-  `seatAssignmentMode=MANUAL`, `baseFare=fare`); a one-time update, verified in
-  build step 1.
-- **Currency consistency** — `FareCalculator` today produces unitless `BigDecimal`
-  while payment labels amounts (e.g. USD). This branch persists an explicit
-  `currency` on the passenger aligned with the payment currency; unifying the
-  fare/payment currency convention fleet-wide is noted but not solved here.
+- **Backfill of existing bookings** — the new `BookingPassenger` columns are added
+  by an **explicit SQL migration** (not `ddl-auto`, §8), backfilling
+  `seatSurcharge=0`, `chargedSeatAssignmentMode='MANUAL'`, `baseFare=fare`,
+  `currency='USD'`, then setting `NOT NULL`. Shipped in
+  `scripts/seed/booking_breakdown_backfill.sql`. The lack of a migration tool is
+  the standing argument for adopting **Flyway** (auth-service already has the
+  dependency with zero migrations) — deferred to its own branch.
+- **Currency is decided, not open: USD only in v1** (§8). Every existing row is
+  already USD; booking, payment, invoice, and seat-pricing config are all USD.
+  Multi-currency is a Pricing-Service-era concern. The only remaining *convention*
+  cleanup is that `FareCalculator` returns a unitless `BigDecimal` the caller
+  labels USD — cosmetic, not a correctness gap.
 - **Surcharge numbers are pre-tuning defaults** — config, changeable without a
   deploy.
 - **Auto-assign "low demand" ordering is a heuristic** — a config-ordered

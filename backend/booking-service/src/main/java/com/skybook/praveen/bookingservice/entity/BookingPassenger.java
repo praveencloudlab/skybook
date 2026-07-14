@@ -96,8 +96,8 @@ public class BookingPassenger extends Auditable {
     private BigDecimal seatSurcharge;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "seat_assignment_mode", nullable = false, length = 10)
-    private SeatAssignmentMode seatAssignmentMode;
+    @Column(name = "charged_seat_assignment_mode", nullable = false, length = 10)
+    private SeatAssignmentMode chargedSeatAssignmentMode;
 
     /** ISO-4217 of baseFare/seatSurcharge/fare - aligned with the booking's payment currency. */
     @Column(nullable = false, length = 3)
@@ -122,8 +122,8 @@ public class BookingPassenger extends Auditable {
         if (seatSurcharge == null) {
             seatSurcharge = BigDecimal.ZERO;
         }
-        if (seatAssignmentMode == null) {
-            seatAssignmentMode = SeatAssignmentMode.MANUAL;
+        if (chargedSeatAssignmentMode == null) {
+            chargedSeatAssignmentMode = SeatAssignmentMode.MANUAL;
         }
         if (baseFare == null) {
             baseFare = fare;

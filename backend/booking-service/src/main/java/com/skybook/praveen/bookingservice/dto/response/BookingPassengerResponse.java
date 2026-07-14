@@ -34,7 +34,7 @@ public record BookingPassengerResponse(
 
         BigDecimal seatSurcharge,
 
-        SeatAssignmentMode seatAssignmentMode,
+        SeatAssignmentMode chargedSeatAssignmentMode,
 
         String currency,
 
