@@ -6,17 +6,18 @@
 
 | | |
 |---|---|
-| **Scope** | Free auto-assignment + paid seat selection; per-seat surcharge pricing by attribute; cabin-aware assignment; enforced at booking **and** check-in |
+| **Scope** | Free auto-assignment + paid seat selection; per-seat surcharge pricing by attribute; cabin-aware assignment; enforced at booking **and** check-in; original fare breakdown persisted per passenger |
 | **Branch** | `feature/seat-selection` |
-| **Status** | Design draft — under review, not yet frozen |
+| **Status** | Frozen after design review (seven corrections applied — persisted breakdown, atomic inventory auto-hold, deferred paid check-in upgrades, inventory returns availability-not-fares, listed-vs-charged surcharge, exit-row-not-extra-legroom, explicit refund policy). Implementation starting per §13. |
 
 Goal: model seats the way real airlines do. A passenger who doesn't care gets a
 low-demand seat **auto-assigned for free**; a passenger who wants a specific
-seat — window, extra legroom/exit row, or a front-of-cabin spot — **pays a
-surcharge** for it, on top of the cabin base fare. Cabin classes
-(Economy / Premium Economy / Business / First) already exist in the data;
-what's missing is the *assignment algorithm*, the *surcharge pricing*, and the
-*free-vs-paid* distinction.
+seat — window, exit row, or a front-of-cabin spot — **pays a surcharge** for it,
+on top of the cabin base fare. Cabin classes (Economy / Premium Economy /
+Business / First) already exist in the data; this branch adds the *assignment
+algorithm*, the *surcharge pricing*, the *free-vs-paid* distinction, and — the
+review's central insight — a **persisted, immutable fare breakdown** so a
+booking always shows what it actually charged, never what today's config says.
 
 ---
 
@@ -24,41 +25,48 @@ what's missing is the *assignment algorithm*, the *surcharge pricing*, and the
 
 1. [Overview](#1-overview)
 2. [Load-Bearing Findings](#2-load-bearing-findings)
-3. [The Pricing Model](#3-the-pricing-model)
-4. [Seat Surcharge — Where It's Computed](#4-seat-surcharge--where-its-computed)
-5. [Auto-Assignment (Free)](#5-auto-assignment-free)
+3. [The Pricing Model — Listed vs Charged](#3-the-pricing-model--listed-vs-charged)
+4. [Seat Surcharge — Where It's Computed & How It Composes](#4-seat-surcharge--where-its-computed--how-it-composes)
+5. [Auto-Assignment (Free, Atomic in Inventory)](#5-auto-assignment-free-atomic-in-inventory)
 6. [Manual Selection (Paid)](#6-manual-selection-paid)
-7. [Cabin-Aware Assignment](#7-cabin-aware-assignment)
-8. [Fare Assembly](#8-fare-assembly)
-9. [Check-In Seat Changes](#9-check-in-seat-changes)
-10. [API Changes](#10-api-changes)
-11. [Deferred / Out of Scope](#11-deferred--out-of-scope)
-12. [Known Risks / Open Questions](#12-known-risks--open-questions)
-13. [Build Order](#13-build-order)
-14. [Testing Plan](#14-testing-plan)
+7. [Cabin-Aware Assignment (Booking + Check-In)](#7-cabin-aware-assignment-booking--check-in)
+8. [Persisted Fare Breakdown](#8-persisted-fare-breakdown)
+9. [Check-In Seat Changes — Contained v1](#9-check-in-seat-changes--contained-v1)
+10. [Refund & Invoice Policy](#10-refund--invoice-policy)
+11. [API Changes & Ownership](#11-api-changes--ownership)
+12. [Deferred / Out of Scope](#12-deferred--out-of-scope)
+13. [Known Risks / Open Questions](#13-known-risks--open-questions)
+14. [Build Order](#14-build-order)
+15. [Testing Plan](#15-testing-plan)
 
 ---
 
 # 1. Overview
 
-Three capabilities, all landing on seams the codebase already built:
+Three capabilities plus one correctness backbone, all landing on seams the
+codebase already built:
 
 - **Free auto-assignment** — the empty `AutoSeatAssignmentStrategy` slot the
-  `SeatAssignmentStrategy` interface was designed for (its Javadoc: *"a real
-  assignment algorithm is premature before there's an actual seat map to pick
-  from"* — which now exists, seeded).
+  `SeatAssignmentStrategy` interface was designed for. **Selection *and* hold
+  happen atomically inside inventory-service** (review correction #2), not as a
+  query-then-hold from booking, so there's no time-of-check/time-of-use race.
 - **Per-seat surcharge pricing** — a config-driven `SeatPricingPolicy` in
-  inventory-service, surfaced on the existing `/seat-map` and `/hold`
-  responses; booking adds it to the cabin base fare `FareCalculator` already
-  produces.
-- **Free-vs-paid rule** — auto-assigned seat → surcharge 0; a *chosen* seat →
-  its attribute surcharge.
+  inventory-service, returning a **listed** surcharge on the seat map and both
+  **listed and charged** surcharges on a hold.
+- **Free-vs-paid rule** — auto-assigned seat → charged surcharge 0 (even if the
+  seat has a non-zero listed price); a *chosen* seat → charged = its listed
+  surcharge.
+- **Persisted breakdown** (review correction #1) — each `BookingPassenger` stores
+  `baseFare`, `seatSurcharge` (the amount actually charged), `seatAssignmentMode`,
+  `currency`, and the all-in `fare`. Refunds, invoices, and check-in comparisons
+  read the **persisted** values — historical charges are never recomputed from
+  current inventory config.
 
-No new microservice. Seat *pricing* is deliberately kept as a small,
-config-driven policy inside inventory-service (which owns seats), not a
-premature full Pricing Service — that stays Phase 2 (dynamic pricing, taxes,
-promotions), and this design leaves a clean seam for it to take over surcharge
-computation later.
+No new microservice. Seat pricing stays a small config-driven policy inside
+inventory (which owns seats), behind an interface the Phase-2 Pricing Service can
+later take over. **Cabin base-fare ownership stays with booking's
+`FareCalculator`** — inventory returns seat/cabin *availability* only, never
+fares (review correction #4).
 
 ---
 
@@ -67,273 +75,328 @@ computation later.
 Confirmed by reading the code, not assumed:
 
 1. **The auto-assignment seam already exists and is deliberately empty.**
-   `SeatAssignmentStrategy` is an interface; `ManualSeatAssignmentStrategy` is
-   the v1 impl that rejects a blank seat with *"automatic seat assignment isn't
-   implemented yet"*. `BookingServiceImpl` already depends on the interface
-   (`seatAssignmentStrategy.resolveSeatNumber(...)`) — so adding an auto impl is
-   a new `@Component` + a selection rule, **not** a refactor of the call site.
-2. **Seat categories and attributes are already fully modeled.** `AircraftSeat`
-   carries `seatType` (ECONOMY / PREMIUM_ECONOMY / BUSINESS / FIRST), `position`
-   (WINDOW / MIDDLE / AISLE), `exitRow` (boolean), and `rowNumber`. Every input
-   the surcharge model needs is present on the seat — no schema change to
-   `aircraft_seats` required for pricing *inputs*.
-3. **"Not every flight has every cabin" is already true.** A flight's sellable
-   seats come from its aircraft's seat map. The seeded A320 has only Business +
-   Economy; the 777 has all four cabins. So a request for a FIRST seat on an
-   A320 flight already has no seat to satisfy it — the cabin-availability rule
-   the user asked for falls out of the existing model; it just needs a clear
-   error instead of a confusing one (§7).
-4. **Base fare per cabin already exists** — `FareCalculator` maps TravelClass →
-   base fare (Eco 100 / Premium 180 / Business 350 / First 700) × a FareType
-   multiplier, stored per passenger on `BookingPassenger.fare`. Seat surcharge
-   is **additive** to this, so `calculateFare`'s contract barely changes (§8).
-5. **Inventory already exposes a seat map and holds specific seats.** Endpoints
-   `/seat-map`, `/seats`, `/seats/status/{status}` exist, and booking already
-   calls `/hold` with a specific seat number. So "show me the seats and their
-   prices" and "hold this seat" both already have homes — the surcharge just
-   needs to ride along on those responses.
-6. **Check-in seat change already exists.** `PATCH /api/checkins/{id}/seat`
-   (`changeSeat`) is implemented. The free-vs-paid rule must apply here too, so
-   a passenger can't dodge the window surcharge by booking a free auto seat and
-   swapping to a window at check-in for nothing (§9).
-7. **Double-booking is already guarded** — a `(flightId, seatNumber)` uniqueness
-   constraint plus inventory's hold/reserve counts. Assignment logic does *not*
-   need to re-implement availability locking; it selects from what inventory
-   reports available and lets the existing constraint be the backstop.
+   `SeatAssignmentStrategy` is an interface; `ManualSeatAssignmentStrategy`
+   rejects a blank seat with *"automatic seat assignment isn't implemented yet"*.
+   `BookingServiceImpl` already depends on the interface — so this is a new
+   `@Component` + delegation, not a call-site refactor.
+2. **Seat categories and attributes are already modeled.** `AircraftSeat` carries
+   `seatType` (ECONOMY / PREMIUM_ECONOMY / BUSINESS / FIRST), `position` (WINDOW /
+   MIDDLE / AISLE), `exitRow` (boolean), `rowNumber`. **There is no
+   `extraLegroom` attribute** — so this branch prices the **exit-row** flag, and
+   does *not* claim exit-row ⇔ extra-legroom (review correction #6); a distinct
+   `extraLegroom` attribute is deferred (§12).
+3. **"Not every flight has every cabin" is already true** — sellable seats come
+   from the aircraft's seat map; the seeded A320 has only Business+Economy, the
+   777 all four. The cabin-availability rule falls out of the model; it needs a
+   clear error and an availability lookup (§7).
+4. **Base fare per cabin already exists and belongs to booking** — `FareCalculator`
+   maps TravelClass → base fare (Eco 100 / Premium 180 / Business 350 / First
+   700) × a FareType multiplier, in `BigDecimal`, `HALF_UP`, scale 2. FareType
+   affects price, so **fares cannot be computed by inventory** — it doesn't know
+   the fare type (review correction #4).
+5. **Inventory already exposes a seat map and holds specific seats** (`/seat-map`,
+   `/seats`, `/hold`), and **check-in already has `PATCH /{id}/seat`** — so every
+   surface this branch touches already exists; it's adding fields and one atomic
+   endpoint, not new subsystems.
+6. **Double-booking is already guarded** by a `(flightId, seatNumber)` uniqueness
+   constraint plus inventory's hold counts — the backstop for the atomic auto-hold
+   (§5) and the concurrency test (§15).
+7. **Refund today applies a fare-type percentage to the whole passenger fare**
+   (payment-service `RefundCalculator` / SAVER cancellation fee). Once the fare
+   includes a seat surcharge, cancellation refunds the surcharge at the same
+   percentage **unless we say otherwise** — so the policy must be explicit
+   (review correction #7, resolved in §10).
 
 ---
 
-# 3. The Pricing Model
+# 3. The Pricing Model — Listed vs Charged
 
-Two independent layers, matching how airlines actually bill:
+Two independent layers, and — the review's key clarification — **two distinct
+surcharge values per seat**:
 
 ```
-   passenger fare  =  CABIN BASE FARE            +  SEAT SURCHARGE
-                      (TravelClass × FareType)      (attribute add-on, only
-                      FareCalculator, exists         if the seat was CHOSEN;
-                      today)                         0 if auto-assigned)
+   passenger fare  =  CABIN BASE FARE            +  CHARGED SEAT SURCHARGE
+                      (TravelClass × FareType,      (0 if the seat was
+                       FareCalculator, exists)       AUTO-assigned; the seat's
+                                                     listed surcharge if MANUAL)
 ```
 
-- **Cabin base fare** is the ticket class — Economy vs Business vs First. Booking
-  a Business ticket costs the Business base fare regardless of *which* Business
-  seat you sit in. Unchanged from today.
-- **Seat surcharge** is a *within-cabin* add-on for a more desirable seat, and
-  it is **only charged when the passenger explicitly picks the seat**. Auto-
-  assignment is always free. This is exactly the user's rule: *"assigning a seat
-  automatically is not a paid service … if a passenger chooses himself, then it's
-  a paid service."*
+- **listedSurcharge** — what the seat *is worth* by its attributes (a window is
+  £12 whether or not anyone paid it). Shown on the seat map.
+- **chargedSurcharge** — what this passenger *actually paid*: `0` for an
+  auto-assigned seat (even if it happens to be a window), the listed amount for a
+  chosen seat. This is what gets **persisted** (§8) and drives refunds/invoices.
 
-Surcharge by attribute (config-driven, starting values — tuned later, same
-"reasoned defaults" posture as every other module):
+So an auto-assigned 12A returns `{assignmentMode: AUTO, listedSurcharge: 12.00,
+chargedSurcharge: 0.00}`; a manually chosen 12A returns `{assignmentMode: MANUAL,
+listedSurcharge: 12.00, chargedSurcharge: 12.00}`. Booking persists
+`chargedSurcharge` as the passenger's `seatSurcharge`.
 
-| Seat attribute | Example surcharge (on top of cabin fare) |
+All amounts are `BigDecimal`, `HALF_UP`, scale 2, in the booking's currency
+(§8's `currency` field — aligned with the existing payment currency, not
+independently asserted here).
+
+---
+
+# 4. Seat Surcharge — Where It's Computed & How It Composes
+
+**Decision: a config-driven `SeatPricingPolicy` inside inventory-service** — not a
+new Pricing Service, not hard-coded in booking. It's a pure function of the
+seat's attributes, driven by `inventory.seat-pricing.*` in `application.yml`.
+
+**Composition — highest applicable tier, NOT additive** (review correction #5).
+A seat is priced at the **single most valuable applicable tier**, the way
+airlines actually sell a seat as one category:
+
+| Applicable attribute (highest wins) | Listed surcharge (config) |
 |---|---|
-| Standard middle economy | £0 (the free auto-assign pool) |
-| Aisle (standard) | £8 |
-| Window (standard) | £12 |
-| Extra legroom / exit row | £30 |
+| Exit row | £30 |
 | Front-of-cabin (first N rows of the cabin) | £15 |
+| Window (standard) | £12 |
+| Aisle (standard) | £8 |
+| Standard middle economy | £0 (the free auto-assign pool) |
 
-Within a premium cabin (Business/First), the base fare already reflects the
-cabin; surcharges there are smaller/optional (a Business window vs aisle), and
-the same attribute table applies on top of the higher base. Exact numbers are
-config, not code (§4).
+A window *and* exit-row seat is charged **£30** (the exit-row tier), not
+£12 + £30. This is `max(applicable tiers)`, stated so implementation can't drift
+into silently summing them.
 
----
-
-# 4. Seat Surcharge — Where It's Computed
-
-**Decision: a config-driven `SeatPricingPolicy` inside inventory-service**, not a
-new Pricing Service and not hard-coded in booking.
-
-- Inventory owns the seats and their attributes (§2.2), so it's the natural home
-  for "what does *this* seat cost extra". The policy is a pure function of seat
-  attributes (`seatType`, `position`, `exitRow`, `rowNumber` relative to its
-  cabin), driven by values in `application.yml` (`inventory.seat-pricing.*`).
-- The surcharge is **surfaced on responses inventory already returns**: each seat
-  in the `/seat-map` gains a `surcharge` field, and the `/hold` response returns
-  the held seat's surcharge so booking can bill it.
-- **Why not a full Pricing Service now:** the roadmap's Phase-2 Pricing Service is
-  a much bigger scope (dynamic pricing, fare rules, taxes, promotions, coupons).
-  Seat surcharge is a small, static, attribute-driven calculation; standing up a
-  whole service for it is premature. The `SeatPricingPolicy` is a single class
-  behind a clear interface — when the Pricing Service arrives, it can implement
-  that same interface (or inventory can delegate to it), and nothing in booking
-  changes. Documented as the deliberate seam it is.
-- **No new persisted price column on `aircraft_seats`.** Surcharge is *derived*
-  from attributes at read time, not stored — so re-pricing is a config change,
-  not a data migration. (If per-seat manual overrides are ever needed, that's a
-  nullable `surcharge_override` column later — deferred, §11.)
+- Surcharge is **derived at read time**, not stored on `aircraft_seats` — re-pricing
+  is a config change, never a data migration. (A per-seat `surcharge_override`
+  column is deferred, §12.)
+- The policy sits behind a `SeatPricingPolicy` interface so the future Pricing
+  Service can implement it (or inventory can delegate to it) with no booking
+  change.
+- **The hold response is the authoritative price** (smaller-addition item): if a
+  seat-map *preview* price and the hold-time price ever differ (config changed
+  mid-session), the hold's `chargedSurcharge` is what the booking persists.
 
 ---
 
-# 5. Auto-Assignment (Free)
+# 5. Auto-Assignment (Free, Atomic in Inventory)
 
-New `AutoSeatAssignmentStrategy implements SeatAssignmentStrategy`, selected when
-the passenger supplies **no** seat number.
+**Selection and hold are one atomic operation inside inventory** (review
+correction #2) — the owner of availability, locking, and pricing.
 
-- Picks the **lowest-demand available seat in the passenger's booked cabin**:
-  prefer standard middle → aisle → window, avoid exit-row/extra-legroom and
-  front rows (those are revenue seats, kept for paying selectors). The goal is
-  literally the user's *"any seat which is not in high demand can be assigned"*.
-- Queries inventory for available seats of the passenger's `travelClass` on the
-  flight (extends the existing `/seats/status/AVAILABLE`-style view with a cabin
-  filter), applies the preference ordering, takes the first.
-- **Always free** — an auto-assigned seat carries surcharge 0 regardless of which
-  physical seat the algorithm lands on (even if only window seats remain, an
-  auto-assign doesn't bill for it — you didn't choose it).
-- **Strategy selection:** rather than two competing `@Component` beans (ambiguous
-  injection), `SeatAssignmentStrategy` becomes a small dispatcher — if
-  `requestedSeatNumber` is blank → auto path, else → manual/validate path. Keeps
-  `BookingServiceImpl`'s single call site untouched.
+- New endpoint: **`POST /api/inventory/flights/{flightId}/holds/auto`**
+  ```json
+  { "bookingId": 123, "bookingPassengerId": 456, "travelClass": "ECONOMY" }
+  ```
+  Inventory orders available in-cabin candidates by the **low-demand preference**
+  (standard middle → aisle → window; exit-row and front rows excluded — those are
+  revenue seats kept for paying selectors), **atomically holds the first
+  available**, and returns:
+  ```json
+  { "seatNumber": "18E", "assignmentMode": "AUTO",
+    "listedSurcharge": 0.00, "chargedSurcharge": 0.00 }
+  ```
+- **Always free** — `chargedSurcharge` is `0.00` regardless of which physical seat
+  the algorithm lands on (even if only window seats remain).
+- Booking's `AutoSeatAssignmentStrategy` **delegates** to this endpoint rather than
+  querying a seat list and choosing itself — eliminating the query-then-hold race.
+  The strategy still occupies the existing `SeatAssignmentStrategy` seam; it just
+  calls inventory for the atomic select-and-hold.
+- Concurrency: the atomic hold + the `(flightId, seatNumber)` unique constraint
+  mean two racing auto-assigns can't get the same seat; inventory advances to the
+  next preference internally. Covered by a concurrency test (§15).
 
 ---
 
 # 6. Manual Selection (Paid)
 
-When the passenger **does** supply a seat number:
+When the passenger supplies a seat number:
 
-- The seat is validated (exists on the aircraft, is AVAILABLE, and its `seatType`
-  matches the passenger's booked `travelClass` — §7).
-- Its surcharge (from inventory's `SeatPricingPolicy`) is added to the passenger's
-  fare (§8).
-- Held in inventory via the existing `/hold` path; the `(flightId, seatNumber)`
-  uniqueness constraint remains the double-booking backstop.
-
-A chosen *standard middle economy* seat has surcharge £0 — so "I want to pick my
-own seat but I'm not paying for a premium one" is honored: selection of a
-zero-surcharge seat is free, selection of a premium seat is billed. This matches
-real airline behavior where standard seat selection is often free and only
-preferred/extra-legroom seats carry a fee.
+- Validated: exists on the aircraft, AVAILABLE, and its `seatType` matches the
+  passenger's booked `travelClass` (§7).
+- Held via the existing `/hold` path, whose response now carries
+  `{assignmentMode: MANUAL, listedSurcharge, chargedSurcharge}` with
+  `chargedSurcharge == listedSurcharge`.
+- A chosen *standard middle economy* seat is `chargedSurcharge: 0.00` — so "I want
+  to pick my own seat but I'm not paying for a premium one" is honored; only
+  window/aisle/front/exit-row selections bill.
 
 ---
 
-# 7. Cabin-Aware Assignment
+# 7. Cabin-Aware Assignment (Booking + Check-In)
 
-- A passenger's `travelClass` determines which seats they may occupy: an ECONOMY
-  ticket → an ECONOMY seat, BUSINESS → BUSINESS, etc. Enforced on both auto and
-  manual paths.
+- `travelClass` determines occupiable seats: an ECONOMY ticket → ECONOMY seat,
+  etc. Enforced on **both** auto and manual paths, **and at check-in seat change**
+  (smaller-addition item — a check-in change can't cross cabins either).
 - **A flight only offers the cabins its aircraft has.** Booking FIRST on an A320
-  flight (no First seats) fails with a clear *"this flight has no First-class
-  seats"* rather than a generic "seat unavailable". This is the user's *"not
-  every flight has business/first/premium; but any flight with these features can
-  be booked into them"* — already true structurally (§2.3), this branch just
-  makes the error message honest and adds a **cabin-availability lookup** so a
-  client can ask "which cabins does this flight sell?" before booking.
+  flight fails with a clear *"this flight has no First-class cabin"*, not a
+  generic "seat unavailable". A **cabin-availability lookup** (§11) lets a client
+  ask which cabins a flight sells before booking.
 
 ---
 
-# 8. Fare Assembly
+# 8. Persisted Fare Breakdown
 
-- `FareCalculator.calculateFare(travelClass, fareType)` stays as the **cabin base
-  fare**. A new overload / wrapper adds the seat surcharge:
-  `totalPassengerFare = calculateFare(class, fareType) + seatSurcharge`.
-- The surcharge value comes from inventory (returned by the hold/seat-map call),
-  so booking doesn't duplicate the pricing rules — it just adds the number
-  inventory gives it. Single source of truth for seat pricing stays in inventory.
-- `BookingPassenger.fare` continues to store the **all-in per-passenger fare**
-  (base + surcharge), so payment, refunds, and invoicing need no changes — they
-  already read `fare`. The booking response gains a breakdown
-  (`baseFare` + `seatSurcharge`) for transparency, but the billed total is the
-  same field as today.
+**The review's #1 point.** `BookingPassenger` gains persisted, immutable-at-charge
+fields — the total alone is insufficient because config changes, an old booking
+must still show its original breakdown, and check-in comparisons need the
+surcharge *actually paid* (an auto window physically worth £12 but charged £0):
 
----
-
-# 9. Check-In Seat Changes
-
-`PATCH /api/checkins/{id}/seat` already exists. The free-vs-paid rule must hold
-here too, or a passenger games it (book a free auto seat, swap to a window at
-check-in for free):
-
-- Changing to a seat with a **higher** surcharge than the current one bills the
-  **difference** (a fare adjustment on the booking/payment).
-- Changing to an equal-or-lower seat is free (no refund of surcharge in v1 —
-  documented simplification, §11).
-- **Open question flagged (§12):** payment adjustment at check-in touches the
-  payment-service flow. The simplest v1 is to record the surcharge delta on the
-  booking and settle it as an additional charge; a fuller "authorize the delta at
-  check-in" flow may be deferred. This is the one genuinely cross-service wrinkle
-  and the design review should weigh in on how far to take it in this branch.
-
----
-
-# 10. API Changes
-
-Additive only — no breaking changes to existing request shapes:
-
-| Endpoint | Change |
+| New field on `BookingPassenger` | Meaning |
 |---|---|
-| `POST /api/bookings` | `seatNumber` per passenger becomes **truly optional** — omit it → free auto-assign; supply it → paid selection. (Today it's "optional but effectively required".) |
-| `GET /api/inventory/flight/{flightId}/seat-map` (inventory) | each seat gains `surcharge` + `available` so a client can render a seat map with prices |
-| `GET /api/inventory/flight/{flightId}/cabins` (new) | which cabins this flight sells + base fare + seat-count — lets a UI show "Economy from £100, Business from £350" |
-| `PATCH /api/checkins/{id}/seat` | applies the surcharge-difference rule (§9) |
-| Booking response | passenger gains `baseFare` + `seatSurcharge` breakdown alongside the existing all-in `fare` |
+| `baseFare` | cabin base fare at booking time (`FareCalculator` output) |
+| `seatSurcharge` | the **charged** surcharge (0 for AUTO, listed for MANUAL) |
+| `seatAssignmentMode` | `AUTO` / `MANUAL` |
+| `currency` | the fare currency (aligned with the booking's payment currency) |
+| `fare` (existing) | all-in total = `baseFare + seatSurcharge` |
+
+- Schema change via Hibernate `ddl-auto: update` (additive columns; existing rows
+  get sensible backfill defaults — `seatSurcharge=0`, `seatAssignmentMode=MANUAL`,
+  `baseFare=fare`).
+- **Refunds, invoices, and seat-change comparisons read these persisted values**,
+  never recompute from current inventory config. This is the invariant the whole
+  correction rests on.
+- The booking response exposes the breakdown; the total billed stays the existing
+  `fare` field, so payment's happy path is unchanged (it still charges `fare`).
 
 ---
 
-# 11. Deferred / Out of Scope
+# 9. Check-In Seat Changes — Contained v1
 
+**The review's #3 point, resolved decisively toward containment.** A paid upgrade
+at check-in needs a real payment saga (hold new → charge delta → confirm →
+release old → compensate on any failure) plus a supplemental-charge operation in
+payment-service. That is its own design; half-building it here is worse than
+scoping it out. So v1:
+
+- **Allowed:** change to a seat whose charged surcharge is **≤** the passenger's
+  persisted `seatSurcharge` (including same-price and downgrades). Cabin
+  compatibility still enforced (§7).
+- **No refund** on a voluntary downgrade (documented simplification).
+- **Rejected:** any change requiring *additional* payment, with a clear response:
+  > *"Paid seat upgrades must be completed through Manage Booking."*
+- The comparison uses the **persisted** `seatSurcharge` (§8) vs the target seat's
+  listed surcharge — not a recomputation of the old seat's price.
+
+Paid check-in upgrades + the payment saga + a payment-service supplemental-charge
+operation are a **separate future design** (§12).
+
+---
+
+# 10. Refund & Invoice Policy
+
+**The review's #7 point, made an explicit declared policy.**
+
+- **v1 policy: the seat surcharge follows the booking's fare-type refund policy.**
+  The `seatSurcharge` is part of the passenger `fare`, so on cancellation it is
+  refunded at the same percentage the fare-type rules already apply (e.g. a SAVER
+  cancellation fee applies to the whole fare including the surcharge). This
+  requires **no change to `RefundCalculator`** — it keeps operating on the total
+  fare — and is a defensible v1.
+- The alternative (**seat surcharge as a non-refundable ancillary**) is
+  deliberately **deferred** (§12): it needs a separate ancillary line item in
+  payment/invoice and a distinct refund path.
+- **Breakdown preservation:** the booking/payment events and the invoice must
+  carry the seat-fee component, not a single unexplained total. The persisted
+  breakdown (§8) is the source; `BookingEvent`, the payment fare snapshot, and the
+  invoice line items surface `baseFare` + `seatSurcharge` separately. (This is the
+  one place existing event/invoice DTOs gain fields — additive.)
+
+---
+
+# 11. API Changes & Ownership
+
+Additive; ownership boundaries corrected per review #4.
+
+| Endpoint | Change | Owner |
+|---|---|---|
+| `POST /api/bookings` | `seatNumber` per passenger truly optional — omit → free auto-assign; supply → paid selection | booking |
+| `POST /api/inventory/flights/{id}/holds/auto` (new) | atomic select-preferred-and-hold; returns seat + listed/charged surcharge | inventory |
+| `GET /api/inventory/flights/{id}/seat-map` | each seat gains `listedSurcharge` + `available` | inventory |
+| `GET /api/inventory/flights/{id}/cabins` (new) | **availability only** — `{travelClass, totalSeats, availableSeats}`, **no fares** | inventory |
+| `POST /api/bookings/quote` (new) | assembles fare options: inventory cabin availability **+** booking base fare (`FareCalculator`, incl. FareType) **+** seat surcharge options → "Economy from X, Business from Y" | booking |
+| `PATCH /api/checkins/{id}/seat` | applies the contained-v1 rule (§9) | check-in |
+| Booking response / events / invoice | gain `baseFare` + `seatSurcharge` + `seatAssignmentMode` breakdown alongside the all-in `fare` | booking |
+
+**Inventory never returns a fare.** The `/cabins` endpoint reports seats; the
+booking `/quote` endpoint is the only place cabin availability, base fare, and
+seat surcharges are combined — so `FareCalculator`'s rules are never duplicated in
+inventory.
+
+---
+
+# 12. Deferred / Out of Scope
+
+- **Paid seat upgrades at check-in + the payment saga + a payment-service
+  supplemental/ancillary-charge operation** (§9) — the biggest deferred piece;
+  its own design.
 - **Full Pricing Service** (dynamic pricing, fare rules, taxes, promotions,
-  coupons) — Phase 2; this branch is seat surcharge only, behind an interface the
-  Pricing Service can later implement (§4).
-- **Per-seat manual price overrides** (a stored `surcharge_override`) — attributes
-  drive price for now; overrides are a later nullable column.
-- **Refunding a surcharge** when downgrading a seat at check-in — v1 doesn't
-  refund the difference (§9); only upgrades are billed.
-- **Seat-map holds/timeouts for in-progress selection** (holding a seat while a
-  user browses) — the existing hold-on-book flow is enough; interactive-selection
-  holds are a frontend-era concern.
-- **Group/family seat-adjacency preferences** in auto-assign — v1 auto-assign is
-  per-passenger independent; keeping a family together is a nice-to-have later.
+  coupons) — Phase 2; this branch is seat surcharge behind an interface it can
+  take over (§4).
+- **A distinct `extraLegroom` seat attribute** (+ migration) — v1 prices `exitRow`
+  only and does not conflate the two (§2.2).
+- **Seat surcharge as a non-refundable ancillary** (separate line item + refund
+  path) — v1 folds it into the fare-type refund policy (§10).
+- **Per-seat manual price overrides** (`surcharge_override` column) — attributes
+  drive price for now.
+- **Exit-row passenger eligibility** (no minors/infants/reduced-mobility in exit
+  rows — the `SeatAllocationValidator` the `AircraftSeat` comment anticipates) —
+  deferred; auto-assign already avoids exit rows, and manual exit-row selection is
+  unrestricted in v1.
+- **Group/family seat-adjacency** in auto-assign; **interactive-selection holds**
+  (holding a seat while a user browses) — frontend-era concerns.
 
 ---
 
-# 12. Known Risks / Open Questions
+# 13. Known Risks / Open Questions
 
-- **Check-in surcharge settlement is the one cross-service wrinkle** (§9) — how
-  far to take payment adjustment at check-in is the main thing for review to
-  decide; everything else is contained to booking + inventory.
-- **Surcharge numbers are pre-tuning defaults** — same honesty clause as every
-  module; they're config, changeable without a deploy.
-- **Auto-assign "low demand" ordering is a heuristic** — middle-first is a
-  reasonable default but not load-tested; it's a config-ordered preference list,
-  not hard-coded.
-- **Race on the last free seat** — two concurrent auto-assigns could pick the same
-  seat; the existing `(flightId, seatNumber)` unique constraint + hold failure is
-  the backstop (one retries with the next preference). Needs a test
-  (concurrency), same pattern as checkin's existing `CheckInConcurrencyTest`.
-
----
-
-# 13. Build Order
-
-1. **`SeatPricingPolicy` in inventory** (§4) — pure attribute→surcharge function,
-   config-driven, unit-tested in isolation; surface `surcharge` on the seat-map
-   response.
-2. **Cabin-availability view** (§7) — `/cabins` endpoint + the "no such cabin on
-   this flight" clear error.
-3. **`AutoSeatAssignmentStrategy`** (§5) — dispatcher + free auto-pick; unit tests
-   for preference ordering and the always-free rule.
-4. **Fare assembly** (§8) — booking adds inventory's surcharge to the cabin base
-   fare; booking response breakdown.
-5. **Manual-selection surcharge** (§6) end-to-end through the gateway (choose a
-   window seat → fare reflects the surcharge; omit a seat → free auto seat).
-6. **Check-in seat-change surcharge** (§9) — the difference-billing rule, to the
-   agreed v1 depth.
-7. **Design doc → implemented + Implementation Notes**, house pattern.
+- **Backfill of existing bookings** — the new `BookingPassenger` columns need
+  sane defaults for rows created before this branch (`seatSurcharge=0`,
+  `seatAssignmentMode=MANUAL`, `baseFare=fare`); a one-time update, verified in
+  build step 1.
+- **Currency consistency** — `FareCalculator` today produces unitless `BigDecimal`
+  while payment labels amounts (e.g. USD). This branch persists an explicit
+  `currency` on the passenger aligned with the payment currency; unifying the
+  fare/payment currency convention fleet-wide is noted but not solved here.
+- **Surcharge numbers are pre-tuning defaults** — config, changeable without a
+  deploy.
+- **Auto-assign "low demand" ordering is a heuristic** — a config-ordered
+  preference list, not hard-coded; not load-tested.
+- **Atomic auto-hold contention** — the endpoint holds under the row/constraint
+  guard; a burst of auto-assigns serializes on the flight's inventory. Acceptable
+  at this scale; a documented limitation if the gateway ever fronts high booking
+  concurrency.
 
 ---
 
-# 14. Testing Plan
+# 14. Build Order
+
+1. **Persisted breakdown** (§8) — add the `BookingPassenger` columns + backfill;
+   verify existing bookings still read/refund correctly. Foundation for the rest.
+2. **`SeatPricingPolicy` in inventory** (§4) — attribute→listed-surcharge, `max`
+   composition, config-driven; surface `listedSurcharge` on the seat map;
+   unit-tested (incl. the "highest tier, not additive" rule).
+3. **Atomic auto-hold endpoint** (§5) — `POST /holds/auto`; preference ordering +
+   atomic hold + `chargedSurcharge=0`; concurrency test.
+4. **`AutoSeatAssignmentStrategy`** delegating to the atomic endpoint; booking
+   omit-seat → free auto seat end-to-end.
+5. **Manual-selection surcharge + fare assembly** (§3/§6/§8) — booking persists
+   base + charged surcharge + mode; response breakdown.
+6. **Cabin availability + booking quote** (§7/§11) — inventory `/cabins`
+   (availability only) + booking `/quote` (assembles fares); clear "no such cabin"
+   error.
+7. **Check-in contained-v1 rule** (§9) — allow ≤-surcharge changes with cabin
+   check, reject upgrades with the Manage-Booking message.
+8. **Refund/invoice breakdown preservation** (§10) — events/invoice carry the
+   seat-fee component; confirm refund uses the persisted total.
+9. **Design doc → implemented + Implementation Notes**, house pattern.
+
+---
+
+# 15. Testing Plan
 
 | Layer | What's tested |
 |---|---|
-| Seat pricing | `SeatPricingPolicy` — each attribute combination maps to the configured surcharge; middle economy = 0 |
-| Auto-assign | no seat supplied → a free, in-cabin, low-demand seat is chosen; surcharge 0; respects the preference ordering |
-| Manual paid | window/exit-row seat supplied → fare = base + that seat's surcharge |
-| Cabin rules | FIRST requested on an A320 flight → clear "no First cabin" error; ECONOMY ticket can't take a BUSINESS seat |
-| Fare assembly | `BookingPassenger.fare` = base + surcharge; response breakdown correct; payment/refund unaffected (read the same `fare`) |
-| Check-in change | upgrade seat → surcharge difference billed; same/lower → free |
-| Concurrency | two auto-assigns racing the last seat → one wins, one falls through to the next preference (no double-book) |
-| End-to-end | through the gateway on a seeded flight: (a) book with no seat → free middle economy; (b) book choosing 1A on the 777 → First-cabin fare + window surcharge; (c) book FIRST on an A320 flight → rejected |
-| Regression | full reactor `mvn clean verify` green; existing booking tests updated for the now-optional seat |
+| Seat pricing | `SeatPricingPolicy`: each attribute → configured listed surcharge; **window+exit-row = exit-row tier, not the sum**; middle economy = 0 |
+| Auto-assign (atomic) | omit seat → in-cabin low-demand seat held; `chargedSurcharge=0` even if only windows remain; preference ordering respected |
+| Manual paid | choose window/exit-row → `chargedSurcharge = listedSurcharge`; fare = base + surcharge |
+| Listed vs charged | auto 12A → charged 0 / listed 12; manual 12A → charged 12 / listed 12; **persisted** `seatSurcharge` matches charged |
+| Persisted breakdown | `baseFare`+`seatSurcharge`+`mode`+`currency` stored; response/invoice/event breakdown correct; refund reads persisted total, not recomputed |
+| Cabin rules | FIRST on an A320 flight → clear "no First cabin"; ECONOMY ticket can't take a BUSINESS seat — at booking **and** check-in |
+| Check-in v1 | downgrade/same → allowed, no refund; upgrade → rejected with the Manage-Booking message; cross-cabin → rejected |
+| Concurrency | two atomic auto-assigns racing the last seat → one wins, one gets the next preference (no double-book) |
+| End-to-end (gateway, seeded flight) | (a) no seat → free middle economy; (b) choose 1A on the 777 → First base fare + window surcharge, persisted; (c) FIRST on an A320 flight → rejected |
+| Regression | full reactor `mvn clean verify` green; existing booking/refund tests updated for the now-optional seat + persisted breakdown |
