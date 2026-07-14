@@ -16,6 +16,7 @@ import com.skybook.praveen.bookingservice.entity.BookingPayment;
 import com.skybook.praveen.bookingservice.entity.Passenger;
 import com.skybook.praveen.bookingservice.enums.BookingStatus;
 import com.skybook.praveen.bookingservice.enums.CheckInStatus;
+import com.skybook.praveen.bookingservice.enums.SeatAssignmentMode;
 import com.skybook.praveen.bookingservice.enums.PaymentStatus;
 import com.skybook.praveen.bookingservice.exception.BookingNotFoundException;
 import com.skybook.praveen.bookingservice.exception.BookingPassengerNotFoundException;
@@ -73,7 +74,13 @@ public class BookingServiceImpl implements BookingService {
             Passenger passenger = PassengerMapper.toEntity(detail);
             bookingValidator.validatePassportValidForTravel(passenger, flightDepartureTime);
 
-            BigDecimal fare = fareCalculator.calculateFare(detail.travelClass(), detail.fareType());
+            // Persisted fare breakdown (SEAT_SELECTION_MODULE.md §8). Seat
+            // surcharge is 0 / mode MANUAL here; the auto-assignment and
+            // surcharge wiring (later build-order steps) set them from the
+            // inventory hold result. Total stays base + surcharge.
+            BigDecimal baseFare = fareCalculator.calculateFare(detail.travelClass(), detail.fareType());
+            BigDecimal seatSurcharge = BigDecimal.ZERO;
+            BigDecimal fare = baseFare.add(seatSurcharge);
 
             BookingPassenger bookingPassenger = BookingPassenger.builder()
                     .booking(booking)
@@ -81,6 +88,10 @@ public class BookingServiceImpl implements BookingService {
                     .flightId(request.flightId())
                     .travelClass(detail.travelClass())
                     .fareType(detail.fareType())
+                    .baseFare(baseFare)
+                    .seatSurcharge(seatSurcharge)
+                    .seatAssignmentMode(SeatAssignmentMode.MANUAL)
+                    .currency(DEFAULT_CURRENCY)
                     .fare(fare)
                     .checkInStatus(CheckInStatus.NOT_OPEN)
                     .build();

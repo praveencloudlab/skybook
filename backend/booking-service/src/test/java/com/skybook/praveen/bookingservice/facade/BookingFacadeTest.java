@@ -64,7 +64,10 @@ class BookingFacadeTest {
 
     private BookingPassengerResponse passenger(long id, String seat) {
         return new BookingPassengerResponse(id, id + 100, "Pax", "Test", "N000" + id,
-                TravelClass.ECONOMY, FareType.FLEXI, seat, new BigDecimal("100.00"), CheckInStatus.NOT_OPEN);
+                TravelClass.ECONOMY, FareType.FLEXI, seat,
+                new BigDecimal("100.00"), BigDecimal.ZERO,
+                com.skybook.praveen.bookingservice.enums.SeatAssignmentMode.MANUAL, "USD",
+                new BigDecimal("100.00"), CheckInStatus.NOT_OPEN);
     }
 
     private BookingResponse booking(BookingStatus status, String... seats) {
