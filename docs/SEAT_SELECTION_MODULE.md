@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | Free auto-assignment + paid seat selection; per-seat surcharge pricing by attribute; cabin-aware assignment; enforced at booking **and** check-in; original fare breakdown persisted per passenger |
 | **Branch** | `feature/seat-selection` |
-| **Status** | **Frozen after five review rounds — final; redesigning stops here per the reviewer's own instruction.** R5: real `DRAFT` booking status + `DRAFT→CREATED` finalization + stale-draft sweep + **V3 check-constraint migration** (self-audit: the V1 baseline's status CHECK would reject DRAFT at the DB); defined hold-idempotency semantics under the flight lock (replay-safe, 409 on conflicting manual re-request); inventory authoritatively enforces check-in cabin + surcharge ceiling via an extended reserve contract (travelClass + maxAllowedSurcharge) with new-reservation compensation on local failure; Payment/Invoice gain baseFareTotal/seatSurchargeTotal aggregates with `fareBreakdown` untouched; the String `SeatAssignmentStrategy` contract is deleted, not repurposed. Earlier rounds: | R1: persisted breakdown, atomic inventory auto-hold, deferred paid check-in upgrades, availability-not-fares, listed-vs-charged, exit-row≠extra-legroom, refund policy. R2: explicit migration not ddl-auto, per-flight lock, USD-only, chargedSeatAssignmentMode rename, exhaustion + cabin-relative front rows. R3: auto-assignment moves into BookingFacade's draft→hold→finalize flow (seat_number nullable in draft); shared pessimistic flight-lock for manual AND auto holds; SeatPricingPolicy takes CabinPricingContext + deterministic ordering tuple; Flyway as the migration mechanism; entitlement-ceiling check-in rule. **R4: Flyway V1-baseline + V2-delta pair with `baseline-version: 1` and `ddl-auto: validate` (fresh-DB bootstrap fixed); BookingPayment created at finalization, not draft (fare/total/payment invariant at publish); CheckIn persists `seatSurchargeEntitlement`+`currency` snapshotted from the extended BookingEventPassenger (legacy null ⇒ 0); manual hold gains `travelClass`+`bookingPassengerId` (symmetric contracts, SeatHold persists the passenger id); §13 Flyway contradiction removed.** Implementation per §14. |
+| **Status** | **Frozen after six review rounds — architecture final.** R6 (persistence rule only, no flow change): `SeatHold` snapshots `assignmentMode`/`listedSurcharge`/`chargedSurcharge` immutably at creation and every replay returns the stored values — money-level idempotency, robust to config changes between call and replay; mode-mismatch replays are 409s; legacy null-snapshot holds are released-and-replaced (self-audit: inventory has no Flyway and `seat_holds` is populated, so the columns land DB-nullable additive). Plus three doc-consistency cleanups (§1 strategy wording, V3 in the migration tests, §11 invoice-aggregate wording). Earlier: | R5: real `DRAFT` booking status + `DRAFT→CREATED` finalization + stale-draft sweep + **V3 check-constraint migration** (self-audit: the V1 baseline's status CHECK would reject DRAFT at the DB); defined hold-idempotency semantics under the flight lock (replay-safe, 409 on conflicting manual re-request); inventory authoritatively enforces check-in cabin + surcharge ceiling via an extended reserve contract (travelClass + maxAllowedSurcharge) with new-reservation compensation on local failure; Payment/Invoice gain baseFareTotal/seatSurchargeTotal aggregates with `fareBreakdown` untouched; the String `SeatAssignmentStrategy` contract is deleted, not repurposed. Earlier rounds: | R1: persisted breakdown, atomic inventory auto-hold, deferred paid check-in upgrades, availability-not-fares, listed-vs-charged, exit-row≠extra-legroom, refund policy. R2: explicit migration not ddl-auto, per-flight lock, USD-only, chargedSeatAssignmentMode rename, exhaustion + cabin-relative front rows. R3: auto-assignment moves into BookingFacade's draft→hold→finalize flow (seat_number nullable in draft); shared pessimistic flight-lock for manual AND auto holds; SeatPricingPolicy takes CabinPricingContext + deterministic ordering tuple; Flyway as the migration mechanism; entitlement-ceiling check-in rule. **R4: Flyway V1-baseline + V2-delta pair with `baseline-version: 1` and `ddl-auto: validate` (fresh-DB bootstrap fixed); BookingPayment created at finalization, not draft (fare/total/payment invariant at publish); CheckIn persists `seatSurchargeEntitlement`+`currency` snapshotted from the extended BookingEventPassenger (legacy null ⇒ 0); manual hold gains `travelClass`+`bookingPassengerId` (symmetric contracts, SeatHold persists the passenger id); §13 Flyway contradiction removed.** Implementation per §14. |
 
 Goal: model seats the way real airlines do. A passenger who doesn't care gets a
 low-demand seat **auto-assigned for free**; a passenger who wants a specific
@@ -46,8 +46,9 @@ booking always shows what it actually charged, never what today's config says.
 Three capabilities plus one correctness backbone, all landing on seams the
 codebase already built:
 
-- **Free auto-assignment** — the empty `AutoSeatAssignmentStrategy` slot the
-  `SeatAssignmentStrategy` interface was designed for. **Selection *and* hold
+- **Free auto-assignment** — `BookingFacade` selects AUTO for a blank requested
+  seat and delegates atomic seat selection to inventory-service (the old
+  `SeatAssignmentStrategy` interface is deleted, §5.1). **Selection *and* hold
   happen atomically inside inventory-service** (review correction #2), not as a
   query-then-hold from booking, so there's no time-of-check/time-of-use race.
 - **Per-seat surcharge pricing** — a config-driven `SeatPricingPolicy` in
@@ -328,19 +329,48 @@ When the passenger supplies a seat number:
   ```
 
   Inventory owns the authoritative cabin validation on **both** paths.
-- **`SeatHold` persists `bookingPassengerId`** (today it stores only `bookingId`) —
-  and the idempotency it enables is **defined behavior, not an implication of the
-  column existing** (review round 5, correction #2). Under the shared flight lock,
-  every hold request first looks up the passenger's active hold
-  (`findByFlightInventoryIdAndBookingPassengerIdAndStatus(…, ACTIVE)`, backed by an
-  index on `(flight_inventory_id, booking_passenger_id, status)`), then:
+- **`SeatHold` persists `bookingPassengerId` AND snapshots the pricing decision**
+  (review rounds 5+6). Today it stores only `bookingId`, no mode, no prices —
+  which makes replay *row*-idempotent but not *money*-idempotent: a replayed
+  request couldn't know whether the stored hold was AUTO or MANUAL (an AUTO
+  retry against a MANUAL 12A hold would silently turn a charged $12 into $0),
+  and recomputing the price from current config would let a config change
+  between call and replay alter what the client is told
+  (10:00 hold at $12 → config bump → 10:01 replay says $15 — not idempotent).
+  So the hold row snapshots, immutably at creation
+  (`nullable = false, updatable = false`):
 
-  | Existing ACTIVE hold for this passenger? | Behavior |
-  |---|---|
-  | none | create the hold |
-  | yes, same requested seat (MANUAL replay) | return the existing hold — idempotent |
-  | yes, AUTO retry | return the existing auto-assigned hold — idempotent |
-  | yes, but a *different* manually requested seat | **409 Conflict** — an explicit release/change flow is required, never a silent second hold |
+  ```
+  assignmentMode    AUTO | MANUAL
+  listedSurcharge   policy result at hold time
+  chargedSurcharge  = listedSurcharge (MANUAL) | 0.00 (AUTO)
+  ```
+
+  **Replay always returns the stored values — an existing hold's price is never
+  recalculated.** The hold response is authoritative *because* it is persisted.
+- The idempotency semantics are **defined behavior, not an implication of the
+  columns existing**. Under the shared flight lock, every hold request first
+  looks up the passenger's active hold
+  (`findByFlightInventoryIdAndBookingPassengerIdAndStatus(…, ACTIVE)`, backed by
+  an index on `(flight_inventory_id, booking_passenger_id, status)`), then:
+
+  | Request | Existing ACTIVE hold | Behavior |
+  |---|---|---|
+  | any | none | create hold with snapshot |
+  | AUTO | AUTO | return stored hold (mode, listed, charged) — idempotent |
+  | AUTO | MANUAL | **409** — conflicting assignment mode, never a silent free-ification |
+  | MANUAL same seat | MANUAL | return stored hold — idempotent |
+  | MANUAL different seat | MANUAL | **409** — explicit release/change flow required |
+  | MANUAL | AUTO | **409** — conflicting assignment mode |
+
+- **Legacy-hold transition** (self-audit, same class as the round-6 catch):
+  inventory has no Flyway and `seat_holds` is populated, so the three snapshot
+  columns land as **DB-nullable additive** columns (`ddl-auto: update` can add
+  those), with the service always populating them for new rows. A pre-branch
+  ACTIVE hold (null snapshot) is **not replay-eligible**: the lookup releases it
+  through the normal release path (counts stay correct) and creates a fresh
+  snapshotted hold. Exposure window is bounded by the 15-minute hold TTL after
+  deploy, then null-snapshot ACTIVE holds cannot exist.
 - Held via the `/hold` path, whose response now carries
   `{assignmentMode: MANUAL, listedSurcharge, chargedSurcharge}` with
   `chargedSurcharge == listedSurcharge`.
@@ -540,7 +570,8 @@ Additive; ownership boundaries corrected per review #4.
 | `GET /api/inventory/flights/{id}/cabins` (new) | **availability only** — `{travelClass, totalSeats, availableSeats}`, **no fares** | inventory |
 | `POST /api/bookings/quote` (new) | assembles fare options: inventory cabin availability **+** booking base fare (`FareCalculator`, incl. FareType) **+** seat surcharge options → "Economy from X, Business from Y" | booking |
 | `PATCH /api/checkins/{id}/seat` | applies the contained-v1 rule (§9) | check-in |
-| Booking response / events / invoice | gain `baseFare` + `seatSurcharge` + `chargedSeatAssignmentMode` breakdown alongside the all-in `fare` | booking |
+| Booking response / events | gain per-passenger `baseFare` + `seatSurcharge` + `chargedSeatAssignmentMode` alongside the all-in `fare` | booking |
+| Payment / Invoice | gain **aggregate** snapshots `baseFareTotal` + `seatSurchargeTotal` (§10) — no per-passenger line items; `fareBreakdown` untouched | payment |
 
 **Inventory never returns a fare.** The `/cabins` endpoint reports seats; the
 booking `/quote` endpoint is the only place cabin availability, base fare, and
@@ -663,7 +694,8 @@ inventory.
 | Cabin rules | FIRST on an A320 flight → clear "no First cabin"; ECONOMY ticket can't take a BUSINESS seat — at booking **and** check-in |
 | Check-in v1 | downgrade/same → allowed, no refund; upgrade → rejected with the Manage-Booking message; cross-cabin → rejected |
 | Concurrency | two atomic auto-assigns racing the last seat → **different seats, no rollback-only error, counts correct**; auto vs MANUAL hold racing the same seat → serialized by the shared flight lock |
-| Migration (round 4) | fresh empty DB → V1+V2 produce the full schema; existing populated DB → baselined at 1, only V2 runs, backfill correct; both converge on the identical schema (`ddl-auto: validate` passes on each) |
+| Migration (rounds 4-6) | fresh empty DB → **V1+V2+V3** produce the full schema (incl. the DRAFT-admitting status CHECK); existing populated DB → baselined at 1, **V2+V3** run, backfill correct; both converge on the identical schema (`ddl-auto: validate` passes on each) |
+| Hold snapshot idempotency (round 6) | replay returns the STORED mode/listed/charged even after a pricing-config change between call and replay; AUTO request against a MANUAL hold → 409 (never a silent $12→$0); legacy null-snapshot ACTIVE hold → released and re-held with a fresh snapshot, counts correct |
 | Payment invariant (round 4) | at `BookingCreated` publish: `sum(passenger.fare) = Booking.totalFare = BookingPayment.amount`; no payment row exists during the draft stage |
 | Entitlement snapshot (round 4) | CONFIRMED event with breakdown fields → `CheckIn.seatSurchargeEntitlement` populated; event without them (legacy) → entitlement null ⇒ treated as 0 (only free seats reachable at check-in) |
 | Manual-hold cabin enforcement (round 4) | manual `/hold` with `travelClass=ECONOMY` on a BUSINESS seat → rejected by inventory; `bookingPassengerId` persisted on the hold |
