@@ -1,6 +1,8 @@
 package com.skybook.praveen.inventoryservice.service.impl;
 
+import com.skybook.praveen.inventoryservice.domain.CabinPricingContext;
 import com.skybook.praveen.inventoryservice.domain.SeatMapGenerator;
+import com.skybook.praveen.inventoryservice.domain.SeatPricingPolicy;
 import com.skybook.praveen.inventoryservice.dto.request.CreateAircraftSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.CreateSeatMapRequest;
 import com.skybook.praveen.inventoryservice.dto.response.AircraftSeatResponse;
@@ -8,6 +10,7 @@ import com.skybook.praveen.inventoryservice.dto.response.SeatMapResponse;
 import com.skybook.praveen.inventoryservice.entity.Aircraft;
 import com.skybook.praveen.inventoryservice.entity.AircraftSeat;
 import com.skybook.praveen.inventoryservice.enums.AircraftSeatStatus;
+import com.skybook.praveen.inventoryservice.enums.SeatType;
 import com.skybook.praveen.inventoryservice.exception.AircraftNotFoundException;
 import com.skybook.praveen.inventoryservice.exception.AircraftSeatNotFoundException;
 import com.skybook.praveen.inventoryservice.mapper.AircraftMapper;
@@ -21,6 +24,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
 
 @Slf4j
 @Service
@@ -31,6 +36,7 @@ public class AircraftSeatServiceImpl implements AircraftSeatService {
     private final AircraftSeatRepository aircraftSeatRepository;
 
     private final SeatMapGenerator seatMapGenerator;
+    private final SeatPricingPolicy seatPricingPolicy;
 
     @Override
     @Transactional
@@ -42,7 +48,7 @@ public class AircraftSeatServiceImpl implements AircraftSeatService {
         List<AircraftSeat> created = seatMapGenerator.generate(aircraft, List.of(request));
 
         log.info("Added seat {} to aircraft {}", request.seatNumber(), aircraft.getRegistrationNumber());
-        return AircraftSeatMapper.toResponse(created.getFirst());
+        return priced(aircraft, created).getFirst();
     }
 
     @Override
@@ -56,28 +62,28 @@ public class AircraftSeatServiceImpl implements AircraftSeatService {
         log.info("Created {} seats on aircraft {} (total now {})",
                 created.size(), aircraft.getRegistrationNumber(), aircraft.getTotalSeats());
 
-        return created.stream().map(AircraftSeatMapper::toResponse).toList();
+        return priced(aircraft, created);
     }
 
     @Override
     @Transactional(readOnly = true)
     public SeatMapResponse getSeatMap(Long aircraftId) {
-        return AircraftMapper.toSeatMapResponse(findAircraft(aircraftId));
+        Aircraft aircraft = findAircraft(aircraftId);
+        return AircraftMapper.toSeatMapResponse(aircraft, priced(aircraft, aircraft.getSeats()));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<AircraftSeatResponse> getSeatsByStatus(Long aircraftId, AircraftSeatStatus status) {
-        findAircraft(aircraftId); // 404 for unknown aircraft rather than an empty list
-        return aircraftSeatRepository.findByAircraftIdAndStatus(aircraftId, status)
-                .stream().map(AircraftSeatMapper::toResponse).toList();
+        Aircraft aircraft = findAircraft(aircraftId); // 404 for unknown aircraft rather than an empty list
+        return priced(aircraft, aircraftSeatRepository.findByAircraftIdAndStatus(aircraftId, status));
     }
 
     @Override
     @Transactional
     public AircraftSeatResponse updateSeatStatus(Long aircraftId, String seatNumber, AircraftSeatStatus newStatus) {
 
-        findAircraft(aircraftId);
+        Aircraft aircraft = findAircraft(aircraftId);
 
         AircraftSeat seat = aircraftSeatRepository.findByAircraftIdAndSeatNumber(aircraftId, seatNumber)
                 .orElseThrow(() -> new AircraftSeatNotFoundException(aircraftId, seatNumber));
@@ -86,7 +92,24 @@ public class AircraftSeatServiceImpl implements AircraftSeatService {
         seat.setStatus(newStatus);
 
         log.info("Seat {} on aircraft id {} status: {} -> {}", seatNumber, aircraftId, from, newStatus);
-        return AircraftSeatMapper.toResponse(seat);
+        return priced(aircraft, List.of(seat)).getFirst();
+    }
+
+    /**
+     * Maps seats to responses with their LISTED surcharge (design §3/§4).
+     * Cabin contexts always derive from the aircraft's FULL seat list - pricing
+     * a filtered subset against itself would misplace each cabin's first row.
+     * The seats being priced are unioned in so a just-added seat (not yet
+     * flushed into the loaded collection) still gets its cabin's first row.
+     */
+    private List<AircraftSeatResponse> priced(Aircraft aircraft, List<AircraftSeat> seats) {
+        List<AircraftSeat> all = Stream.concat(aircraft.getSeats().stream(), seats.stream())
+                .distinct().toList();
+        Map<SeatType, CabinPricingContext> cabins = seatPricingPolicy.cabinContexts(all);
+        return seats.stream()
+                .map(seat -> AircraftSeatMapper.toResponse(seat,
+                        seatPricingPolicy.calculateListedSurcharge(seat, cabins.get(seat.getSeatType()))))
+                .toList();
     }
 
     private Aircraft findAircraft(Long aircraftId) {

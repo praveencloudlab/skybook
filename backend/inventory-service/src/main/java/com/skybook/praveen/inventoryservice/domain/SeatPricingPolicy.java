@@ -3,11 +3,16 @@ package com.skybook.praveen.inventoryservice.domain;
 import com.skybook.praveen.inventoryservice.config.SeatPricingProperties;
 import com.skybook.praveen.inventoryservice.entity.AircraftSeat;
 import com.skybook.praveen.inventoryservice.enums.SeatPosition;
+import com.skybook.praveen.inventoryservice.enums.SeatType;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * The LISTED surcharge of a physical seat (SEAT_SELECTION_MODULE.md §3/§4):
@@ -51,5 +56,21 @@ public class SeatPricingPolicy {
         }
 
         return max.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Derives each cabin's {@link CabinPricingContext} from an aircraft's seat
+     * list: a cabin's first row is the lowest rowNumber among its seatType
+     * (§4, round 3 - Business row 3 on a 777 is that cabin's front row).
+     * Pass the FULL seat list, not a filtered one, or the minimum lies.
+     */
+    public Map<SeatType, CabinPricingContext> cabinContexts(Collection<AircraftSeat> seats) {
+        return seats.stream().collect(Collectors.groupingBy(
+                AircraftSeat::getSeatType,
+                Collectors.collectingAndThen(
+                        Collectors.minBy(Comparator.comparingInt(AircraftSeat::getRowNumber)),
+                        min -> new CabinPricingContext(
+                                min.orElseThrow().getRowNumber(),
+                                properties.getFrontRowCount()))));
     }
 }
