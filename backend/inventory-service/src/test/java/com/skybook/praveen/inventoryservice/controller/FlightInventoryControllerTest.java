@@ -1,6 +1,7 @@
 package com.skybook.praveen.inventoryservice.controller;
 
 import com.skybook.praveen.inventoryservice.config.SecurityConfig;
+import com.skybook.praveen.inventoryservice.dto.request.AutoHoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.CreateFlightInventoryRequest;
 import com.skybook.praveen.inventoryservice.dto.request.HoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.InventorySearchRequest;
@@ -8,6 +9,7 @@ import com.skybook.praveen.inventoryservice.dto.request.ReleaseSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.response.FlightInventoryResponse;
 import com.skybook.praveen.inventoryservice.dto.response.SeatHoldResponse;
 import com.skybook.praveen.inventoryservice.enums.InventoryStatus;
+import com.skybook.praveen.inventoryservice.enums.SeatAssignmentMode;
 import com.skybook.praveen.inventoryservice.enums.SeatHoldStatus;
 import com.skybook.praveen.inventoryservice.exception.FlightInventoryNotFoundException;
 import com.skybook.praveen.inventoryservice.exception.FlightNotFoundForInventoryException;
@@ -24,6 +26,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -57,7 +60,15 @@ class FlightInventoryControllerTest {
     }
 
     private SeatHoldResponse holdResponse() {
-        return new SeatHoldResponse(5L, 100L, 2L, "12A", 42L, SeatHoldStatus.ACTIVE, now, now.plusMinutes(15));
+        return new SeatHoldResponse(5L, 100L, 2L, "12A", 42L, 420L, SeatAssignmentMode.MANUAL,
+                new BigDecimal("12.00"), new BigDecimal("12.00"),
+                SeatHoldStatus.ACTIVE, now, now.plusMinutes(15));
+    }
+
+    private SeatHoldResponse autoHoldResponse() {
+        return new SeatHoldResponse(6L, 100L, 3L, "20B", 42L, 420L, SeatAssignmentMode.AUTO,
+                new BigDecimal("12.00"), new BigDecimal("0.00"),
+                SeatHoldStatus.ACTIVE, now, now.plusMinutes(15));
     }
 
     @Test
@@ -152,11 +163,39 @@ class FlightInventoryControllerTest {
         mockMvc.perform(post("/api/inventory/hold")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"flightId":100,"seatNumber":"12A","bookingId":42}
+                                {"flightId":100,"seatNumber":"12A","bookingId":42,
+                                 "bookingPassengerId":420,"travelClass":"ECONOMY"}
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
-                .andExpect(jsonPath("$.seatNumber").value("12A"));
+                .andExpect(jsonPath("$.seatNumber").value("12A"))
+                .andExpect(jsonPath("$.assignmentMode").value("MANUAL"))
+                .andExpect(jsonPath("$.chargedSurcharge").value(12.00));
+    }
+
+    @Test
+    void holdMissingTravelClassReturns400() throws Exception {
+        mockMvc.perform(post("/api/inventory/hold")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"flightId":100,"seatNumber":"12A","bookingId":42,"bookingPassengerId":420}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void autoHoldReturns201WithZeroCharge() throws Exception {
+        when(inventoryFacade.autoHoldSeat(eq(100L), any(AutoHoldSeatRequest.class)))
+                .thenReturn(autoHoldResponse());
+
+        mockMvc.perform(post("/api/inventory/flights/100/holds/auto")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"bookingId":42,"bookingPassengerId":420,"travelClass":"ECONOMY"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.assignmentMode").value("AUTO"))
+                .andExpect(jsonPath("$.chargedSurcharge").value(0.00));
     }
 
     @Test
@@ -167,7 +206,8 @@ class FlightInventoryControllerTest {
         mockMvc.perform(post("/api/inventory/hold")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"flightId":100,"seatNumber":"12A","bookingId":42}
+                                {"flightId":100,"seatNumber":"12A","bookingId":42,
+                                 "bookingPassengerId":420,"travelClass":"ECONOMY"}
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Seat 12A on flight 100 is already held"));

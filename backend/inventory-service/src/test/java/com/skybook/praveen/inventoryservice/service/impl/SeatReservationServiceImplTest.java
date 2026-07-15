@@ -1,8 +1,11 @@
 package com.skybook.praveen.inventoryservice.service.impl;
 
+import com.skybook.praveen.inventoryservice.config.SeatPricingProperties;
+import com.skybook.praveen.inventoryservice.domain.AutoSeatSelector;
 import com.skybook.praveen.inventoryservice.domain.InventoryStateMachine;
 import com.skybook.praveen.inventoryservice.domain.SeatAllocationValidator;
 import com.skybook.praveen.inventoryservice.domain.SeatHoldExpiryCalculator;
+import com.skybook.praveen.inventoryservice.domain.SeatPricingPolicy;
 import com.skybook.praveen.inventoryservice.dto.request.ReleaseSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.ReserveSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.response.SeatReservationResponse;
@@ -74,10 +77,12 @@ class SeatReservationServiceImplTest {
 
         // Real InventoryServiceImpl (with mocked repositories) so the count
         // bookkeeping shared between the two services is exercised for real.
+        SeatPricingPolicy pricingPolicy = new SeatPricingPolicy(new SeatPricingProperties());
         InventoryServiceImpl inventoryService = new InventoryServiceImpl(
                 flightInventoryRepository, aircraftRepository, aircraftSeatRepository,
                 seatHoldRepository, seatReservationRepository, inventoryHistoryRepository,
-                stateMachine, validator, calculator);
+                stateMachine, validator, calculator, pricingPolicy,
+                new AutoSeatSelector(pricingPolicy));
 
         reservationService = new SeatReservationServiceImpl(
                 seatReservationRepository, seatHoldRepository,
