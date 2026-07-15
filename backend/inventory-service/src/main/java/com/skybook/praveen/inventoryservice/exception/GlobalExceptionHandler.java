@@ -30,6 +30,7 @@ public class GlobalExceptionHandler {
             SeatAlreadyHeldException.class,
             SeatAlreadyReservedException.class,
             SeatNotAvailableException.class,
+            SeatCabinMismatchException.class,
             InventoryConflictException.class
     })
     public ResponseEntity<ErrorResponse> handleSeatConflict(

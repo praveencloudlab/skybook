@@ -17,6 +17,7 @@ import com.skybook.praveen.inventoryservice.enums.AircraftSeatStatus;
 import com.skybook.praveen.inventoryservice.enums.AircraftStatus;
 import com.skybook.praveen.inventoryservice.enums.InventoryHistoryType;
 import com.skybook.praveen.inventoryservice.enums.InventoryStatus;
+import com.skybook.praveen.inventoryservice.enums.SeatAssignmentMode;
 import com.skybook.praveen.inventoryservice.enums.SeatHoldStatus;
 import com.skybook.praveen.inventoryservice.enums.SeatPosition;
 import com.skybook.praveen.inventoryservice.enums.SeatReservationStatus;
@@ -133,13 +134,17 @@ class InventoryMappersTest {
     void seatHoldMapsExpiryAndFlattensSeatAndFlight() {
         SeatHold hold = SeatHold.builder()
                 .id(5L).flightInventory(inventory()).aircraftSeat(seat()).bookingId(42L)
+                .bookingPassengerId(420L).assignmentMode(SeatAssignmentMode.MANUAL)
+                .listedSurcharge(new BigDecimal("30.00")).chargedSurcharge(new BigDecimal("30.00"))
                 .status(SeatHoldStatus.ACTIVE).heldAt(now).expiresAt(now.plusMinutes(15))
                 .build();
 
         SeatHoldResponse response = SeatHoldMapper.toResponse(hold);
 
         assertThat(response).isEqualTo(new SeatHoldResponse(
-                5L, 100L, 2L, "12A", 42L, SeatHoldStatus.ACTIVE, now, now.plusMinutes(15)));
+                5L, 100L, 2L, "12A", 42L, 420L, SeatAssignmentMode.MANUAL,
+                new BigDecimal("30.00"), new BigDecimal("30.00"),
+                SeatHoldStatus.ACTIVE, now, now.plusMinutes(15)));
     }
 
     @Nested
