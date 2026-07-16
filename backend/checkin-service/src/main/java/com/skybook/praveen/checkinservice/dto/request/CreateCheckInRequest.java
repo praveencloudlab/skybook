@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -47,6 +48,15 @@ public record CreateCheckInRequest(
         String travelClass,
 
         String fareType,
+
+        /**
+         * Seat surcharge the passenger PAID at booking (SEAT_SELECTION_MODULE.md
+         * §9) - the free-seat-change ceiling. Null on legacy events => 0.
+         */
+        BigDecimal seatSurchargeEntitlement,
+
+        /** ISO-4217 of the entitlement; null on legacy events. */
+        String entitlementCurrency,
 
         boolean documentVerified
 

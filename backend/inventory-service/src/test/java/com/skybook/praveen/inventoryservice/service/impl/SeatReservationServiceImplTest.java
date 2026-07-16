@@ -19,10 +19,13 @@ import com.skybook.praveen.inventoryservice.enums.AircraftStatus;
 import com.skybook.praveen.inventoryservice.enums.InventoryHistoryType;
 import com.skybook.praveen.inventoryservice.enums.InventoryStatus;
 import com.skybook.praveen.inventoryservice.enums.SeatHoldStatus;
+import com.skybook.praveen.inventoryservice.enums.SeatPosition;
 import com.skybook.praveen.inventoryservice.enums.SeatReservationStatus;
+import com.skybook.praveen.inventoryservice.enums.SeatType;
 import com.skybook.praveen.inventoryservice.exception.InventoryConflictException;
 import com.skybook.praveen.inventoryservice.exception.SeatAlreadyHeldException;
 import com.skybook.praveen.inventoryservice.exception.SeatAlreadyReservedException;
+import com.skybook.praveen.inventoryservice.exception.SeatCabinMismatchException;
 import com.skybook.praveen.inventoryservice.exception.SeatHoldExpiredException;
 import com.skybook.praveen.inventoryservice.repository.AircraftRepository;
 import com.skybook.praveen.inventoryservice.repository.AircraftSeatRepository;
@@ -37,12 +40,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -93,7 +98,11 @@ class SeatReservationServiceImplTest {
 
         seat = AircraftSeat.builder()
                 .id(2L).aircraft(aircraft).seatNumber("12A").rowNumber(12)
+                .seatType(SeatType.ECONOMY).position(SeatPosition.WINDOW)
                 .status(AircraftSeatStatus.ACTIVE).exitRow(false).build();
+        // The §9 ceiling check prices the seat against its cabin's context,
+        // which derives from the aircraft's seat map.
+        aircraft.getSeats().add(seat);
 
         inventory = FlightInventory.builder()
                 .id(10L).flightId(100L).aircraft(aircraft)
@@ -101,7 +110,10 @@ class SeatReservationServiceImplTest {
                 .totalSeats(3).availableSeats(3).heldSeats(0).reservedSeats(0).blockedSeats(0)
                 .build();
 
-        when(flightInventoryRepository.findByFlightId(100L)).thenReturn(Optional.of(inventory));
+        // reserveSeat takes the pessimistic FOR UPDATE lookup (§5.3);
+        // cancelReservation keeps the plain one - stub both leniently.
+        lenient().when(flightInventoryRepository.findByFlightId(100L)).thenReturn(Optional.of(inventory));
+        lenient().when(flightInventoryRepository.findByFlightIdForUpdate(100L)).thenReturn(Optional.of(inventory));
         when(aircraftSeatRepository.findByAircraftIdAndSeatNumber(1L, "12A")).thenReturn(Optional.of(seat));
     }
 
@@ -139,7 +151,7 @@ class SeatReservationServiceImplTest {
             when(seatHoldRepository.findById(5L)).thenReturn(Optional.of(hold));
 
             SeatReservationResponse response = reservationService.reserveSeat(
-                    new ReserveSeatRequest(100L, "12A", 77L, 200L, 5L));
+                    new ReserveSeatRequest(100L, "12A", 77L, 200L, 5L, null, null));
 
             assertThat(hold.getStatus()).isEqualTo(SeatHoldStatus.CONFIRMED);
             assertThat(inventory.getHeldSeats()).isZero();
@@ -160,7 +172,7 @@ class SeatReservationServiceImplTest {
                     10L, 2L, SeatHoldStatus.ACTIVE)).thenReturn(Optional.of(hold));
 
             SeatReservationResponse response = reservationService.reserveSeat(
-                    new ReserveSeatRequest(100L, "12A", 77L, null, null));
+                    new ReserveSeatRequest(100L, "12A", 77L, null, null, null, null));
 
             assertThat(hold.getStatus()).isEqualTo(SeatHoldStatus.CONFIRMED);
             assertThat(response.originatingHoldId()).isEqualTo(5L);
@@ -173,7 +185,7 @@ class SeatReservationServiceImplTest {
                     10L, 2L, SeatHoldStatus.ACTIVE)).thenReturn(Optional.of(activeHold(88L)));
 
             assertThatThrownBy(() -> reservationService.reserveSeat(
-                    new ReserveSeatRequest(100L, "12A", 77L, null, null)))
+                    new ReserveSeatRequest(100L, "12A", 77L, null, null, null, null)))
                     .isInstanceOf(SeatAlreadyHeldException.class);
         }
 
@@ -185,7 +197,7 @@ class SeatReservationServiceImplTest {
             when(seatHoldRepository.findById(5L)).thenReturn(Optional.of(hold));
 
             assertThatThrownBy(() -> reservationService.reserveSeat(
-                    new ReserveSeatRequest(100L, "12A", 77L, null, 5L)))
+                    new ReserveSeatRequest(100L, "12A", 77L, null, 5L, null, null)))
                     .isInstanceOf(SeatHoldExpiredException.class);
         }
 
@@ -195,7 +207,7 @@ class SeatReservationServiceImplTest {
             when(seatHoldRepository.findById(999L)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> reservationService.reserveSeat(
-                    new ReserveSeatRequest(100L, "12A", 77L, null, 999L)))
+                    new ReserveSeatRequest(100L, "12A", 77L, null, 999L, null, null)))
                     .isInstanceOf(InventoryConflictException.class)
                     .hasMessageContaining("999");
         }
@@ -208,7 +220,7 @@ class SeatReservationServiceImplTest {
             when(seatHoldRepository.findById(5L)).thenReturn(Optional.of(hold));
 
             assertThatThrownBy(() -> reservationService.reserveSeat(
-                    new ReserveSeatRequest(100L, "12A", 77L, null, 5L)))
+                    new ReserveSeatRequest(100L, "12A", 77L, null, 5L, null, null)))
                     .isInstanceOf(InventoryConflictException.class)
                     .hasMessageContaining("different flight/seat");
         }
@@ -229,7 +241,7 @@ class SeatReservationServiceImplTest {
                     10L, 2L, SeatHoldStatus.ACTIVE)).thenReturn(Optional.empty());
 
             SeatReservationResponse response = reservationService.reserveSeat(
-                    new ReserveSeatRequest(100L, "12A", 77L, null, null));
+                    new ReserveSeatRequest(100L, "12A", 77L, null, null, null, null));
 
             assertThat(inventory.getAvailableSeats()).isEqualTo(2);
             assertThat(inventory.getReservedSeats()).isEqualTo(1);
@@ -247,7 +259,7 @@ class SeatReservationServiceImplTest {
             when(seatHoldRepository.findByFlightInventoryIdAndAircraftSeatIdAndStatus(
                     10L, 2L, SeatHoldStatus.ACTIVE)).thenReturn(Optional.empty());
 
-            reservationService.reserveSeat(new ReserveSeatRequest(100L, "12A", 77L, null, null));
+            reservationService.reserveSeat(new ReserveSeatRequest(100L, "12A", 77L, null, null, null, null));
 
             assertThat(inventory.getStatus()).isEqualTo(InventoryStatus.SOLD_OUT);
         }
@@ -258,7 +270,7 @@ class SeatReservationServiceImplTest {
                     10L, 2L, SeatReservationStatus.RESERVED)).thenReturn(true);
 
             assertThatThrownBy(() -> reservationService.reserveSeat(
-                    new ReserveSeatRequest(100L, "12A", 77L, null, null)))
+                    new ReserveSeatRequest(100L, "12A", 77L, null, null, null, null)))
                     .isInstanceOf(SeatAlreadyReservedException.class);
         }
 
@@ -270,8 +282,57 @@ class SeatReservationServiceImplTest {
                     10L, 2L, SeatHoldStatus.ACTIVE)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> reservationService.reserveSeat(
-                    new ReserveSeatRequest(100L, "12A", 77L, null, null)))
+                    new ReserveSeatRequest(100L, "12A", 77L, null, null, null, null)))
                     .isInstanceOf(IllegalStateException.class);
+        }
+
+        // §9 contained-v1 check-in rule: the direct path enforces cabin +
+        // entitlement ceiling when the caller supplies them; booking
+        // confirmation (hold-based, fields omitted) is untouched.
+
+        @Test
+        void checkInCrossCabinMoveIsRejected() {
+            stubNoExistingReservation();
+            when(seatHoldRepository.findByFlightInventoryIdAndAircraftSeatIdAndStatus(
+                    10L, 2L, SeatHoldStatus.ACTIVE)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reservationService.reserveSeat(new ReserveSeatRequest(
+                    100L, "12A", 77L, 200L, null, SeatType.BUSINESS, new BigDecimal("100.00"))))
+                    .isInstanceOf(SeatCabinMismatchException.class);
+        }
+
+        @Test
+        void checkInSeatAboveEntitlementIsRejected() {
+            // 12A is a front-of-cabin WINDOW (lists max(15, 12) = 15.00, §4);
+            // a passenger who paid 0 can't take it.
+            stubNoExistingReservation();
+            when(seatHoldRepository.findByFlightInventoryIdAndAircraftSeatIdAndStatus(
+                    10L, 2L, SeatHoldStatus.ACTIVE)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> reservationService.reserveSeat(new ReserveSeatRequest(
+                    100L, "12A", 77L, 200L, null, SeatType.ECONOMY, BigDecimal.ZERO)))
+                    .isInstanceOf(InventoryConflictException.class)
+                    .hasMessageContaining("exceeds")
+                    .hasMessageContaining("Manage-Booking");
+
+            // Nothing mutated on rejection.
+            assertThat(inventory.getAvailableSeats()).isEqualTo(3);
+        }
+
+        @Test
+        void checkInSeatAtTheCeilingIsAllowed() {
+            // Paid 15.00 at booking -> this 15.00-listed seat is a free change
+            // (downgrade/equal allowed, no refund - §9).
+            stubNoExistingReservation();
+            stubSaveEcho();
+            when(seatHoldRepository.findByFlightInventoryIdAndAircraftSeatIdAndStatus(
+                    10L, 2L, SeatHoldStatus.ACTIVE)).thenReturn(Optional.empty());
+
+            SeatReservationResponse response = reservationService.reserveSeat(new ReserveSeatRequest(
+                    100L, "12A", 77L, 200L, null, SeatType.ECONOMY, new BigDecimal("15.00")));
+
+            assertThat(response.seatNumber()).isEqualTo("12A");
+            assertThat(inventory.getReservedSeats()).isEqualTo(1);
         }
     }
 

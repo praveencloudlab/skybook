@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -92,22 +93,42 @@ public class CheckInFacade {
     }
 
     /**
-     * design doc section 5.6: reserve the new seat first (external, outside
-     * any transaction) - if it's unavailable nothing has changed yet, same
-     * compensate-on-failure ordering as BookingFacade.holdSeatsOrCompensate.
-     * Only once the new seat is secured does the DB change, and only after
-     * that does the old reservation get released (quietly - a cleanup
-     * failure here must not undo an otherwise-successful seat change).
+     * design doc section 5.6 + SEAT_SELECTION_MODULE.md §9 (contained v1):
+     * reserve the new seat first (external, outside any transaction) with the
+     * passenger's travelClass + paid-surcharge entitlement - INVENTORY
+     * authoritatively rejects cross-cabin moves and seats listing above what
+     * was paid (downgrade/equal => allowed, no refund; upgrade => a
+     * Manage-Booking flow, not check-in). Legacy check-ins without an
+     * entitlement snapshot get 0 - only free seats reachable.
+     *
+     * Only once the new seat is secured does the DB change; if that local
+     * update fails, the NEW reservation is compensated (cancelled, round 5) so
+     * inventory doesn't leak a reservation for a change that never happened.
+     * Only after a successful update does the old reservation get released
+     * (quietly - a cleanup failure must not undo a successful seat change).
      */
     public CheckInResponse changeSeat(Long id, String newSeatNumber) {
 
         CheckInResponse current = checkInService.getById(id);
         String oldSeatNumber = current.seatNumber();
 
-        inventoryServiceClient.reserveSeat(current.flightId(), newSeatNumber,
-                current.bookingId(), current.bookingPassengerId());
+        BigDecimal entitlement = current.seatSurchargeEntitlement() != null
+                ? current.seatSurchargeEntitlement()
+                : BigDecimal.ZERO;
 
-        CheckInResponse updated = checkInService.changeSeatNumber(id, newSeatNumber);
+        inventoryServiceClient.reserveSeat(current.flightId(), newSeatNumber,
+                current.bookingId(), current.bookingPassengerId(),
+                current.travelClass(), entitlement);
+
+        CheckInResponse updated;
+        try {
+            updated = checkInService.changeSeatNumber(id, newSeatNumber);
+        } catch (RuntimeException localFailure) {
+            inventoryServiceClient.cancelReservationQuietly(current.flightId(), newSeatNumber,
+                    current.bookingId(), "compensation - local seat-change update failed: "
+                            + localFailure.getMessage());
+            throw localFailure;
+        }
 
         if (oldSeatNumber != null && !oldSeatNumber.isBlank()) {
             inventoryServiceClient.cancelReservationQuietly(current.flightId(), oldSeatNumber,

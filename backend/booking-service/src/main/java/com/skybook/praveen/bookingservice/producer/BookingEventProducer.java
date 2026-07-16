@@ -83,6 +83,10 @@ public class BookingEventProducer {
                                 .travelClass(p.travelClass() != null ? p.travelClass().name() : null)
                                 .fareType(p.fareType() != null ? p.fareType().name() : null)
                                 .fare(p.fare())
+                                // §9: check-in snapshots the surcharge actually
+                                // PAID as its free-change entitlement ceiling.
+                                .seatSurcharge(p.seatSurcharge())
+                                .currency(p.currency())
                                 .checkInStatus(p.checkInStatus() != null ? p.checkInStatus().name() : null)
                                 .build())
                         .toList())
