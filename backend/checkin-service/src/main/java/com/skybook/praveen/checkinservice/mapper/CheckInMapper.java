@@ -24,6 +24,8 @@ public final class CheckInMapper {
                 checkIn.getSeatNumber(),
                 checkIn.getTravelClass(),
                 checkIn.getFareType(),
+                checkIn.getSeatSurchargeEntitlement(),
+                checkIn.getEntitlementCurrency(),
                 checkIn.getStatus(),
                 checkIn.isDocumentVerified(),
                 checkIn.getCheckedInAt(),

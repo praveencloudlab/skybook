@@ -173,7 +173,7 @@ class InventoryApiKafkaIntegrationTest {
 
         // 5. Reserve (auto-resolves the booking's own hold)
         ResponseEntity<SeatReservationResponse> reservation = rest.postForEntity("/api/reservations",
-                new ReserveSeatRequest(FLIGHT_ID, "12A", BOOKING_ID, 200L, null), SeatReservationResponse.class);
+                new ReserveSeatRequest(FLIGHT_ID, "12A", BOOKING_ID, 200L, null, null, null), SeatReservationResponse.class);
         assertThat(reservation.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(reservation.getBody().status()).isEqualTo(SeatReservationStatus.RESERVED);
         assertThat(reservation.getBody().originatingHoldId()).isEqualTo(hold.getBody().id());

@@ -166,7 +166,7 @@ class InventoryFacadeTest {
 
     @Test
     void reserveDelegatesAndPublishesSeatReserved() {
-        ReserveSeatRequest request = new ReserveSeatRequest(1L, "12A", 42L, null, 5L);
+        ReserveSeatRequest request = new ReserveSeatRequest(1L, "12A", 42L, null, 5L, null, null);
         when(seatReservationService.reserveSeat(request)).thenReturn(reservationResponse());
 
         facade.reserveSeat(request);

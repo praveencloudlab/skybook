@@ -41,7 +41,7 @@ class CheckInControllerTest {
     private CheckInResponse response(CheckInStatus status) {
         LocalDateTime now = LocalDateTime.now();
         return new CheckInResponse(1L, 42L, "SBTEST", 100L, 7L, "BA178", "LHR", "JFK", now.plusHours(2),
-                "Test Passenger", "test@example.com", "12B", "ECONOMY", "FLEXI", status, true, null, null, null, null, 0L, now, now);
+                "Test Passenger", "test@example.com", "12B", "ECONOMY", "FLEXI", new java.math.BigDecimal("12.00"), "USD", status, true, null, null, null, null, 0L, now, now);
     }
 
     private static final String CREATE_BODY = """

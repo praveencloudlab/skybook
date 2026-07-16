@@ -426,7 +426,8 @@ public class InventoryServiceImpl implements InventoryService {
         }
     }
 
-    private BigDecimal listedSurchargeFor(FlightInventory inventory, AircraftSeat seat) {
+    /** Package-private: SeatReservationServiceImpl prices direct check-in reservations (§9). */
+    BigDecimal listedSurchargeFor(FlightInventory inventory, AircraftSeat seat) {
         return seatPricingPolicy.calculateListedSurcharge(seat, cabinContext(inventory, seat.getSeatType()));
     }
 
