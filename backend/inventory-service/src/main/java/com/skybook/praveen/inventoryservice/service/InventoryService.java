@@ -5,6 +5,7 @@ import com.skybook.praveen.inventoryservice.dto.request.CreateFlightInventoryReq
 import com.skybook.praveen.inventoryservice.dto.request.HoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.InventorySearchRequest;
 import com.skybook.praveen.inventoryservice.dto.request.ReleaseSeatRequest;
+import com.skybook.praveen.inventoryservice.dto.response.CabinAvailabilityResponse;
 import com.skybook.praveen.inventoryservice.dto.response.FlightInventoryResponse;
 import com.skybook.praveen.inventoryservice.dto.response.InventoryHistoryResponse;
 import com.skybook.praveen.inventoryservice.dto.response.SeatHoldResponse;
@@ -27,6 +28,9 @@ public interface InventoryService {
     List<FlightInventoryResponse> search(InventorySearchRequest criteria);
 
     List<InventoryHistoryResponse> getHistory(Long flightId);
+
+    /** Which cabins this flight sells and how many seats are left in each - availability only, no fares (§7/§11). */
+    List<CabinAvailabilityResponse> getCabinAvailability(Long flightId);
 
     /** Manual (passenger-chosen) hold. Money-idempotent per passenger under the flight lock (§6). */
     SeatHoldResponse holdSeat(HoldSeatRequest request);

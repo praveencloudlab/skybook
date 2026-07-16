@@ -5,12 +5,16 @@ import com.skybook.praveen.bookingservice.client.FlightDetails;
 import com.skybook.praveen.bookingservice.client.FlightServiceClient;
 import com.skybook.praveen.bookingservice.client.InventoryHoldDetails;
 import com.skybook.praveen.bookingservice.client.InventoryServiceClient;
+import com.skybook.praveen.bookingservice.domain.FareCalculator;
 import com.skybook.praveen.bookingservice.domain.SeatAssignmentResult;
 import com.skybook.praveen.bookingservice.dto.request.CreateBookingRequest;
 import com.skybook.praveen.bookingservice.dto.request.PassengerBookingDetail;
 import com.skybook.praveen.bookingservice.dto.response.BookingPassengerResponse;
 import com.skybook.praveen.bookingservice.dto.response.BookingResponse;
+import com.skybook.praveen.bookingservice.dto.response.QuoteResponse;
+import com.skybook.praveen.bookingservice.enums.FareType;
 import com.skybook.praveen.bookingservice.enums.SeatAssignmentMode;
+import com.skybook.praveen.bookingservice.enums.TravelClass;
 import com.skybook.praveen.bookingservice.producer.BookingEventProducer;
 import com.skybook.praveen.bookingservice.service.BookingService;
 import lombok.RequiredArgsConstructor;
@@ -19,7 +23,10 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -57,11 +64,13 @@ import java.util.Optional;
 public class BookingFacade {
 
     private static final BigDecimal ZERO_MONEY = new BigDecimal("0.00");
+    private static final String QUOTE_CURRENCY = "USD";
 
     private final FlightServiceClient flightServiceClient;
     private final InventoryServiceClient inventoryServiceClient;
     private final BookingService bookingService;
     private final BookingEventProducer bookingEventProducer;
+    private final FareCalculator fareCalculator;
 
     public BookingResponse createBooking(CreateBookingRequest request) {
 
@@ -134,6 +143,41 @@ public class BookingFacade {
         bookingEventProducer.publishBookingCancelled(booking, flightOrNull(booking.flightId()));
 
         return booking;
+    }
+
+    /**
+     * Fare options for a flight (§11): the ONLY place inventory's cabin
+     * availability and FareCalculator's base fares are combined - neither
+     * service ever computes the other's numbers. Cabins the aircraft doesn't
+     * have simply aren't quoted (§7); a flight without any seat inventory
+     * quotes every cabin with unknown (null) availability.
+     */
+    public QuoteResponse quoteFares(Long flightId) {
+
+        FlightDetails flight = flightServiceClient.getFlight(flightId);
+
+        if (flight.status() == FlightBookingStatus.CANCELLED) {
+            throw new IllegalArgumentException("Cannot quote a cancelled flight");
+        }
+
+        List<QuoteResponse.CabinQuote> cabins = inventoryServiceClient.getCabins(flightId)
+                .map(available -> available.stream()
+                        .map(cabin -> cabinQuote(cabin.travelClass(), cabin.availableSeats()))
+                        .toList())
+                .orElseGet(() -> Arrays.stream(TravelClass.values())
+                        .map(travelClass -> cabinQuote(travelClass, null))
+                        .toList());
+
+        return new QuoteResponse(flightId, QUOTE_CURRENCY, cabins);
+    }
+
+    private QuoteResponse.CabinQuote cabinQuote(TravelClass travelClass, Integer availableSeats) {
+        Map<FareType, BigDecimal> baseFares = new EnumMap<>(FareType.class);
+        for (FareType fareType : FareType.values()) {
+            baseFares.put(fareType, fareCalculator.calculateFare(travelClass, fareType));
+        }
+        BigDecimal fromFare = baseFares.values().stream().min(BigDecimal::compareTo).orElseThrow();
+        return new QuoteResponse.CabinQuote(travelClass, availableSeats, baseFares, fromFare);
     }
 
     /**

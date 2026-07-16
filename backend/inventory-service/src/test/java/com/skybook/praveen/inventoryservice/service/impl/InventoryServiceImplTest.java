@@ -117,6 +117,55 @@ class InventoryServiceImplTest {
     }
 
     // ---------------------------------------------------------------
+    // getCabinAvailability (§7/§11)
+    // ---------------------------------------------------------------
+
+    @Nested
+    class CabinAvailability {
+
+        @Test
+        void listsOnlyCabinsTheAircraftHasWithHeldSeatsExcluded() {
+            // Add a BUSINESS seat and a second economy seat to the map.
+            AircraftSeat business = AircraftSeat.builder()
+                    .id(3L).aircraft(aircraft).seatNumber("2A").rowNumber(2)
+                    .seatType(SeatType.BUSINESS).position(SeatPosition.WINDOW)
+                    .status(AircraftSeatStatus.ACTIVE).exitRow(false).build();
+            AircraftSeat economyB = AircraftSeat.builder()
+                    .id(4L).aircraft(aircraft).seatNumber("12B").rowNumber(12)
+                    .seatType(SeatType.ECONOMY).position(SeatPosition.MIDDLE)
+                    .status(AircraftSeatStatus.ACTIVE).exitRow(false).build();
+            aircraft.getSeats().add(business);
+            aircraft.getSeats().add(economyB);
+
+            when(flightInventoryRepository.findByFlightId(100L)).thenReturn(Optional.of(inventory));
+            // Seat 12A is actively held; nothing reserved.
+            when(seatHoldRepository.findByFlightInventoryIdAndStatus(10L, SeatHoldStatus.ACTIVE))
+                    .thenReturn(List.of(SeatHold.builder().id(5L).aircraftSeat(seat).build()));
+            when(seatReservationRepository.findByFlightInventoryIdAndStatus(10L, SeatReservationStatus.RESERVED))
+                    .thenReturn(List.of());
+
+            var cabins = inventoryService.getCabinAvailability(100L);
+
+            // FIRST/PREMIUM_ECONOMY absent (the aircraft has none) - that IS
+            // the "which cabins does this flight sell" answer. No fares anywhere.
+            assertThat(cabins).hasSize(2);
+            assertThat(cabins.get(0).travelClass()).isEqualTo(SeatType.ECONOMY);
+            assertThat(cabins.get(0).totalSeats()).isEqualTo(2);
+            assertThat(cabins.get(0).availableSeats()).isEqualTo(1); // 12A held
+            assertThat(cabins.get(1).travelClass()).isEqualTo(SeatType.BUSINESS);
+            assertThat(cabins.get(1).availableSeats()).isEqualTo(1);
+        }
+
+        @Test
+        void unknownFlightIs404() {
+            when(flightInventoryRepository.findByFlightId(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> inventoryService.getCabinAvailability(999L))
+                    .isInstanceOf(FlightInventoryNotFoundException.class);
+        }
+    }
+
+    // ---------------------------------------------------------------
     // createInventory
     // ---------------------------------------------------------------
 
