@@ -3,6 +3,7 @@ package com.skybook.praveen.bookingservice.facade;
 import com.skybook.praveen.bookingservice.client.FlightBookingStatus;
 import com.skybook.praveen.bookingservice.client.FlightDetails;
 import com.skybook.praveen.bookingservice.client.FlightServiceClient;
+import com.skybook.praveen.bookingservice.client.InventoryCabinDetails;
 import com.skybook.praveen.bookingservice.client.InventoryHoldDetails;
 import com.skybook.praveen.bookingservice.client.InventoryReservationDetails;
 import com.skybook.praveen.bookingservice.client.InventoryServiceClient;
@@ -64,8 +65,10 @@ class BookingFacadeTest {
 
     @BeforeEach
     void setUp() {
+        // Real FareCalculator - pure/deterministic, already unit-tested.
         facade = new BookingFacade(flightServiceClient, inventoryServiceClient,
-                bookingService, bookingEventProducer);
+                bookingService, bookingEventProducer,
+                new com.skybook.praveen.bookingservice.domain.FareCalculator());
     }
 
     private BookingPassengerResponse passenger(long id, String seat) {
@@ -277,6 +280,62 @@ class BookingFacadeTest {
 
             assertThat(result.bookingStatus()).isEqualTo(BookingStatus.CONFIRMED);
             verify(bookingEventProducer).publishBookingConfirmed(confirmed, null);
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Quote (§11)
+    // ---------------------------------------------------------------
+
+    @Nested
+    class QuoteFares {
+
+        @Test
+        void combinesInventoryAvailabilityWithFareCalculatorBaseFares() {
+            stubFlightOk();
+            when(inventoryServiceClient.getCabins(10L)).thenReturn(Optional.of(List.of(
+                    new InventoryCabinDetails(TravelClass.ECONOMY, 162, 87),
+                    new InventoryCabinDetails(TravelClass.BUSINESS, 18, 4))));
+
+            var quote = facade.quoteFares(10L);
+
+            assertThat(quote.currency()).isEqualTo("USD");
+            // Only the cabins the flight sells - FIRST absent IS the answer (§7).
+            assertThat(quote.cabins()).hasSize(2);
+            var economy = quote.cabins().get(0);
+            assertThat(economy.travelClass()).isEqualTo(TravelClass.ECONOMY);
+            assertThat(economy.availableSeats()).isEqualTo(87);
+            assertThat(economy.baseFares().get(FareType.SAVER)).isEqualByComparingTo("85.00");
+            assertThat(economy.baseFares().get(FareType.FLEXI)).isEqualByComparingTo("100.00");
+            assertThat(economy.baseFares().get(FareType.PREMIUM)).isEqualByComparingTo("125.00");
+            assertThat(economy.fromFare()).isEqualByComparingTo("85.00");   // "Economy from 85"
+            assertThat(quote.cabins().get(1).fromFare()).isEqualByComparingTo("297.50"); // "Business from 297.50"
+        }
+
+        @Test
+        void flightWithoutInventoryQuotesAllCabinsWithUnknownAvailability() {
+            stubFlightOk();
+            when(inventoryServiceClient.getCabins(10L)).thenReturn(Optional.empty());
+
+            var quote = facade.quoteFares(10L);
+
+            assertThat(quote.cabins()).hasSize(TravelClass.values().length);
+            assertThat(quote.cabins()).allSatisfy(cabin -> {
+                assertThat(cabin.availableSeats()).isNull();
+                assertThat(cabin.fromFare()).isNotNull();
+            });
+        }
+
+        @Test
+        void cancelledFlightIsNotQuotable() {
+            when(flightServiceClient.getFlight(10L)).thenReturn(new FlightDetails(
+                    10L, "AI131", "LHR", "DEL",
+                    LocalDateTime.now().plusDays(7), LocalDateTime.now().plusDays(7).plusHours(9),
+                    FlightBookingStatus.CANCELLED));
+
+            assertThatThrownBy(() -> facade.quoteFares(10L))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("cancelled");
         }
     }
 

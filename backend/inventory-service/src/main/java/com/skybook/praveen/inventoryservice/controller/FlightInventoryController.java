@@ -5,6 +5,7 @@ import com.skybook.praveen.inventoryservice.dto.request.CreateFlightInventoryReq
 import com.skybook.praveen.inventoryservice.dto.request.HoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.InventorySearchRequest;
 import com.skybook.praveen.inventoryservice.dto.request.ReleaseSeatRequest;
+import com.skybook.praveen.inventoryservice.dto.response.CabinAvailabilityResponse;
 import com.skybook.praveen.inventoryservice.dto.response.FlightInventoryResponse;
 import com.skybook.praveen.inventoryservice.dto.response.InventoryHistoryResponse;
 import com.skybook.praveen.inventoryservice.dto.response.SeatHoldResponse;
@@ -58,6 +59,13 @@ public class FlightInventoryController {
     @GetMapping("/flight/{flightId}/history")
     public ResponseEntity<List<InventoryHistoryResponse>> getHistory(@PathVariable Long flightId) {
         return ResponseEntity.ok(inventoryService.getHistory(flightId));
+    }
+
+    // Which cabins does this flight sell (§7/§11)? Availability only - fares
+    // are assembled solely by booking-service's /quote.
+    @GetMapping("/flights/{flightId}/cabins")
+    public ResponseEntity<List<CabinAvailabilityResponse>> getCabinAvailability(@PathVariable Long flightId) {
+        return ResponseEntity.ok(inventoryService.getCabinAvailability(flightId));
     }
 
     @PostMapping("/hold")

@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -113,6 +114,34 @@ public class InventoryServiceClient {
     private String conflictReason(FeignException.Conflict conflict) {
         String body = conflict.contentUTF8();
         return body == null || body.isBlank() ? "already held or reserved" : body;
+    }
+
+    /**
+     * Cabin availability for the quote (§7/§11). Optional.empty() = the flight
+     * has no inventory record - the quote then reports fares without
+     * availability (same hold-if-exists spirit as the hold paths).
+     */
+    public Optional<List<InventoryCabinDetails>> getCabins(Long flightId) {
+        try {
+            return Optional.of(resilientClient.getCabins(flightId));
+
+        } catch (FeignException.NotFound notFound) {
+            if (notFound.contentUTF8().contains(NO_INVENTORY_MARKER)) {
+                log.info("Flight {} has no seat inventory - quote proceeds without availability", flightId);
+                return Optional.empty();
+            }
+            throw new InventoryServiceUnavailableException(flightId, notFound);
+
+        } catch (CallNotPermittedException | BulkheadFullException fastFail) {
+            log.warn("inventory-service cabins lookup rejected without attempt ({}), flight {}",
+                    fastFail.getClass().getSimpleName(), flightId);
+            throw new InventoryServiceUnavailableException(flightId, fastFail);
+
+        } catch (FeignException unreachable) {
+            log.error("Could not reach inventory-service for cabin availability on flight {}",
+                    flightId, unreachable);
+            throw new InventoryServiceUnavailableException(flightId, unreachable);
+        }
     }
 
     public Optional<InventoryReservationDetails> reserveSeat(Long flightId, String seatNumber,

@@ -115,6 +115,10 @@ resilience4j:
     instances:
       flight-read:
         base-config: reads
+      # Cabin availability lookup for /quote - read-only, so safely retryable
+      # (unlike the hold/reserve writes, which have NO retry by design).
+      inventory-read:
+        base-config: reads
   bulkhead:
     configs:
       default:

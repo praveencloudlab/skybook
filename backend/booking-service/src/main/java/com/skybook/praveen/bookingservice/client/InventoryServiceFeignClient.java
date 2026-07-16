@@ -1,9 +1,12 @@
 package com.skybook.praveen.bookingservice.client;
 
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+
+import java.util.List;
 
 /**
  * Declarative client for inventory-service's seat operations (Sprint 6).
@@ -22,6 +25,10 @@ public interface InventoryServiceFeignClient {
     @PostMapping("/api/inventory/flights/{flightId}/holds/auto")
     InventoryHoldDetails autoHoldSeat(@PathVariable("flightId") Long flightId,
                                       @RequestBody InventorySeatCall call);
+
+    // Which cabins the flight sells + seats left (§7/§11) - feeds /quote.
+    @GetMapping("/api/inventory/flights/{flightId}/cabins")
+    List<InventoryCabinDetails> getCabins(@PathVariable("flightId") Long flightId);
 
     @PostMapping("/api/inventory/release")
     InventoryHoldDetails releaseHold(@RequestBody InventorySeatCall call);

@@ -12,6 +12,7 @@ import com.skybook.praveen.inventoryservice.dto.request.CreateFlightInventoryReq
 import com.skybook.praveen.inventoryservice.dto.request.HoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.InventorySearchRequest;
 import com.skybook.praveen.inventoryservice.dto.request.ReleaseSeatRequest;
+import com.skybook.praveen.inventoryservice.dto.response.CabinAvailabilityResponse;
 import com.skybook.praveen.inventoryservice.dto.response.FlightInventoryResponse;
 import com.skybook.praveen.inventoryservice.dto.response.InventoryHistoryResponse;
 import com.skybook.praveen.inventoryservice.dto.response.SeatHoldResponse;
@@ -54,6 +55,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -159,6 +161,31 @@ public class InventoryServiceImpl implements InventoryService {
         FlightInventory inventory = findByFlightId(flightId);
         return inventoryHistoryRepository.findByFlightInventoryIdOrderByChangedAtAsc(inventory.getId())
                 .stream().map(InventoryHistoryMapper::toResponse).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CabinAvailabilityResponse> getCabinAvailability(Long flightId) {
+
+        // Advisory pre-booking data (§7/§11) - no flight lock: the hold path
+        // revalidates everything under the pessimistic lock anyway.
+        FlightInventory inventory = findByFlightId(flightId);
+        Set<Long> occupied = occupiedSeatIds(inventory);
+
+        Map<SeatType, List<AircraftSeat>> byCabin = inventory.getAircraft().getSeats().stream()
+                .filter(s -> s.getStatus() == AircraftSeatStatus.ACTIVE)
+                .collect(Collectors.groupingBy(AircraftSeat::getSeatType));
+
+        // Stable SeatType-enum order (economy first); a cabin the aircraft
+        // doesn't have simply isn't listed - that's the §7 "which cabins does
+        // this flight sell" answer.
+        return byCabin.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .map(e -> new CabinAvailabilityResponse(
+                        e.getKey(),
+                        e.getValue().size(),
+                        (int) e.getValue().stream().filter(s -> !occupied.contains(s.getId())).count()))
+                .toList();
     }
 
     // ---------------------------------------------------------------
@@ -417,15 +444,7 @@ public class InventoryServiceImpl implements InventoryService {
 
     /** Available (ACTIVE, unheld, unreserved) seats of one cabin, for auto-assignment. */
     private List<AircraftSeat> availableSeatsInCabin(FlightInventory inventory, SeatType cabin) {
-
-        Set<Long> occupied = seatHoldRepository
-                .findByFlightInventoryIdAndStatus(inventory.getId(), SeatHoldStatus.ACTIVE).stream()
-                .map(h -> h.getAircraftSeat().getId())
-                .collect(Collectors.toSet());
-        seatReservationRepository
-                .findByFlightInventoryIdAndStatus(inventory.getId(), SeatReservationStatus.RESERVED)
-                .forEach(r -> occupied.add(r.getAircraftSeat().getId()));
-
+        Set<Long> occupied = occupiedSeatIds(inventory);
         return inventory.getAircraft().getSeats().stream()
                 .filter(s -> s.getSeatType() == cabin)
                 .filter(s -> s.getStatus() == AircraftSeatStatus.ACTIVE)
@@ -433,6 +452,18 @@ public class InventoryServiceImpl implements InventoryService {
                 .sorted(Comparator.comparing(AircraftSeat::getRowNumber)
                         .thenComparing(AircraftSeat::getSeatNumber))
                 .toList();
+    }
+
+    /** Seat ids taken by an ACTIVE hold or live reservation on this flight. */
+    private Set<Long> occupiedSeatIds(FlightInventory inventory) {
+        Set<Long> occupied = seatHoldRepository
+                .findByFlightInventoryIdAndStatus(inventory.getId(), SeatHoldStatus.ACTIVE).stream()
+                .map(h -> h.getAircraftSeat().getId())
+                .collect(Collectors.toSet());
+        seatReservationRepository
+                .findByFlightInventoryIdAndStatus(inventory.getId(), SeatReservationStatus.RESERVED)
+                .forEach(r -> occupied.add(r.getAircraftSeat().getId()));
+        return occupied;
     }
 
     AircraftSeat findSeat(FlightInventory inventory, String seatNumber) {
