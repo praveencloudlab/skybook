@@ -106,8 +106,22 @@ public class Payment extends Auditable {
     // for fare-type refund rules without a booking-service call
     // (design doc section 16.4). Compact "FARETYPE:amount" pairs joined by
     // ';', e.g. "FLEXI:100.00;SAVER:80.00". Parsed only by RefundCalculator.
+    // UNTOUCHED by seat selection (SEAT_SELECTION_MODULE.md §10): the fare
+    // amounts are all-in (base + charged surcharge), format byte-identical.
     @Column(length = 1000, updatable = false)
     private String fareBreakdown;
+
+    // Aggregate snapshots of the booking's charge composition
+    // (SEAT_SELECTION_MODULE.md §10): sum of per-passenger base fares and of
+    // CHARGED seat surcharges, so an invoice can show "fares X + seats Y"
+    // without a booking-service call. baseFareTotal + seatSurchargeTotal =
+    // amount when present. Nullable: pre-seat-selection events don't carry
+    // per-passenger surcharges - legacy payments show null aggregates.
+    @Column(name = "base_fare_total", updatable = false, precision = 19, scale = 2)
+    private BigDecimal baseFareTotal;
+
+    @Column(name = "seat_surcharge_total", updatable = false, precision = 19, scale = 2)
+    private BigDecimal seatSurchargeTotal;
 
     // Append-only ledger of gateway interactions. NO cascade - transaction
     // rows are saved explicitly by the service layer; this mapping exists

@@ -23,6 +23,11 @@ public record InvoiceResponse(
 
         String currency,
 
+        /** §10 charge composition, snapshotted from the payment. Null on legacy payments. */
+        BigDecimal baseFareTotal,
+
+        BigDecimal seatSurchargeTotal,
+
         LocalDateTime issuedAt
 
 ) {

@@ -48,6 +48,10 @@ public class InvoiceServiceImpl implements InvoiceService {
                 .discount(BigDecimal.ZERO)
                 .grandTotal(payment.getCapturedAmount())
                 .currency(payment.getCurrency())
+                // §10 charge composition, copied verbatim from the payment's
+                // snapshot (null on legacy payments) - never recomputed.
+                .baseFareTotal(payment.getBaseFareTotal())
+                .seatSurchargeTotal(payment.getSeatSurchargeTotal())
                 .build();
 
         Invoice saved = invoiceRepository.save(invoice);

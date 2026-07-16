@@ -55,7 +55,7 @@ class PaymentControllerTest {
                 new BigDecimal("100.00"), "USD",
                 status == PaymentStatus.CAPTURED ? new BigDecimal("100.00") : BigDecimal.ZERO,
                 BigDecimal.ZERO, status, PaymentMethod.CARD,
-                "SIM-abc", null, List.of(), List.of(), 0L, now, now);
+                "SIM-abc", null, null, null, List.of(), List.of(), 0L, now, now);
     }
 
     private static final String CREATE_BODY = """
