@@ -27,6 +27,12 @@ public class ResilientInventoryClient {
 
     @Bulkhead(name = "inventory")
     @CircuitBreaker(name = "inventory")
+    public InventoryHoldDetails autoHoldSeat(Long flightId, InventorySeatCall call) {
+        return feignClient.autoHoldSeat(flightId, call);
+    }
+
+    @Bulkhead(name = "inventory")
+    @CircuitBreaker(name = "inventory")
     public InventoryHoldDetails releaseHold(InventorySeatCall call) {
         return feignClient.releaseHold(call);
     }

@@ -337,6 +337,20 @@ class InventoryServiceImplTest {
         }
 
         @Test
+        void autoHoldForACabinTheAircraftDoesNotHaveIsAClearError() {
+            // A320 with only ECONOMY seats; a FIRST-class auto-assign must say
+            // "no such cabin" (§7), not a generic mismatch.
+            when(flightInventoryRepository.findByFlightIdForUpdate(100L)).thenReturn(Optional.of(inventory));
+            when(seatHoldRepository.findByFlightInventoryIdAndBookingPassengerIdAndStatus(
+                    10L, 770L, SeatHoldStatus.ACTIVE)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> inventoryService.autoHoldSeat(100L,
+                    new AutoHoldSeatRequest(77L, 770L, SeatType.FIRST)))
+                    .isInstanceOf(SeatCabinMismatchException.class)
+                    .hasMessageContaining("no FIRST cabin");
+        }
+
+        @Test
         void autoRequestAgainstAManualHoldIsAConflict() {
             SeatHold manualHold = SeatHold.builder()
                     .id(9L).flightInventory(inventory).aircraftSeat(seat).bookingId(77L)

@@ -18,7 +18,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
-import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -33,19 +32,14 @@ import java.math.BigDecimal;
  * live here rather than on Booking, since different passengers on the same
  * PNR can fly different classes (e.g. a mixed-class family booking).
  *
- * flightId is denormalized from Booking.flightId purely so the
- * (flightId, seatNumber) uniqueness constraint - the real backstop against
- * concurrently double-booking a seat - can live on this table without a
- * cross-table constraint.
+ * The old uk_flight_seat unique constraint is GONE (SEAT_SELECTION_MODULE.md
+ * §2.6, V4): being unconditional it blocked cancel -> rebook-same-seat, since
+ * a cancelled booking keeps its historical seat row. Live seat exclusivity is
+ * inventory-service's job (shared flight lock + active holds/reservations);
+ * this table keeps seat/fare rows as historical snapshot and audit only.
  */
 @Entity
-@Table(
-        name = "booking_passengers",
-        uniqueConstraints = @UniqueConstraint(
-                name = "uk_flight_seat",
-                columnNames = {"flight_id", "seat_number"}
-        )
-)
+@Table(name = "booking_passengers")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -79,7 +73,10 @@ public class BookingPassenger extends Auditable {
     @Column(nullable = false, length = 20)
     private FareType fareType;
 
-    @Column(name = "seat_number", nullable = false, length = 5)
+    // Nullable: a DRAFT booking commits before any seat exists (§5.1); the
+    // finalize step writes the seat inventory actually held. Stays null on a
+    // finalized booking only when the flight has no seat inventory at all.
+    @Column(name = "seat_number", length = 5)
     private String seatNumber;
 
     // Immutable fare breakdown (SEAT_SELECTION_MODULE.md §8). Persisted, never

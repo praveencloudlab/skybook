@@ -4,7 +4,7 @@ import com.skybook.praveen.bookingservice.domain.BookingStateMachine;
 import com.skybook.praveen.bookingservice.domain.BookingValidator;
 import com.skybook.praveen.bookingservice.domain.FareCalculator;
 import com.skybook.praveen.bookingservice.domain.PnrGenerator;
-import com.skybook.praveen.bookingservice.domain.SeatAssignmentStrategy;
+import com.skybook.praveen.bookingservice.domain.SeatAssignmentResult;
 import com.skybook.praveen.bookingservice.dto.request.BookingSearchRequest;
 import com.skybook.praveen.bookingservice.dto.request.CreateBookingRequest;
 import com.skybook.praveen.bookingservice.dto.request.PassengerBookingDetail;
@@ -20,14 +20,13 @@ import com.skybook.praveen.bookingservice.enums.SeatAssignmentMode;
 import com.skybook.praveen.bookingservice.enums.PaymentStatus;
 import com.skybook.praveen.bookingservice.exception.BookingNotFoundException;
 import com.skybook.praveen.bookingservice.exception.BookingPassengerNotFoundException;
-import com.skybook.praveen.bookingservice.exception.SeatAlreadyBookedException;
 import com.skybook.praveen.bookingservice.mapper.BookingMapper;
 import com.skybook.praveen.bookingservice.mapper.PassengerMapper;
 import com.skybook.praveen.bookingservice.repository.BookingPassengerRepository;
 import com.skybook.praveen.bookingservice.repository.BookingRepository;
 import com.skybook.praveen.bookingservice.service.BookingService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,7 +37,6 @@ import java.util.List;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class BookingServiceImpl implements BookingService {
 
     private static final int MAX_PNR_GENERATION_ATTEMPTS = 10;
@@ -51,17 +49,35 @@ public class BookingServiceImpl implements BookingService {
     private final BookingStateMachine bookingStateMachine;
     private final BookingValidator bookingValidator;
     private final FareCalculator fareCalculator;
-    private final SeatAssignmentStrategy seatAssignmentStrategy;
+
+    /** TTL for the stale-draft sweep (§5.1a) - matches inventory's hold TTL by default. */
+    private final long draftTtlMinutes;
+
+    public BookingServiceImpl(BookingRepository bookingRepository,
+                              BookingPassengerRepository bookingPassengerRepository,
+                              PnrGenerator pnrGenerator,
+                              BookingStateMachine bookingStateMachine,
+                              BookingValidator bookingValidator,
+                              FareCalculator fareCalculator,
+                              @Value("${booking.draft.ttl-minutes:15}") long draftTtlMinutes) {
+        this.bookingRepository = bookingRepository;
+        this.bookingPassengerRepository = bookingPassengerRepository;
+        this.pnrGenerator = pnrGenerator;
+        this.bookingStateMachine = bookingStateMachine;
+        this.bookingValidator = bookingValidator;
+        this.fareCalculator = fareCalculator;
+        this.draftTtlMinutes = draftTtlMinutes;
+    }
 
     @Override
     @Transactional
-    public BookingResponse createBooking(CreateBookingRequest request, LocalDateTime flightDepartureTime) {
+    public BookingResponse createDraftBooking(CreateBookingRequest request, LocalDateTime flightDepartureTime) {
 
         Booking booking = Booking.builder()
                 .bookingReference(generateUniquePnr())
                 .customerId(request.customerId())
                 .flightId(request.flightId())
-                .bookingStatus(BookingStatus.CREATED)
+                .bookingStatus(BookingStatus.DRAFT)
                 .bookingDate(LocalDateTime.now())
                 .remarks(request.remarks())
                 .build();
@@ -74,13 +90,12 @@ public class BookingServiceImpl implements BookingService {
             Passenger passenger = PassengerMapper.toEntity(detail);
             bookingValidator.validatePassportValidForTravel(passenger, flightDepartureTime);
 
-            // Persisted fare breakdown (SEAT_SELECTION_MODULE.md §8). Seat
-            // surcharge is 0 / mode MANUAL here; the auto-assignment and
-            // surcharge wiring (later build-order steps) set them from the
-            // inventory hold result. Total stays base + surcharge.
+            // Draft stage (§5.1): fare = base fare only, seat NULL, surcharge 0.
+            // finalizeSeatAssignments writes the authoritative seat/surcharge/
+            // mode from the inventory hold results. The MANUAL placeholder mode
+            // exists only because the column is NOT NULL - it is meaningless
+            // until finalize overwrites it.
             BigDecimal baseFare = fareCalculator.calculateFare(detail.travelClass(), detail.fareType());
-            BigDecimal seatSurcharge = BigDecimal.ZERO;
-            BigDecimal fare = baseFare.add(seatSurcharge);
 
             BookingPassenger bookingPassenger = BookingPassenger.builder()
                     .booking(booking)
@@ -89,23 +104,15 @@ public class BookingServiceImpl implements BookingService {
                     .travelClass(detail.travelClass())
                     .fareType(detail.fareType())
                     .baseFare(baseFare)
-                    .seatSurcharge(seatSurcharge)
+                    .seatSurcharge(BigDecimal.ZERO)
                     .chargedSeatAssignmentMode(SeatAssignmentMode.MANUAL)
                     .currency(DEFAULT_CURRENCY)
-                    .fare(fare)
+                    .fare(baseFare)
                     .checkInStatus(CheckInStatus.NOT_OPEN)
                     .build();
 
-            String resolvedSeat = seatAssignmentStrategy.resolveSeatNumber(bookingPassenger, detail.seatNumber());
-
-            if (bookingPassengerRepository.existsByFlightIdAndSeatNumber(request.flightId(), resolvedSeat)) {
-                throw new SeatAlreadyBookedException(request.flightId(), resolvedSeat);
-            }
-
-            bookingPassenger.setSeatNumber(resolvedSeat);
-
             bookingPassengers.add(bookingPassenger);
-            totalFare = totalFare.add(fare);
+            totalFare = totalFare.add(baseFare);
         }
 
         booking.setPassengers(bookingPassengers);
@@ -119,6 +126,48 @@ public class BookingServiceImpl implements BookingService {
                 .build();
         booking.setContact(contact);
 
+        // Deliberately NO BookingPayment here (round 4): the amount would go
+        // stale the moment a surcharge lands. finalizeSeatAssignments creates
+        // it with the final total in the same transaction as the money fields.
+
+        Booking saved = bookingRepository.save(booking);
+
+        log.info("Created DRAFT booking {} ({} passenger(s)) for flight {}",
+                saved.getBookingReference(), bookingPassengers.size(), request.flightId());
+
+        return BookingMapper.toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public BookingResponse finalizeSeatAssignments(Long bookingId, List<SeatAssignmentResult> assignments) {
+
+        Booking booking = findBookingOrThrow(bookingId);
+
+        if (booking.getBookingStatus() != BookingStatus.DRAFT) {
+            throw new IllegalStateException("Booking " + booking.getBookingReference()
+                    + " is " + booking.getBookingStatus() + " - only a DRAFT can be finalized");
+        }
+
+        BigDecimal totalFare = BigDecimal.ZERO;
+
+        for (SeatAssignmentResult assignment : assignments) {
+
+            BookingPassenger passenger = findBookingPassengerOrThrow(booking, assignment.bookingPassengerId());
+
+            passenger.setSeatNumber(assignment.seatNumber());
+            passenger.setSeatSurcharge(assignment.chargedSurcharge());
+            passenger.setChargedSeatAssignmentMode(assignment.mode());
+            passenger.setFare(passenger.getBaseFare().add(assignment.chargedSurcharge()));
+        }
+
+        for (BookingPassenger passenger : booking.getPassengers()) {
+            totalFare = totalFare.add(passenger.getFare());
+        }
+        booking.setTotalFare(totalFare);
+
+        // Payment snapshot created HERE, with the final total (round 4).
+        // Invariant: sum(passenger.fare) = totalFare = payment.amount.
         BookingPayment payment = BookingPayment.builder()
                 .booking(booking)
                 .paymentStatus(PaymentStatus.PENDING)
@@ -127,12 +176,33 @@ public class BookingServiceImpl implements BookingService {
                 .build();
         booking.setPayment(payment);
 
+        bookingStateMachine.transitionBookingStatus(booking, BookingStatus.CREATED,
+                "seat assignments finalized (" + assignments.size() + " passenger(s))", "system");
+
         Booking saved = bookingRepository.save(booking);
 
-        log.info("Created booking {} ({} passenger(s)) for flight {}",
-                saved.getBookingReference(), bookingPassengers.size(), request.flightId());
+        log.info("Finalized booking {} - total {} {} across {} passenger(s)",
+                saved.getBookingReference(), totalFare, DEFAULT_CURRENCY, assignments.size());
 
         return BookingMapper.toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public int cancelStaleDrafts() {
+
+        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(draftTtlMinutes);
+        List<Booking> stale = bookingRepository.findByBookingStatusAndBookingDateBefore(
+                BookingStatus.DRAFT, cutoff);
+
+        for (Booking draft : stale) {
+            bookingStateMachine.transitionBookingStatus(draft, BookingStatus.CANCELLED,
+                    "stale DRAFT swept (older than " + draftTtlMinutes + "m)", "system");
+            bookingRepository.save(draft);
+            log.info("Swept stale DRAFT booking {}", draft.getBookingReference());
+        }
+
+        return stale.size();
     }
 
     @Override

@@ -15,17 +15,19 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The fresh-database migration path (SEAT_SELECTION_MODULE.md §8/§15, review
- * round 4): on an empty database, Flyway must bootstrap the ENTIRE schema
- * (V1 baseline) before applying the seat-selection delta (V2) - and the
+ * The fresh-database migration path (SEAT_SELECTION_MODULE.md §8/§15, rounds
+ * 4-7): on an empty database, Flyway must bootstrap the ENTIRE schema (V1
+ * baseline) before applying the seat-selection deltas (V2 breakdown columns,
+ * V3 DRAFT-admitting status CHECK, V4 uk_flight_seat removal) - and the
  * result must satisfy Hibernate's ddl-auto: validate, which this context
  * boots with. A lone V1-delta design failed exactly here: Flyway runs before
  * Hibernate, so there would have been no booking_passengers table to ALTER.
  *
  * The existing-database path (baseline-on-migrate adopting the schema at
- * version 1, then running only V2 with its backfill) is verified against the
- * real pre-branch compose database at deploy time - it can't be faithfully
- * simulated here without replaying a Hibernate-created schema byte for byte.
+ * version 1, then running only V2+V3+V4 with the backfill) is verified
+ * against the real pre-branch compose database at deploy time - it can't be
+ * faithfully simulated here without replaying a Hibernate-created schema
+ * byte for byte.
  */
 @SpringBootTest
 @Testcontainers(disabledWithoutDocker = true)
@@ -55,15 +57,42 @@ class FlywayMigrationIntegrationTest {
     private JdbcTemplate jdbc;
 
     @Test
-    void freshDatabaseGetsBaselinePlusDeltaAndSurvivesHibernateValidate() {
+    void freshDatabaseGetsBaselinePlusDeltasAndSurvivesHibernateValidate() {
         // Reaching here at all means ddl-auto: validate accepted the
-        // Flyway-built schema. Now prove both migrations actually ran.
+        // Flyway-built schema. Now prove all four migrations actually ran.
         List<Map<String, Object>> applied = jdbc.queryForList(
                 "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank");
 
-        assertThat(applied).hasSize(2);
-        assertThat(applied.get(0)).containsEntry("version", "1").containsEntry("success", true);
-        assertThat(applied.get(1)).containsEntry("version", "2").containsEntry("success", true);
+        assertThat(applied).hasSize(4);
+        for (int i = 0; i < 4; i++) {
+            assertThat(applied.get(i))
+                    .containsEntry("version", String.valueOf(i + 1))
+                    .containsEntry("success", true);
+        }
+    }
+
+    @Test
+    void statusCheckAdmitsDraft() {
+        // V3 (§5.1a): without the replaced CHECK constraint every draft
+        // insert would fail at the database regardless of the Java enum.
+        String checkClause = jdbc.queryForObject("""
+                SELECT pg_get_constraintdef(oid)
+                FROM pg_constraint
+                WHERE conname = 'bookings_booking_status_check'""", String.class);
+
+        assertThat(checkClause).contains("DRAFT");
+    }
+
+    @Test
+    void ukFlightSeatIsGone() {
+        // V4 (§2.6, round 7): the unconditional unique constraint broke
+        // cancel -> rebook-same-seat; live exclusivity is inventory's job.
+        Integer count = jdbc.queryForObject("""
+                SELECT count(*)
+                FROM pg_constraint
+                WHERE conname = 'uk_flight_seat'""", Integer.class);
+
+        assertThat(count).isZero();
     }
 
     @Test
