@@ -146,7 +146,8 @@ class ResilientClientBehaviorTest {
     void writesAreNeverRetried() {
         when(inventoryFeign.holdSeat(any())).thenThrow(serverError());
 
-        assertThatThrownBy(() -> inventoryClient.holdSeat(1L, "12B", 42L))
+        assertThatThrownBy(() -> inventoryClient.holdSeat(1L, "12B", 42L, 1L,
+                com.skybook.praveen.bookingservice.enums.TravelClass.ECONOMY))
                 .isInstanceOf(InventoryServiceUnavailableException.class);
 
         verify(inventoryFeign, times(1)).holdSeat(any()); // exactly one attempt - no write retries (§6)

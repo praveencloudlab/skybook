@@ -8,9 +8,10 @@ import java.util.Optional;
 
 public interface BookingPassengerRepository extends JpaRepository<BookingPassenger, Long> {
 
-    // The real backstop against concurrently double-booking a seat (docs section 6) -
-    // paired with the DB-level unique constraint on (flight_id, seat_number).
-    boolean existsByFlightIdAndSeatNumber(Long flightId, String seatNumber);
+    // NOTE: the old existsByFlightIdAndSeatNumber live-availability pre-check is
+    // retired (SEAT_SELECTION_MODULE.md §2.6, round 7) - inventory-service's
+    // hold under the shared flight lock is the sole live-seat exclusivity gate;
+    // this table is a historical snapshot.
 
     List<BookingPassenger> findByBooking_Id(Long bookingId);
 

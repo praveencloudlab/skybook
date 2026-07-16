@@ -70,6 +70,14 @@ flight-service:
 inventory-service:
   base-url: http://localhost:8084
 
+# Stale-draft sweep (SEAT_SELECTION_MODULE.md §5.1a): DRAFT bookings older
+# than the TTL are cancelled by StaleDraftSweepJob - the booking-side half of
+# inventory's hold expiry (both default to 15 minutes by design).
+booking:
+  draft:
+    ttl-minutes: 15
+    sweep-interval-ms: 60000
+
 # RESILIENCE_MODULE.md §5-§7. All thresholds are reasoned defaults, expected
 # to be re-tuned against the Grafana dashboards once real load data exists.
 resilience4j:

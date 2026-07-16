@@ -13,4 +13,14 @@ public class SeatCabinMismatchException extends RuntimeException {
         super("Seat " + seatNumber + " is in the " + seatCabin
                 + " cabin but the passenger is booked in " + travelClass);
     }
+
+    private SeatCabinMismatchException(String message) {
+        super(message);
+    }
+
+    /** §7: "no such cabin" must be a clear error, not a generic mismatch. */
+    public static SeatCabinMismatchException noSuchCabin(SeatType cabin, String registrationNumber) {
+        return new SeatCabinMismatchException("This flight's aircraft " + registrationNumber
+                + " has no " + cabin + " cabin");
+    }
 }

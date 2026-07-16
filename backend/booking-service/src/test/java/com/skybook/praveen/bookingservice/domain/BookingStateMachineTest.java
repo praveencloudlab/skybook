@@ -36,9 +36,12 @@ class BookingStateMachineTest {
     @Nested
     class BookingStatusTransitions {
 
-        // The full golden transition table from docs section 4.1 - every
-        // (from, to) pair not listed here is expected to be invalid.
+        // The full golden transition table (docs section 4.1 + seat-selection
+        // §5.1a DRAFT lifecycle) - every (from, to) pair not listed here is
+        // expected to be invalid. In particular DRAFT -> CONFIRMED is illegal:
+        // a crash-orphaned draft can never be confirmed.
         private final Map<BookingStatus, Set<BookingStatus>> validTransitions = Map.of(
+                BookingStatus.DRAFT, Set.of(BookingStatus.CREATED, BookingStatus.CANCELLED),
                 BookingStatus.CREATED, Set.of(BookingStatus.CONFIRMED, BookingStatus.CANCELLED),
                 BookingStatus.CONFIRMED, Set.of(BookingStatus.CANCELLED, BookingStatus.COMPLETED),
                 BookingStatus.CANCELLED, Set.of(),

@@ -11,10 +11,10 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
 /**
- * One traveler within a CreateBookingRequest. seatNumber is optional in the
- * request shape but effectively required today - ManualSeatAssignmentStrategy
- * rejects a blank seat number, since automatic assignment isn't implemented
- * yet (docs section 6/9).
+ * One traveler within a CreateBookingRequest. seatNumber is genuinely optional
+ * (SEAT_SELECTION_MODULE.md §5.1): blank means FREE auto-assignment - inventory
+ * atomically picks a low-demand seat in the passenger's cabin at charged 0.00;
+ * a supplied seat is a MANUAL (paid) selection charged its listed surcharge.
  */
 public record PassengerBookingDetail(
 

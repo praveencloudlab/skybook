@@ -407,8 +407,10 @@ public class InventoryServiceImpl implements InventoryService {
         CabinPricingContext context = seatPricingPolicy
                 .cabinContexts(inventory.getAircraft().getSeats()).get(cabin);
         if (context == null) {
-            // The aircraft has no seats of this cabin at all - "no such cabin".
-            throw new SeatCabinMismatchException("(auto)", cabin, cabin);
+            // The aircraft has no seats of this cabin at all (§7): a clear
+            // "no such cabin" error, e.g. FIRST requested on an A320 flight.
+            throw SeatCabinMismatchException.noSuchCabin(
+                    cabin, inventory.getAircraft().getRegistrationNumber());
         }
         return context;
     }
