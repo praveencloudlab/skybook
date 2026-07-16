@@ -66,7 +66,7 @@ class PaymentFacadeTest {
                 status == PaymentStatus.CAPTURED ? new BigDecimal("100.00") : BigDecimal.ZERO,
                 BigDecimal.ZERO, status, PaymentMethod.CARD, "SIM-ref",
                 status == PaymentStatus.AUTHORIZATION_FAILED ? "declined" : null,
-                List.of(), List.of(), 0L, now, now);
+                null, null, List.of(), List.of(), 0L, now, now);
     }
 
     private GatewayResult success() {
@@ -121,7 +121,7 @@ class PaymentFacadeTest {
         when(invoiceService.getByPaymentId(1L)).thenReturn(new InvoiceResponse(
                 5L, "INV-2026-000001", "PAY-2026-TESTAA", "SBTEST",
                 new BigDecimal("100.00"), BigDecimal.ZERO, BigDecimal.ZERO,
-                new BigDecimal("100.00"), "USD", now));
+                new BigDecimal("100.00"), "USD", null, null, now));
 
         facade.capture(1L, CTX);
 

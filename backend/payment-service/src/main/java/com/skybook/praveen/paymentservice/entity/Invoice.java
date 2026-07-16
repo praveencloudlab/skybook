@@ -68,6 +68,15 @@ public class Invoice extends Auditable {
     @Column(nullable = false, updatable = false, length = 3)
     private String currency;
 
+    // Charge-composition snapshots copied from the Payment at issue time
+    // (SEAT_SELECTION_MODULE.md §10) - the invoice renders "fares X + seat
+    // selection Y" without recomputing anything. Null on legacy payments.
+    @Column(name = "base_fare_total", updatable = false, precision = 19, scale = 2)
+    private BigDecimal baseFareTotal;
+
+    @Column(name = "seat_surcharge_total", updatable = false, precision = 19, scale = 2)
+    private BigDecimal seatSurchargeTotal;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime issuedAt;
 
