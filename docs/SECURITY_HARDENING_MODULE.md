@@ -8,8 +8,8 @@
 |---|---|
 | **Scope** | Close the fleet's real security gaps: every service authenticates requests (not just the gateway), role-based authorization, hardened JWT issuance/validation, input validation + safe error handling on the auth surface, non-root/read-only containers, network isolation of internal ports, and supply-chain scanning in CI |
 | **Branch** | `feature/security-hardening` |
-| **Status** | **DRAFT — round 5 (revised after review 4, 9.5/10 "architecture approved").** R4's three implementation-contract corrections applied: (1) **build order reordered** so roles + token claims + ownership schema/propagation all land *before* enforcement is flipped — the strict validator ships with token issuance, not after, so a role-based rule can never reject a claimless token; (2) **Feign/filter registration isolation frozen** as explicit Spring rules — no global auth `RequestInterceptor`, per-client configs kept off component-scan + named per `@FeignClient`, `ServiceTokenClient` sets `inheritParentConfiguration()=false`, and the JWT filter is constructed only inside its security chain (or servlet auto-registration disabled via `FilterRegistrationBean`) so it never runs on `/service-token`; (3) **security persistence fully specified** — a `service_clients` table (auth `V3`) with BCrypt hashes provisioned via deploy properties/bootstrap (never plaintext migration SQL), and `owner_subject` migrations for booking (`V5`) + payment/check-in (baseline+delta), all three moving to `ddl-auto: validate`. Plus the stale build-order `ownerSubject` wording and the actuator matrix rows corrected. R1–R3 retained. **This is the freeze candidate.** |
-| **Revision history** | R1 (8.3): build-order-before-propagation, `ROLE_SERVICE` identity, auto-config module, ownership in scope, HS384/48-byte, port isolation. R2 (8.8): RS256 + per-service credentials, per-operation Feign identity, two-rule audience, ownership→Payment/CheckIn, management port, email-collision migration, TTL 60/10. R3 (9.5): Feign identity frozen at client-interface level, `/service-token` de-routed + client-credential chain, inventory→flight identity, token↔role coherence. R4 (this round): build order reordered, Feign/filter registration isolation, security-persistence migrations. |
+| **Status** | **🔒 FROZEN — 10/10 (approved after review 5). Implementation may begin at §13 build order step 1.** R5's two sequencing corrections applied: (1) step 1 builds the RS256/`skybook-security` infrastructure **without** swapping the live gateway validator; hardened issuance **and** the gateway migration happen together in an atomic step 2, so there is no checkpoint where the gateway demands claims auth can't yet mint; (2) ownership capture is gated on a `SecurityContext` — booking's JWT filter is turned on in authentication-only mode and the create endpoint made `authenticated()` in step 4 *before* `ownerSubject` capture is introduced, so a new booking can never snapshot a null owner. Plus: `inventory-service` added to the client-credential env table, and the risk-section step references corrected. No architecture change. |
+| **Revision history** | R1 (8.3): build-order-before-propagation, `ROLE_SERVICE` identity, auto-config module, ownership in scope, HS384/48-byte, port isolation. R2 (8.8): RS256 + per-service credentials, per-operation Feign identity, two-rule audience, ownership→Payment/CheckIn, management port, email-collision migration, TTL 60/10. R3 (9.5): Feign identity frozen at client-interface level, `/service-token` de-routed + client-credential chain, inventory→flight identity, token↔role coherence. R4 (9.5→9.8): build order reordered, Feign/filter registration isolation, security-persistence migrations. R5 (10/10, FROZEN): atomic issuer/verifier switch, `SecurityContext`-before-capture ordering, client-cred env + risk cleanups. |
 
 Goal: take SkyBook from "secured at the front door only" to **defense in depth**.
 Today a valid JWT is checked in exactly one place — the API gateway — and every
@@ -802,7 +802,7 @@ The compose file ships insecure fallbacks that must go (all verified present):
 | `grafana` env | `GRAFANA_ADMIN_PASSWORD:-admin` | `${GRAFANA_ADMIN_PASSWORD:?required}` |
 | `auth` env | `JWT_SECRET: ${JWT_SECRET}` (HMAC, retired) | `JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?required}` + `JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?required}` |
 | every other service env | `JWT_SECRET` (shared, forgeable) | `JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?required}` only — no private key, no HMAC secret |
-| `booking`/`checkin`/`payment` env | (none) | `SKYBOOK_SERVICE_CLIENT_ID` + `SKYBOOK_SERVICE_CLIENT_SECRET:?required` (per-service, §3.3) |
+| `booking`/`checkin`/`payment`/**`inventory`** env | (none) | `SKYBOOK_SERVICE_CLIENT_ID` + `SKYBOOK_SERVICE_CLIENT_SECRET:?required` (per-service, §3.3) — inventory included because of `inventory-service → flight-service` in the allowlist |
 
 Using the `${VAR:?message}` form makes compose **fail fast with a clear error**
 if a required secret is unset, instead of silently booting with a known-bad
@@ -892,32 +892,50 @@ ships *with* token issuance, not after it. The
 `skybook.security.enforcement-enabled` flag (default `true`, off only in the test
 profile) lets each chain be built and merged before it's switched live.
 
-1. **RS256 keys + shared `skybook-security` validator/filter infrastructure**
-   (§3.3, §5, §3.2) — generate the RSA keypair; auth signs with the private key,
-   the module validates with the public key (`JwtTokenValidator` with the **full
-   §5 checklist incl. alg-pin, two-rule audience, token_type↔role coherence**,
-   filter, entry-point/denied handlers, `JwtSecurityProperties`,
-   `ServiceTokenProvider`), registered via `AutoConfiguration.imports`. **Do not
-   switch enforcement on yet.** Migrate the gateway onto the shared validator.
-2. **Auth roles + hardened RS256 user-token issuance** (§4.3, §4.1, §5) — auth
-   Flyway **V1 baseline + V2** (`role` col: nullable → backfill `USER` → NOT
-   NULL + CHECK; email collision-abort → normalize → `UNIQUE` + `CHECK`),
-   `ddl-auto: validate`, bootstrap-admin property; issuance emits **`roles`,
-   `token_type=user`, `iss`, `aud=user-audience`, 60-min TTL**. Now a real user
-   token carries every claim the matrix will require.
+1. **RS256 keys + shared `skybook-security` infrastructure — build only, do NOT
+   swap the live gateway validator yet** (§3.3, §5, §3.2). Generate the RSA
+   keypair; build the module: `JwtTokenValidator` with the **full §5 checklist
+   (alg-pin, two-rule audience, token_type↔role coherence)**, filter,
+   entry-point/denied handlers, `JwtSecurityProperties`, `ServiceTokenProvider`,
+   registered via `AutoConfiguration.imports`. Nothing is wired into a live chain
+   in this step — the gateway keeps its current validator, because auth-service
+   cannot yet issue a token the new validator would accept (that arrives in
+   step 2). **Enforcement stays off.**
+2. **Atomic checkpoint: hardened RS256 issuance + gateway migration together**
+   (§4.3, §4.1, §5). auth Flyway **V1 baseline + V2** (`role`: nullable →
+   backfill `USER` → NOT NULL + CHECK; email collision-abort → normalize →
+   `UNIQUE` + `CHECK`), `ddl-auto: validate`, bootstrap-admin property; issuance
+   emits **`roles`, `token_type=user`, `iss`, `aud=user-audience`, 60-min TTL**.
+   **In the same commit**, migrate the gateway onto the shared validator — issuer
+   and verifier change as one unit, never separately. **Verify register → login →
+   a protected gateway endpoint end-to-end before committing**, so there is no
+   checkpoint where the gateway demands claims auth doesn't yet mint. (Steps 1–2
+   may be merged into a single implementation checkpoint if that's cleaner.)
 3. **Client-credential registry + `/service-token` endpoint, isolated** (§3.3,
    §4.5) — auth **V3 `service_clients`** table; **narrow the gateway route to
    `/register`+`/login`** (drop `/api/auth/**`); `@Order(1)` client-credential
    `SecurityFilterChain` for `/service-token` (BCrypt-verified, `sub`+allowlist
    from the authenticated client id, no JWT); issues a 10-min `ROLE_SERVICE`
    token (`token_type=service`, `aud=<target>`).
-4. **Booking/Payment/CheckIn ownership schema + event propagation** (§4.2, §4.5)
-   — booking **V5** adds `owner_subject` (nullable); **payment + check-in get
-   baseline+delta migrations** adding `owner_subject` and move to
-   `ddl-auto: validate`; `BookingEvent.ownerSubject` set in the shared
-   `publish(...)` for **CREATED, CONFIRMED, CANCELLED**; captured at booking
-   creation from the principal, snapshotted on consume. Legacy rows stay null
-   (ADMIN-only).
+4. **Ownership schema + event wiring, with `SecurityContext` available for the
+   capture** (§4.2, §4.5). Two ordered parts so a freshly created booking can
+   never snapshot a null owner while the rest of the matrix is still off:
+   1. **Migrations + event plumbing first** — booking **V5** adds `owner_subject`
+      (nullable); **payment + check-in get baseline+delta migrations** adding
+      `owner_subject`, all three moving to `ddl-auto: validate`;
+      `BookingEvent.ownerSubject` set in the shared `publish(...)` for **CREATED,
+      CONFIRMED, CANCELLED** and snapshotted on consume.
+   2. **Turn booking-service's JWT filter on in authentication-only mode** (valid
+      bearer → populate `SecurityContext`; **absent** bearer → still allowed while
+      authorization is off; **present-but-invalid** → reject) **and make the
+      booking-create endpoint `authenticated()`**. Only then does
+      `createDraftBooking` capture `ownerSubject` from the (now guaranteed)
+      principal — so the invariant "only legacy rows are null" holds from the
+      first new booking. The rest of the matrix still flips at step 6. *(Simpler
+      alternative if preferred: keep only the schema/event migrations here and
+      move the `ownerSubject` **capture** code into step 6, so capture and
+      enforcement activate atomically — either way, capture never runs before a
+      `SecurityContext` exists.)*
 5. **Feign identity split + service-token provider** (§3.3) —
    `InventoryQueryFeignClient` (`UserTokenFeignConfiguration`) +
    `InventoryCommandFeignClient` (`ServiceTokenFeignConfiguration`,
@@ -1001,9 +1019,15 @@ profile) lets each chain be built and merged before it's switched live.
 
 - **Breaking working flows** is the top risk — flipping every service to
   `authenticated()` before tokens propagate would 401 every internal call. This
-  is exactly why the build order (§13, Build Order) does **Feign propagation + `ROLE_SERVICE`
-  before** enforcement flips, behind the default-on `enforcement-enabled` flag,
-  re-running the full live e2e at step 4.
+  is exactly why the build order (§13) lands **hardened issuance + gateway
+  migration atomically (step 2), the Feign identity split + `ROLE_SERVICE`
+  (step 5), and only then the full-matrix flip (step 6)**, behind the default-on
+  `enforcement-enabled` flag, with the full gateway + direct-service e2e at
+  **step 7**.
+- **Null `ownerSubject` on a new booking** if capture ran before a
+  `SecurityContext` existed — closed by step 4.2: booking's JWT filter is turned
+  on in authentication-only mode and the create endpoint made `authenticated()`
+  *before* capture is introduced, so only pre-branch rows are ever null.
 - **Accidental privilege elevation** — a service token used on a code path that
   should have carried a user token. Mitigation: `ROLE_SERVICE` is granted only on
   explicitly identified call sites and fails closed everywhere else (§3.3); the
