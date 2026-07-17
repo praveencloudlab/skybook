@@ -277,7 +277,11 @@ public class InventoryServiceImpl implements InventoryService {
     @Transactional
     public SeatHoldResponse releaseHold(ReleaseSeatRequest request) {
 
-        FlightInventory inventory = findByFlightId(request.flightId());
+        // §5.3 policy: EVERY counter mutation takes the shared flight lock -
+        // an unlocked release racing an auto-hold on the same @Version'd row
+        // would fail optimistically, and quiet cleanup callers would swallow
+        // that failure, leaving the hold active and the seat lost.
+        FlightInventory inventory = findByFlightIdForUpdate(request.flightId());
         AircraftSeat seat = findSeat(inventory, request.seatNumber());
 
         SeatHold hold = seatHoldRepository.findByFlightInventoryIdAndAircraftSeatIdAndStatus(
@@ -305,20 +309,39 @@ public class InventoryServiceImpl implements InventoryService {
     @Transactional
     public int expireHolds() {
 
-        List<SeatHold> expired = seatHoldRepository.findByStatusAndExpiresAtBefore(
-                SeatHoldStatus.ACTIVE, LocalDateTime.now());
+        // §5.3 policy: the sweep mutates counters, so it must hold each
+        // flight's pessimistic lock too. The unlocked query is only a
+        // candidate scan - flights are then locked one at a time (in sorted
+        // order, so concurrent sweeps can't deadlock each other) and every
+        // hold is RE-CHECKED under the lock: one confirmed/released in the
+        // race window must not be expired twice.
+        List<Long> candidateFlightIds = seatHoldRepository
+                .findByStatusAndExpiresAtBefore(SeatHoldStatus.ACTIVE, LocalDateTime.now()).stream()
+                .map(hold -> hold.getFlightInventory().getFlightId())
+                .distinct().sorted()
+                .toList();
 
-        for (SeatHold hold : expired) {
-            stateMachine.transitionHold(hold, SeatHoldStatus.EXPIRED,
-                    "Expired by SeatHoldExpiryJob (TTL " + expiryCalculator.getTtlMinutes() + "m)");
-            returnSeatToPool(hold.getFlightInventory(), true);
+        int expired = 0;
+        for (Long flightId : candidateFlightIds) {
+            FlightInventory inventory = findByFlightIdForUpdate(flightId);
+            LocalDateTime now = LocalDateTime.now();
+
+            for (SeatHold hold : seatHoldRepository
+                    .findByFlightInventoryIdAndStatus(inventory.getId(), SeatHoldStatus.ACTIVE)) {
+                if (expiryCalculator.isExpired(hold.getExpiresAt(), now)) {
+                    stateMachine.transitionHold(hold, SeatHoldStatus.EXPIRED,
+                            "Expired by SeatHoldExpiryJob (TTL " + expiryCalculator.getTtlMinutes() + "m)");
+                    returnSeatToPool(inventory, true);
+                    expired++;
+                }
+            }
         }
 
-        if (!expired.isEmpty()) {
-            log.info("Expired {} seat hold(s)", expired.size());
+        if (expired > 0) {
+            log.info("Expired {} seat hold(s)", expired);
         }
 
-        return expired.size();
+        return expired;
     }
 
     // ---------------------------------------------------------------

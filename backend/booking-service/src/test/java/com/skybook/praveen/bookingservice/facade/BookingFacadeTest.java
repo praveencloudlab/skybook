@@ -196,6 +196,29 @@ class BookingFacadeTest {
         }
 
         @Test
+        void noInventoryAfterASuccessfulHoldCompensatesInsteadOfLeaking() {
+            // "No inventory" is a per-flight fact - arriving AFTER a hold
+            // succeeded on the same flight is an inconsistent downstream
+            // state. The earlier hold must be released and the draft
+            // cancelled, never finalized unpriced (review hardening).
+            stubFlightOk();
+            when(bookingService.createDraftBooking(request, departure())).thenReturn(draft);
+            when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
+                    .thenReturn(Optional.of(hold("12A", "MANUAL", "12.00", "12.00")));
+            when(inventoryServiceClient.holdSeat(10L, "12B", 7L, 2L, TravelClass.ECONOMY))
+                    .thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> facade.createBooking(request))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("inconsistent");
+
+            verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12A"), eq(7L), anyString());
+            verify(bookingService).cancelBooking(eq(7L), anyString());
+            verify(bookingService, never()).finalizeSeatAssignments(anyLong(), any());
+            verify(bookingEventProducer, never()).publishBookingCreated(any(), any());
+        }
+
+        @Test
         void seatConflictCompensatesAndCancelsTheDraft() {
             stubFlightOk();
             when(bookingService.createDraftBooking(request, departure())).thenReturn(draft);

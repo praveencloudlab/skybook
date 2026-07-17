@@ -110,11 +110,11 @@ class SeatReservationServiceImplTest {
                 .totalSeats(3).availableSeats(3).heldSeats(0).reservedSeats(0).blockedSeats(0)
                 .build();
 
-        // reserveSeat takes the pessimistic FOR UPDATE lookup (§5.3);
-        // cancelReservation keeps the plain one - stub both leniently.
-        lenient().when(flightInventoryRepository.findByFlightId(100L)).thenReturn(Optional.of(inventory));
+        // Both counter-mutating paths take the pessimistic FOR UPDATE lookup
+        // (§5.3). Lenient: the request-shape rejection tests throw before any
+        // lookup happens.
         lenient().when(flightInventoryRepository.findByFlightIdForUpdate(100L)).thenReturn(Optional.of(inventory));
-        when(aircraftSeatRepository.findByAircraftIdAndSeatNumber(1L, "12A")).thenReturn(Optional.of(seat));
+        lenient().when(aircraftSeatRepository.findByAircraftIdAndSeatNumber(1L, "12A")).thenReturn(Optional.of(seat));
     }
 
     private SeatHold activeHold(Long bookingId) {
@@ -289,6 +289,21 @@ class SeatReservationServiceImplTest {
         // §9 contained-v1 check-in rule: the direct path enforces cabin +
         // entitlement ceiling when the caller supplies them; booking
         // confirmation (hold-based, fields omitted) is untouched.
+
+        @Test
+        void suppliedAloneEitherCheckInFieldIsRejected() {
+            // travelClass + maxAllowedSurcharge are a PAIR - one without the
+            // other would bypass either the cabin check or the ceiling.
+            assertThatThrownBy(() -> reservationService.reserveSeat(new ReserveSeatRequest(
+                    100L, "12A", 77L, 200L, null, SeatType.ECONOMY, null)))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("together");
+
+            assertThatThrownBy(() -> reservationService.reserveSeat(new ReserveSeatRequest(
+                    100L, "12A", 77L, 200L, null, null, new BigDecimal("12.00"))))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("together");
+        }
 
         @Test
         void checkInCrossCabinMoveIsRejected() {

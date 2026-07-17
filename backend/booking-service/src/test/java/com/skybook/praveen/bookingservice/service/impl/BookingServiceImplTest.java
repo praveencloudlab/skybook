@@ -297,6 +297,72 @@ class BookingServiceImplTest {
         }
 
         @Test
+        void finalizeRejectsIncompletePassengerCoverage() {
+            // Review follow-up: a malformed internal call must never promote
+            // a booking while a passenger is seatless / still draft-priced.
+            Booking draft = draftWithOnePassenger();
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(draft));
+
+            assertThatThrownBy(() -> bookingService.finalizeSeatAssignments(1L, List.of()))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("exactly");
+            assertThat(draft.getBookingStatus()).isEqualTo(BookingStatus.DRAFT);
+            verify(bookingRepository, never()).save(any());
+        }
+
+        @Test
+        void finalizeRejectsAssignmentsForForeignOrDuplicatePassengers() {
+            Booking draft = draftWithOnePassenger();
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(draft));
+
+            // Foreign passenger id (999 is not on this booking).
+            assertThatThrownBy(() -> bookingService.finalizeSeatAssignments(1L, List.of(
+                    new SeatAssignmentResult(999L, "12A",
+                            new BigDecimal("12.00"), new BigDecimal("12.00"), SeatAssignmentMode.MANUAL))))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("exactly");
+
+            // Duplicate assignment for the same passenger.
+            assertThatThrownBy(() -> bookingService.finalizeSeatAssignments(1L, List.of(
+                    new SeatAssignmentResult(10L, "12A",
+                            new BigDecimal("12.00"), new BigDecimal("12.00"), SeatAssignmentMode.MANUAL),
+                    new SeatAssignmentResult(10L, "12B",
+                            new BigDecimal("0.00"), new BigDecimal("0.00"), SeatAssignmentMode.AUTO))))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Duplicate");
+        }
+
+        @Test
+        void finalizeRejectsAssignmentsMissingModeOrCharge() {
+            Booking draft = draftWithOnePassenger();
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(draft));
+
+            assertThatThrownBy(() -> bookingService.finalizeSeatAssignments(1L, List.of(
+                    new SeatAssignmentResult(10L, "12A", new BigDecimal("12.00"),
+                            new BigDecimal("12.00"), null))))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("mode/chargedSurcharge");
+        }
+
+        @Test
+        void finalizeAcceptsANullSeatOnlyAsTheNoInventoryFallback() {
+            // Documented fallback: no inventory record => AUTO with null seat
+            // is legal; the coverage check must not reject it.
+            Booking draft = draftWithOnePassenger();
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(draft));
+            when(bookingPassengerRepository.findByIdAndBooking_Id(10L, 1L))
+                    .thenReturn(Optional.of(draft.getPassengers().getFirst()));
+            stubSaveReturnsArgument();
+
+            BookingResponse response = bookingService.finalizeSeatAssignments(1L, List.of(
+                    new SeatAssignmentResult(10L, null,
+                            new BigDecimal("0.00"), new BigDecimal("0.00"), SeatAssignmentMode.AUTO)));
+
+            assertThat(response.bookingStatus()).isEqualTo(BookingStatus.CREATED);
+            assertThat(response.passengers().get(0).seatNumber()).isNull();
+        }
+
+        @Test
         void finalizeRejectsANonDraftBooking() {
             Booking created = draftWithOnePassenger();
             created.setBookingStatus(BookingStatus.CREATED);

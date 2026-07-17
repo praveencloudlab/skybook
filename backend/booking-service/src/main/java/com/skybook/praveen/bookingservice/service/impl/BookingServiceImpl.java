@@ -33,7 +33,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -148,6 +151,8 @@ public class BookingServiceImpl implements BookingService {
             throw new IllegalStateException("Booking " + booking.getBookingReference()
                     + " is " + booking.getBookingStatus() + " - only a DRAFT can be finalized");
         }
+
+        validateCompleteCoverage(booking, assignments);
 
         BigDecimal totalFare = BigDecimal.ZERO;
 
@@ -352,6 +357,38 @@ public class BookingServiceImpl implements BookingService {
         bookingStateMachine.transitionCheckInStatus(passenger, CheckInStatus.BOARDED, "system");
 
         return BookingMapper.toResponse(bookingRepository.save(booking));
+    }
+
+    /**
+     * Finalization must cover EVERY passenger exactly once with complete
+     * pricing (review follow-up on §5.1): a malformed internal call must not
+     * create a payment and promote a booking while a passenger is seatless or
+     * still carries draft placeholder pricing. seatNumber alone may be null -
+     * the documented no-inventory AUTO fallback.
+     */
+    private void validateCompleteCoverage(Booking booking, List<SeatAssignmentResult> assignments) {
+
+        Set<Long> assignedIds = new HashSet<>();
+        for (SeatAssignmentResult assignment : assignments) {
+            if (assignment.mode() == null || assignment.chargedSurcharge() == null) {
+                throw new IllegalArgumentException("Assignment for passenger "
+                        + assignment.bookingPassengerId() + " is missing mode/chargedSurcharge");
+            }
+            if (!assignedIds.add(assignment.bookingPassengerId())) {
+                throw new IllegalArgumentException("Duplicate assignment for passenger "
+                        + assignment.bookingPassengerId());
+            }
+        }
+
+        Set<Long> passengerIds = booking.getPassengers().stream()
+                .map(BookingPassenger::getId)
+                .collect(Collectors.toSet());
+
+        if (!assignedIds.equals(passengerIds)) {
+            throw new IllegalArgumentException("Assignments must cover booking "
+                    + booking.getBookingReference() + "'s passengers exactly: expected "
+                    + passengerIds + " but got " + assignedIds);
+        }
     }
 
     private String generateUniquePnr() {

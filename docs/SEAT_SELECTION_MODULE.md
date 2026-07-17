@@ -815,3 +815,14 @@ honestly recorded:
   (asserted in unit tests), so `RefundCalculator`'s fare-type percentages keep
   applying to the all-in passenger fare — which per §10 is exactly the v1
   refund policy for surcharges.
+- **Documented deviation — event carries LESS than §11's row promised.** The
+  design table said the events gain per-passenger `baseFare` + `seatSurcharge`
+  + `chargedSeatAssignmentMode` alongside `fare`. The implementation carries
+  `fare` (all-in, pre-existing) + `seatSurcharge` + `currency` only; payment
+  derives `baseFareTotal = amount − Σ seatSurcharge`, which is exact under the
+  §8 invariant `fare = baseFare + seatSurcharge`. `chargedSeatAssignmentMode`
+  has no downstream consumer today (check-in's entitlement needs only the
+  charged amount; payment aggregates need only the sums), so the two extra
+  fields were left off rather than shipped unread. If a consumer ever needs
+  the per-passenger base fare or mode, add them additively then — same
+  nullable-evolution path the other two fields took.
