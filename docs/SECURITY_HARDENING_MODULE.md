@@ -8,8 +8,8 @@
 |---|---|
 | **Scope** | Close the fleet's real security gaps: every service authenticates requests (not just the gateway), role-based authorization, hardened JWT issuance/validation, input validation + safe error handling on the auth surface, non-root/read-only containers, network isolation of internal ports, and supply-chain scanning in CI |
 | **Branch** | `feature/security-hardening` |
-| **Status** | **DRAFT — round 4 (revised after review 3, "architecture sound").** R3's three blockers + localized fixes applied: (1) Feign identity is **technically** frozen — booking's mixed inventory client is split into `InventoryQueryFeignClient` (propagates USER token) and `InventoryCommandFeignClient` (attaches the `inventory-service`-audience `ROLE_SERVICE` token), each its own `contextId` + config; the token endpoint uses an isolated `ServiceTokenClient` that inherits neither; ambiguous-origin reads use explicit `…AsUser`/`…AsService` wrappers, never servlet-context inference; (2) `/api/auth/service-token` is de-routed from the gateway (route narrows to `/register`+`/login`) and authenticated by an `@Order(1)` **client-credential** filter chain (BCrypt-hashed per-client secrets, `sub`+allowlist from the client id, never the body) — matrix label `CLIENT_CREDENTIAL`; (3) the **inventory→flight** outbound call gets an identity (ADMIN-token propagation, or an `inventory-service`→`flight-service` service token) and is added to the allowlist, verification, and pre-flip test list. Plus: audience tests corrected (USER accepted on GETs, 403 on writes by role), `ownerSubject` on CREATED+CONFIRMED+CANCELLED, strict token_type↔role coherence, and doc cleanups. R1/R2 retained. Freeze this, then build. |
-| **Superseded status** | ~~DRAFT — round 3 (revised after review 2, 8.8/10).~~ R2's four blockers + two localized fixes applied: (1) **asymmetric RS256** signing — auth-service holds the private key, every other service gets the public key only, so `JWT_SECRET`-style local forgery of `ROLE_SERVICE` is impossible; per-service client credentials replace the single service secret, with `sub` derived from the authenticated client and a caller→audience allowlist; (2) Feign identity is chosen **per operation** — user-token propagation for reads, the caller's own `ROLE_SERVICE` token for inventory writes (which the matrix denies to USER); (3) **two-rule audience model** — user tokens `aud = skybook-api-*`, service tokens `aud = <exact receiving service>`, gateway rejects `token_type=service`; (4) ownership **propagated** via `ownerSubject` on the booking event into `Payment`/`CheckIn`, with the full real check-in/payment/booking HTTP surfaces frozen in §4.4 (booking `/confirm` is ADMIN, not SERVICE); (5) actuator endpoints **move** to the internal management port (health/probes/metrics there; k8s probes re-exposed on main via `add-additional-paths`); (6) email-normalization migration gets a **collision-abort** pre-check + a `CHECK(email = lower(trim(email)))` constraint. **TTL settled: USER/ADMIN 60 min, SERVICE 10 min auto-refreshed.** R1 corrections retained. Nothing implemented yet — freeze this, then build. |
+| **Status** | **DRAFT — round 5 (revised after review 4, 9.5/10 "architecture approved").** R4's three implementation-contract corrections applied: (1) **build order reordered** so roles + token claims + ownership schema/propagation all land *before* enforcement is flipped — the strict validator ships with token issuance, not after, so a role-based rule can never reject a claimless token; (2) **Feign/filter registration isolation frozen** as explicit Spring rules — no global auth `RequestInterceptor`, per-client configs kept off component-scan + named per `@FeignClient`, `ServiceTokenClient` sets `inheritParentConfiguration()=false`, and the JWT filter is constructed only inside its security chain (or servlet auto-registration disabled via `FilterRegistrationBean`) so it never runs on `/service-token`; (3) **security persistence fully specified** — a `service_clients` table (auth `V3`) with BCrypt hashes provisioned via deploy properties/bootstrap (never plaintext migration SQL), and `owner_subject` migrations for booking (`V5`) + payment/check-in (baseline+delta), all three moving to `ddl-auto: validate`. Plus the stale build-order `ownerSubject` wording and the actuator matrix rows corrected. R1–R3 retained. **This is the freeze candidate.** |
+| **Revision history** | R1 (8.3): build-order-before-propagation, `ROLE_SERVICE` identity, auto-config module, ownership in scope, HS384/48-byte, port isolation. R2 (8.8): RS256 + per-service credentials, per-operation Feign identity, two-rule audience, ownership→Payment/CheckIn, management port, email-collision migration, TTL 60/10. R3 (9.5): Feign identity frozen at client-interface level, `/service-token` de-routed + client-credential chain, inventory→flight identity, token↔role coherence. R4 (this round): build order reordered, Feign/filter registration isolation, security-persistence migrations. |
 
 Goal: take SkyBook from "secured at the front door only" to **defense in depth**.
 Today a valid JWT is checked in exactly one place — the API gateway — and every
@@ -409,6 +409,45 @@ flightClient.getFlightAsService(id)  → request an aud=flight-service ROLE_SERV
 method argument). Privilege is chosen by the **calling code path**, which knows
 its origin — the transport layer never elevates on its own.
 
+**Spring wiring rules (frozen, review 4).** Distinct `contextId`s alone do *not*
+stop a `@Configuration`-annotated Feign config in a component-scanned package from
+becoming a **parent** application bean whose `RequestInterceptor` leaks onto every
+Feign client. So:
+
+- **No authentication `RequestInterceptor` is registered as a global/parent
+  bean.** The per-client config classes either live **outside the service's
+  component-scan path** or are **not** annotated as application `@Configuration` —
+  they are referenced only via `@FeignClient(configuration = …)`.
+- **Every `@FeignClient` names its `configuration` explicitly** (query → user,
+  command → service).
+- **`ServiceTokenClient` opts out of parent configuration** so it can never
+  inherit either interceptor:
+
+  ```java
+  @Configuration
+  class ServiceTokenClientConfig {
+      @Bean FeignClientConfigurer feignClientConfigurer() {
+          return new FeignClientConfigurer() {
+              @Override public boolean inheritParentConfiguration() { return false; }
+          };
+      }
+  }
+  ```
+
+  It sends the client credential only — never a bearer token.
+- **Filter single-registration.** If the shared `JwtAuthenticationFilter` is
+  exposed as a plain servlet `Filter` bean, Spring Boot may auto-register it in
+  the servlet container **outside** Spring Security, so it could run on
+  `/api/auth/service-token` despite the separate `@Order(1)` chain. The
+  auto-configuration therefore **either** constructs the filter only inside the
+  intended `SecurityFilterChain(s)`, **or** disables container auto-registration
+  with a `FilterRegistrationBean` (`setEnabled(false)`). It must run **once**, and
+  **only** inside JWT-protected chains — never on the client-credential chain.
+- **Tests capture the actual outbound header** (§15): query client → the exact
+  incoming USER/ADMIN token; command client → an `aud=inventory-service`
+  `ROLE_SERVICE` token; `ServiceTokenClient` → a client-credential request with
+  **no** bearer token.
+
 ---
 
 # 4. Authorization — Roles and Ownership
@@ -524,8 +563,8 @@ check).
 | `POST /checkins` (manual manifest creation) | — | ✓ | — (normal creation is an internal method call from the Kafka consumer) |
 | **payment** `GET /payments/{id}`, `/reference/{ref}`, `/booking/{id}`, `/{id}/history`; `PATCH /{id}/authorize`, `/{id}/capture`; invoices `GET`; refunds `GET` | OWNER | ✓ | — |
 | `POST /payments` (manual create), `PATCH /{id}/cancel`, `/{id}/refund` | — | ✓ | — (normal payment lifecycle is event-driven internal method calls) |
-| **actuator** `/health`, liveness/readiness (main port) | public | public | public |
-| **actuator** `/prometheus`, `/metrics`, `/info` | internal management port only, never host-published (§7) | | |
+| **actuator** `/livez`, `/readyz` (MAIN port only) | public | public | public |
+| **actuator** `/actuator/health`, `/metrics`, `/prometheus`, `/info` (MANAGEMENT port) | internal management port only, never host-published (§7) | | |
 
 Principle: **writes to shared reference data (aircraft, flights, inventory
 creation) and every back-office/gate/manual-lifecycle HTTP operation are ADMIN; a
@@ -534,6 +573,41 @@ OWNER; reads of reference data are any authenticated. `SERVICE` is used ONLY for
 service→service Feign calls (the inventory hold/reserve/release endpoints) — the
 event-driven booking-confirm / payment-lifecycle / manifest-creation paths are
 in-process method calls, NOT HTTP, so they need no HTTP role at all.**
+
+## 4.5 Security-critical persistence (migrations, review 4)
+
+`ownerSubject` and the service-client registry are security state, so they get
+**real Flyway migrations**, not `ddl-auto` — and the two services still on
+`ddl-auto: update` (verified: payment, check-in — neither has any migration) move
+to the proven baseline+delta pattern with `ddl-auto: validate`.
+
+- **auth `V3__create_service_clients.sql`** — the client-credential registry:
+
+  ```
+  service_clients
+    client_id          PK
+    secret_hash        NOT NULL        -- BCrypt/Argon2, never plaintext
+    allowed_audiences  NOT NULL        -- e.g. 'flight-service,inventory-service'
+    enabled            NOT NULL DEFAULT true
+    created_at / updated_at
+  ```
+
+  **No environment-specific credentials are committed in migration SQL.** Rows are
+  provisioned by **required deploy properties carrying pre-generated BCrypt
+  hashes**, or a **one-time admin bootstrap command** that hashes a supplied
+  secret. The token request carries only the requested audience; identity is the
+  authenticated `client_id`. Invalid-client and invalid-secret responses are
+  **indistinguishable** (constant-time, same error).
+- **booking `V5__add_owner_subject.sql`** — `owner_subject varchar` **nullable**
+  (legacy rows stay null → ADMIN-only). booking already runs Flyway `validate`.
+- **payment: baseline + delta** — `V1__baseline_payment_schema.sql` (current
+  schema) + `V2__add_owner_subject.sql` (nullable); `baseline-on-migrate: true`,
+  `baseline-version: 1`, **`ddl-auto: validate`**.
+- **check-in: baseline + delta** — `V1__baseline_checkin_schema.sql` +
+  `V2__add_owner_subject.sql` (nullable); same Flyway config.
+- **New rows/events must always populate `ownerSubject`**; only pre-branch rows
+  are null. The value is captured at booking creation from the authenticated
+  principal and rides the event (§4.2) to payment/check-in.
 
 ---
 
@@ -760,7 +834,7 @@ follow-up branch (§14).
 
 ---
 
-# 12. Decisions Settled (rounds 1–3)
+# 12. Decisions Settled (rounds 1–4)
 
 All open forks are now resolved into the design above; recorded for traceability:
 
@@ -794,60 +868,81 @@ All open forks are now resolved into the design above; recorded for traceability
 - **K. inventory→flight identity (R3 blocker #3)** — ADMIN-token propagation
   (service token if ever scheduler-origin); verified before flipping flight
   (§3.3, §13).
+- **L. Enforcement ordering (R4)** — roles, token claims, and ownership
+  schema/propagation all land **before** `authenticated()` is flipped; the strict
+  validator ships with token issuance (§13).
+- **M. Feign/filter Spring wiring (R4)** — no global auth interceptor; per-client
+  configs off component-scan + named per `@FeignClient`;
+  `ServiceTokenClient.inheritParentConfiguration()=false`; JWT filter registered
+  once, only inside JWT-protected chains (§3.3).
+- **N. Security-critical persistence (R4)** — `service_clients` (auth `V3`,
+  BCrypt, provisioned via deploy props/bootstrap) + `owner_subject` migrations
+  (booking `V5`; payment/check-in baseline+delta); all three on
+  `ddl-auto: validate` (§4.5).
 
 ---
 
 # 13. Build Order
 
-**Reordered after review 1: Feign propagation lands BEFORE enforcement is
-flipped on, or every internal call 401s.** The
-`skybook.security.enforcement-enabled` flag (default `true`, off only in the
-test profile) lets each chain be built and merged before it's switched live.
+**Reordered after review 4: every token claim, role, and ownership column the
+matrix relies on exists BEFORE enforcement is flipped** — otherwise flipping
+`authenticated()` would either enforce authn-only (admin/ownership rules absent)
+or reject every user whose token lacks `roles`/`token_type`. The strict validator
+ships *with* token issuance, not after it. The
+`skybook.security.enforcement-enabled` flag (default `true`, off only in the test
+profile) lets each chain be built and merged before it's switched live.
 
-1. **RS256 key infrastructure + shared `skybook-security` auto-config module**
+1. **RS256 keys + shared `skybook-security` validator/filter infrastructure**
    (§3.3, §5, §3.2) — generate the RSA keypair; auth signs with the private key,
-   the module validates with the public key (`JwtTokenValidator`, filter,
-   entry-point/denied handlers, `JwtSecurityProperties`, Feign interceptor,
-   service-token provider), registered via `AutoConfiguration.imports`. **Do not
-   switch enforcement on fleet-wide yet.** Migrate the gateway onto the shared
-   validator.
-2. **Service-token endpoint, isolated** (§3.3) — **narrow the gateway route to
-   `/api/auth/register` + `/api/auth/login`** (drop the `/api/auth/**` wildcard so
-   `/service-token` is not published); add the `@Order(1)` client-credential
-   `SecurityFilterChain` for `/service-token` (BCrypt-hashed per-client secrets,
-   `sub`+allowlist from the client id, no JWT); auth issues a 10-min
-   `ROLE_SERVICE` token; `ServiceTokenProvider` fetches/caches/refreshes per
-   audience.
-3. **Feign identity, frozen per client interface** (§3.3) — split booking's mixed
-   inventory client into `InventoryQueryFeignClient` (`UserTokenFeignConfiguration`)
-   + `InventoryCommandFeignClient` (`ServiceTokenFeignConfiguration`, aud=inventory-service),
-   distinct `contextId`s; isolated `ServiceTokenClient` inheriting neither;
-   explicit `getFlightAsUser`/`getFlightAsService` wrappers for ambiguous-origin
-   reads. Verify booking→flight (user), booking→inventory + checkin→inventory
-   (service), **inventory→flight (ADMIN-propagated) — before flight is flipped**,
-   and the finalize path.
-4. **Flip each service to `authenticated()`** (§3.2), one dependency chain at a
-   time, each with its local `SecurityConfig` (STATELESS, OPTIONS permit,
-   formLogin/httpBasic disabled). Add security to flight/notification. Stop
-   trusting `X-Auth-User`. Gateway rejects `token_type=service`. **flight-service
-   is flipped only after step 3's inventory→flight path is proven**, or aircraft/
+   the module validates with the public key (`JwtTokenValidator` with the **full
+   §5 checklist incl. alg-pin, two-rule audience, token_type↔role coherence**,
+   filter, entry-point/denied handlers, `JwtSecurityProperties`,
+   `ServiceTokenProvider`), registered via `AutoConfiguration.imports`. **Do not
+   switch enforcement on yet.** Migrate the gateway onto the shared validator.
+2. **Auth roles + hardened RS256 user-token issuance** (§4.3, §4.1, §5) — auth
+   Flyway **V1 baseline + V2** (`role` col: nullable → backfill `USER` → NOT
+   NULL + CHECK; email collision-abort → normalize → `UNIQUE` + `CHECK`),
+   `ddl-auto: validate`, bootstrap-admin property; issuance emits **`roles`,
+   `token_type=user`, `iss`, `aud=user-audience`, 60-min TTL**. Now a real user
+   token carries every claim the matrix will require.
+3. **Client-credential registry + `/service-token` endpoint, isolated** (§3.3,
+   §4.5) — auth **V3 `service_clients`** table; **narrow the gateway route to
+   `/register`+`/login`** (drop `/api/auth/**`); `@Order(1)` client-credential
+   `SecurityFilterChain` for `/service-token` (BCrypt-verified, `sub`+allowlist
+   from the authenticated client id, no JWT); issues a 10-min `ROLE_SERVICE`
+   token (`token_type=service`, `aud=<target>`).
+4. **Booking/Payment/CheckIn ownership schema + event propagation** (§4.2, §4.5)
+   — booking **V5** adds `owner_subject` (nullable); **payment + check-in get
+   baseline+delta migrations** adding `owner_subject` and move to
+   `ddl-auto: validate`; `BookingEvent.ownerSubject` set in the shared
+   `publish(...)` for **CREATED, CONFIRMED, CANCELLED**; captured at booking
+   creation from the principal, snapshotted on consume. Legacy rows stay null
+   (ADMIN-only).
+5. **Feign identity split + service-token provider** (§3.3) —
+   `InventoryQueryFeignClient` (`UserTokenFeignConfiguration`) +
+   `InventoryCommandFeignClient` (`ServiceTokenFeignConfiguration`,
+   aud=inventory-service), distinct `contextId`s; isolated `ServiceTokenClient`
+   (`inheritParentConfiguration()=false`, no interceptor); explicit
+   `getFlightAsUser`/`getFlightAsService`. Verify booking→flight (user),
+   booking→inventory + checkin→inventory (service), and **inventory→flight
+   (ADMIN-propagated)** — all while enforcement is still off, asserting the
+   actual outbound header per client.
+6. **Flip services to the full authentication + authorization matrix** (§3.2,
+   §4.4) — each service's local `SecurityConfig` (STATELESS, OPTIONS permit,
+   formLogin/httpBasic disabled) with the **complete role/OWNER/SERVICE rules**,
+   one dependency chain at a time. Add security to flight/notification; gateway
+   rejects `token_type=service`; stop trusting `X-Auth-User`. **flight-service is
+   flipped only after step 5's inventory→flight path is proven**, or aircraft/
    inventory admin 401s internally.
-5. **Full gateway E2E** — every existing seat-selection/booking/check-in flow
-   still passes *through the gateway*; a direct-to-service call now 401s; a
-   forged `X-Auth-User` alone still 401s; a forged/locally-signed token fails
-   (no private key downstream); a USER token to `/inventory/hold` → 403.
-6. **Network isolation** (§3.1) — unpublish all internal ports incl.
+7. **Full gateway + direct-service E2E** — every seat-selection/booking/check-in
+   flow still passes *through the gateway*; a direct-to-service call → 401; a
+   forged `X-Auth-User` alone → 401; a forged/locally-signed token → rejected (no
+   private key downstream); a USER token to `/inventory/hold` → 403; cross-user
+   booking/payment/checkin access → 403.
+8. **Network isolation** (§3.1) — unpublish all internal ports incl.
    Postgres/Kafka + management ports; document the override file.
-7. **Roles + ownership** (§4) — auth Flyway V1+V2 (`role`, email collision-abort
-   + normalization + CHECK), bootstrap-admin property,
-   `roles`/`token_type`/`aud` claims + authority mapping; `ownerSubject` on the
-   `BookingCreated` event snapshotted into `Booking`/`Payment`/`CheckIn`; the
-   frozen §4.4 matrix. Verify ADMIN-only, OWNER-only, cross-user 403, and SERVICE
-   surfaces.
-8. **JWT validation hardening** (§5) — RS256 pin + `alg` reject, key boot check,
-   two-rule audience, TTLs (60/10), full validation checklist, env doc.
-9. **Auth surface** (§6) — split validation, email normalization + DB unique +
-   race→409, typed exceptions, `@RestControllerAdvice`, remove dead line.
+9. **Auth surface** (§6) — split validation (register complexity, login
+   `@NotBlank`), typed exceptions, `@RestControllerAdvice`, remove dead line.
 10. **Actuator hardening** (§7) — actuator moved to a separate internal-only
     management port; k8s probe paths re-exposed on main.
 11. **Committed secret defaults removed** (§10) — `${VAR:?required}`;
