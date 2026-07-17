@@ -216,7 +216,7 @@ class SeatHoldConcurrencyTest extends AbstractPostgresSpringBootTest {
         assertThat(failures).allSatisfy(failure -> assertThat(failure)
                 .isInstanceOfAny(SeatAlreadyHeldException.class, SeatNotAvailableException.class));
 
-        long successes = 2 - failures.size();
+        int successes = 2 - failures.size();
         assertThat(successes).isGreaterThanOrEqualTo(1);
         assertThat(activeHolds()).isEqualTo(successes);
 
