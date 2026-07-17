@@ -2,6 +2,7 @@ package com.skybook.praveen.inventoryservice.facade;
 
 import com.skybook.praveen.inventoryservice.client.FlightDetails;
 import com.skybook.praveen.inventoryservice.client.FlightServiceClient;
+import com.skybook.praveen.inventoryservice.dto.request.AutoHoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.CreateFlightInventoryRequest;
 import com.skybook.praveen.inventoryservice.dto.request.HoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.ReleaseSeatRequest;
@@ -56,6 +57,15 @@ public class InventoryFacade {
     public SeatHoldResponse holdSeat(HoldSeatRequest request) {
 
         SeatHoldResponse hold = inventoryService.holdSeat(request);
+
+        inventoryEventProducer.publishSeatHeld(hold);
+
+        return hold;
+    }
+
+    public SeatHoldResponse autoHoldSeat(Long flightId, AutoHoldSeatRequest request) {
+
+        SeatHoldResponse hold = inventoryService.autoHoldSeat(flightId, request);
 
         inventoryEventProducer.publishSeatHeld(hold);
 

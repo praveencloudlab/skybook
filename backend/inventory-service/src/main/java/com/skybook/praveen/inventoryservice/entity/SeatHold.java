@@ -1,6 +1,7 @@
 package com.skybook.praveen.inventoryservice.entity;
 
 import com.skybook.praveen.common.entity.Auditable;
+import com.skybook.praveen.inventoryservice.enums.SeatAssignmentMode;
 import com.skybook.praveen.inventoryservice.enums.SeatHoldStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -21,6 +22,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
@@ -35,7 +37,10 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "seat_holds", indexes = {
         @Index(name = "ix_seat_holds_status_expires", columnList = "status, expiresAt"),
-        @Index(name = "ix_seat_holds_booking", columnList = "bookingId")
+        @Index(name = "ix_seat_holds_booking", columnList = "bookingId"),
+        // Backs the money-idempotency lookup: the passenger's ACTIVE hold on a flight (§6).
+        @Index(name = "ix_seat_holds_passenger",
+                columnList = "flight_inventory_id, bookingPassengerId, status")
 })
 @Getter
 @Setter
@@ -60,6 +65,30 @@ public class SeatHold extends Auditable {
     // the hold. Correlation key for confirm/release calls.
     @Column(nullable = false, updatable = false)
     private Long bookingId;
+
+    // ---- Immutable pricing snapshot (SEAT_SELECTION_MODULE.md §6, round 7) ----
+    // All four are DB-nullable: inventory has no Flyway and seat_holds is
+    // populated, so a pre-branch (legacy) hold has them null. Completeness is
+    // enforced in the SERVICE for every NEW hold, not by the schema; a hold
+    // with any of these null is by definition legacy and is never replayed.
+    // updatable = false makes the snapshot immutable once written.
+
+    // The booking passenger this hold belongs to - key for the money-idempotency
+    // replay lookup. Legacy holds carry null and can never be matched by it.
+    @Column(updatable = false)
+    private Long bookingPassengerId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(updatable = false, length = 10)
+    private SeatAssignmentMode assignmentMode;
+
+    // What the seat is worth by its attributes at hold time (policy result).
+    @Column(updatable = false, precision = 19, scale = 2)
+    private BigDecimal listedSurcharge;
+
+    // What the passenger is actually charged: listed (MANUAL) or 0.00 (AUTO).
+    @Column(updatable = false, precision = 19, scale = 2)
+    private BigDecimal chargedSurcharge;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 15)

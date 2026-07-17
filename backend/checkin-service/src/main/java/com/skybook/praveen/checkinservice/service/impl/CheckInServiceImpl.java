@@ -68,6 +68,8 @@ public class CheckInServiceImpl implements CheckInService {
                 .seatNumber(request.seatNumber())
                 .travelClass(request.travelClass())
                 .fareType(request.fareType())
+                .seatSurchargeEntitlement(request.seatSurchargeEntitlement())
+                .entitlementCurrency(request.entitlementCurrency())
                 .documentVerified(request.documentVerified())
                 .build();
 

@@ -194,8 +194,32 @@ class PaymentServiceImplTest {
             Payment saved = captor.getValue();
             assertThat(saved.getAmount()).isEqualByComparingTo("180.00");
             assertThat(saved.getFareBreakdown()).isEqualTo("FLEXI:100.00;SAVER:80.00");
+            // Legacy event (no per-passenger surcharges): the aggregates stay
+            // null - the event doesn't know, so the payment must not claim.
+            assertThat(saved.getBaseFareTotal()).isNull();
+            assertThat(saved.getSeatSurchargeTotal()).isNull();
             assertThat(saved.getHistory().getFirst().getActor()).isEqualTo("KAFKA");
             assertThat(saved.getHistory().getFirst().getSource()).isEqualTo("BOOKING_EVENT");
+        }
+
+        @Test
+        void seatSurchargesAggregateIntoTheChargeComposition() {
+            // SEAT_SELECTION_MODULE.md §10: seatSurchargeTotal = sum of the
+            // CHARGED surcharges, baseFareTotal = amount minus that sum, and
+            // the fareBreakdown string stays byte-identical to the old format.
+            when(paymentRepository.findByBookingId(42L)).thenReturn(Optional.empty());
+            BookingEvent enriched = event();
+            enriched.getPassengers().get(0).setSeatSurcharge(new BigDecimal("12.00"));
+            enriched.getPassengers().get(1).setSeatSurcharge(new BigDecimal("0.00"));
+
+            paymentService.createFromBookingEvent(enriched);
+
+            ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
+            verify(paymentRepository).save(captor.capture());
+            Payment saved = captor.getValue();
+            assertThat(saved.getSeatSurchargeTotal()).isEqualByComparingTo("12.00");
+            assertThat(saved.getBaseFareTotal()).isEqualByComparingTo("168.00");
+            assertThat(saved.getFareBreakdown()).isEqualTo("FLEXI:100.00;SAVER:80.00");
         }
 
         @Test

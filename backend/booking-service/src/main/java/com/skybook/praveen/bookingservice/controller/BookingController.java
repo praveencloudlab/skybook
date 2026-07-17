@@ -3,7 +3,9 @@ package com.skybook.praveen.bookingservice.controller;
 import com.skybook.praveen.bookingservice.dto.request.BookingSearchRequest;
 import com.skybook.praveen.bookingservice.dto.request.CancelBookingRequest;
 import com.skybook.praveen.bookingservice.dto.request.CreateBookingRequest;
+import com.skybook.praveen.bookingservice.dto.request.QuoteRequest;
 import com.skybook.praveen.bookingservice.dto.response.BookingResponse;
+import com.skybook.praveen.bookingservice.dto.response.QuoteResponse;
 import com.skybook.praveen.bookingservice.enums.BookingStatus;
 import com.skybook.praveen.bookingservice.enums.PaymentStatus;
 import com.skybook.praveen.bookingservice.facade.BookingFacade;
@@ -40,6 +42,17 @@ public class BookingController {
     @ResponseStatus(HttpStatus.CREATED)
     public BookingResponse createBooking(@Valid @RequestBody CreateBookingRequest request) {
         return bookingFacade.createBooking(request);
+    }
+
+    @Operation(
+            summary = "Quote Fares",
+            description = "Fare options for one flight: which cabins it sells, seats left in each, and the cabin " +
+                    "base fare per fare type - 'Economy from X, Business from Y'. A chosen seat adds its listed " +
+                    "surcharge on top; auto-assigned seats add nothing."
+    )
+    @PostMapping("/quote")
+    public QuoteResponse quoteFares(@Valid @RequestBody QuoteRequest request) {
+        return bookingFacade.quoteFares(request.flightId());
     }
 
     @Operation(summary = "Get Booking By Id")

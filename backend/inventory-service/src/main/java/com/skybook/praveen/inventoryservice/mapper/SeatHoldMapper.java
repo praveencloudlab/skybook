@@ -15,6 +15,10 @@ public final class SeatHoldMapper {
                 hold.getAircraftSeat().getId(),
                 hold.getAircraftSeat().getSeatNumber(),
                 hold.getBookingId(),
+                hold.getBookingPassengerId(),
+                hold.getAssignmentMode(),
+                hold.getListedSurcharge(),
+                hold.getChargedSurcharge(),
                 hold.getStatus(),
                 hold.getHeldAt(),
                 hold.getExpiresAt()

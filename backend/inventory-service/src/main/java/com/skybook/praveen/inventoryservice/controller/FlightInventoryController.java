@@ -1,9 +1,11 @@
 package com.skybook.praveen.inventoryservice.controller;
 
+import com.skybook.praveen.inventoryservice.dto.request.AutoHoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.CreateFlightInventoryRequest;
 import com.skybook.praveen.inventoryservice.dto.request.HoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.InventorySearchRequest;
 import com.skybook.praveen.inventoryservice.dto.request.ReleaseSeatRequest;
+import com.skybook.praveen.inventoryservice.dto.response.CabinAvailabilityResponse;
 import com.skybook.praveen.inventoryservice.dto.response.FlightInventoryResponse;
 import com.skybook.praveen.inventoryservice.dto.response.InventoryHistoryResponse;
 import com.skybook.praveen.inventoryservice.dto.response.SeatHoldResponse;
@@ -59,9 +61,25 @@ public class FlightInventoryController {
         return ResponseEntity.ok(inventoryService.getHistory(flightId));
     }
 
+    // Which cabins does this flight sell (§7/§11)? Availability only - fares
+    // are assembled solely by booking-service's /quote.
+    @GetMapping("/flights/{flightId}/cabins")
+    public ResponseEntity<List<CabinAvailabilityResponse>> getCabinAvailability(@PathVariable Long flightId) {
+        return ResponseEntity.ok(inventoryService.getCabinAvailability(flightId));
+    }
+
     @PostMapping("/hold")
     public ResponseEntity<SeatHoldResponse> holdSeat(@Valid @RequestBody HoldSeatRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(inventoryFacade.holdSeat(request));
+    }
+
+    // Free auto-assignment (§5.2): no seatNumber - inventory picks a low-demand
+    // seat in the passenger's cabin atomically under the flight lock.
+    @PostMapping("/flights/{flightId}/holds/auto")
+    public ResponseEntity<SeatHoldResponse> autoHoldSeat(
+            @PathVariable Long flightId, @Valid @RequestBody AutoHoldSeatRequest request) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(inventoryFacade.autoHoldSeat(flightId, request));
     }
 
     @PostMapping("/release")

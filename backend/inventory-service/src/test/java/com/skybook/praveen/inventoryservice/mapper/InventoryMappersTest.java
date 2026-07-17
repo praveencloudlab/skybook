@@ -17,6 +17,7 @@ import com.skybook.praveen.inventoryservice.enums.AircraftSeatStatus;
 import com.skybook.praveen.inventoryservice.enums.AircraftStatus;
 import com.skybook.praveen.inventoryservice.enums.InventoryHistoryType;
 import com.skybook.praveen.inventoryservice.enums.InventoryStatus;
+import com.skybook.praveen.inventoryservice.enums.SeatAssignmentMode;
 import com.skybook.praveen.inventoryservice.enums.SeatHoldStatus;
 import com.skybook.praveen.inventoryservice.enums.SeatPosition;
 import com.skybook.praveen.inventoryservice.enums.SeatReservationStatus;
@@ -24,7 +25,9 @@ import com.skybook.praveen.inventoryservice.enums.SeatType;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -82,7 +85,9 @@ class InventoryMappersTest {
             Aircraft aircraft = aircraft();
             aircraft.getSeats().add(seat());
 
-            SeatMapResponse response = AircraftMapper.toSeatMapResponse(aircraft);
+            // The service prices the seats; the mapper just carries the rows.
+            SeatMapResponse response = AircraftMapper.toSeatMapResponse(
+                    aircraft, List.of(AircraftSeatMapper.toResponse(seat(), new BigDecimal("30.00"))));
 
             assertThat(response.aircraftId()).isEqualTo(1L);
             assertThat(response.registrationNumber()).isEqualTo("VT-SKB");
@@ -93,7 +98,7 @@ class InventoryMappersTest {
 
         @Test
         void emptySeatListMapsToEmptyListNotNull() {
-            SeatMapResponse response = AircraftMapper.toSeatMapResponse(aircraft());
+            SeatMapResponse response = AircraftMapper.toSeatMapResponse(aircraft(), List.of());
 
             assertThat(response.seats()).isNotNull().isEmpty();
         }
@@ -101,10 +106,12 @@ class InventoryMappersTest {
 
     @Test
     void aircraftSeatMapsAllFields() {
-        AircraftSeatResponse response = AircraftSeatMapper.toResponse(seat());
+        // Exit-row window seat: listed surcharge is the exit-row tier (30.00).
+        AircraftSeatResponse response = AircraftSeatMapper.toResponse(seat(), new BigDecimal("30.00"));
 
         assertThat(response).isEqualTo(new AircraftSeatResponse(
-                2L, "12A", 12, SeatType.ECONOMY, SeatPosition.WINDOW, AircraftSeatStatus.ACTIVE, true));
+                2L, "12A", 12, SeatType.ECONOMY, SeatPosition.WINDOW, AircraftSeatStatus.ACTIVE,
+                true, new BigDecimal("30.00")));
     }
 
     @Test
@@ -127,13 +134,17 @@ class InventoryMappersTest {
     void seatHoldMapsExpiryAndFlattensSeatAndFlight() {
         SeatHold hold = SeatHold.builder()
                 .id(5L).flightInventory(inventory()).aircraftSeat(seat()).bookingId(42L)
+                .bookingPassengerId(420L).assignmentMode(SeatAssignmentMode.MANUAL)
+                .listedSurcharge(new BigDecimal("30.00")).chargedSurcharge(new BigDecimal("30.00"))
                 .status(SeatHoldStatus.ACTIVE).heldAt(now).expiresAt(now.plusMinutes(15))
                 .build();
 
         SeatHoldResponse response = SeatHoldMapper.toResponse(hold);
 
         assertThat(response).isEqualTo(new SeatHoldResponse(
-                5L, 100L, 2L, "12A", 42L, SeatHoldStatus.ACTIVE, now, now.plusMinutes(15)));
+                5L, 100L, 2L, "12A", 42L, 420L, SeatAssignmentMode.MANUAL,
+                new BigDecimal("30.00"), new BigDecimal("30.00"),
+                SeatHoldStatus.ACTIVE, now, now.plusMinutes(15)));
     }
 
     @Nested

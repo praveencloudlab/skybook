@@ -16,6 +16,7 @@ import com.skybook.praveen.inventoryservice.enums.SeatReservationStatus;
 import com.skybook.praveen.inventoryservice.exception.InventoryConflictException;
 import com.skybook.praveen.inventoryservice.exception.SeatAlreadyHeldException;
 import com.skybook.praveen.inventoryservice.exception.SeatAlreadyReservedException;
+import com.skybook.praveen.inventoryservice.exception.SeatCabinMismatchException;
 import com.skybook.praveen.inventoryservice.exception.SeatHoldExpiredException;
 import com.skybook.praveen.inventoryservice.exception.SeatNotAvailableException;
 import com.skybook.praveen.inventoryservice.mapper.SeatReservationMapper;
@@ -27,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -50,7 +52,19 @@ public class SeatReservationServiceImpl implements SeatReservationService {
     @Transactional
     public SeatReservationResponse reserveSeat(ReserveSeatRequest request) {
 
-        FlightInventory inventory = inventoryService.findByFlightId(request.flightId());
+        // §9 contract: travelClass + maxAllowedSurcharge come as a PAIR -
+        // both null (hold-confirmation semantics) or both set (direct
+        // check-in semantics). One without the other would silently bypass
+        // either the cabin check or the entitlement ceiling.
+        if ((request.travelClass() == null) != (request.maxAllowedSurcharge() == null)) {
+            throw new IllegalArgumentException(
+                    "travelClass and maxAllowedSurcharge must be supplied together (check-in) or omitted together");
+        }
+
+        // Shared pessimistic flight lock (§5.3): reservations mutate the same
+        // counters as holds, so they serialize on the same lock - and the §9
+        // check-in cabin/ceiling validation below runs under it.
+        FlightInventory inventory = inventoryService.findByFlightIdForUpdate(request.flightId());
         AircraftSeat seat = inventoryService.findSeat(inventory, request.seatNumber());
 
         if (seatReservationRepository.existsByFlightInventoryIdAndAircraftSeatIdAndStatus(
@@ -86,7 +100,11 @@ public class SeatReservationServiceImpl implements SeatReservationService {
     @Transactional
     public SeatReservationResponse cancelReservation(ReleaseSeatRequest request) {
 
-        FlightInventory inventory = inventoryService.findByFlightId(request.flightId());
+        // §5.3 policy: cancellation returns a seat to the pool - a counter
+        // mutation - so it serializes on the same flight lock as everything
+        // else. Quiet cleanup callers would otherwise swallow an optimistic
+        // failure and leave the reservation live.
+        FlightInventory inventory = inventoryService.findByFlightIdForUpdate(request.flightId());
         AircraftSeat seat = inventoryService.findSeat(inventory, request.seatNumber());
 
         SeatReservation reservation = seatReservationRepository
@@ -182,6 +200,23 @@ public class SeatReservationServiceImpl implements SeatReservationService {
 
         allocationValidator.validateInventoryOpen(inventory);
         allocationValidator.validateSeatUsable(seat);
+
+        // Contained-v1 check-in rule (§9, round-7 contract): the DIRECT path
+        // enforces cabin + entitlement ceiling when the caller supplies them
+        // (check-in does; booking confirmation goes through a hold and never
+        // reaches here with these fields). Inventory is authoritative - the
+        // caller's own comparison is UX, this is the enforcement.
+        if (request.travelClass() != null && seat.getSeatType() != request.travelClass()) {
+            throw new SeatCabinMismatchException(seat.getSeatNumber(), seat.getSeatType(), request.travelClass());
+        }
+        if (request.maxAllowedSurcharge() != null) {
+            BigDecimal listed = inventoryService.listedSurchargeFor(inventory, seat);
+            if (listed.compareTo(request.maxAllowedSurcharge()) > 0) {
+                throw new InventoryConflictException("Seat " + request.seatNumber()
+                        + " lists at " + listed + " which exceeds the passenger's paid entitlement of "
+                        + request.maxAllowedSurcharge() + " - paid upgrades are a Manage-Booking flow, not check-in");
+            }
+        }
 
         if (inventory.getAvailableSeats() <= 0) {
             throw new SeatNotAvailableException(request.flightId(), request.seatNumber(),

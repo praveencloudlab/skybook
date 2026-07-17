@@ -1,13 +1,16 @@
 package com.skybook.praveen.inventoryservice.integration;
 
+import com.skybook.praveen.inventoryservice.dto.request.AutoHoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.HoldSeatRequest;
 import com.skybook.praveen.inventoryservice.entity.Aircraft;
 import com.skybook.praveen.inventoryservice.entity.AircraftSeat;
 import com.skybook.praveen.inventoryservice.entity.FlightInventory;
+import com.skybook.praveen.inventoryservice.entity.SeatHold;
 import com.skybook.praveen.inventoryservice.enums.SeatHoldStatus;
 import com.skybook.praveen.inventoryservice.enums.SeatPosition;
 import com.skybook.praveen.inventoryservice.enums.SeatType;
 import com.skybook.praveen.inventoryservice.exception.SeatAlreadyHeldException;
+import com.skybook.praveen.inventoryservice.exception.SeatNotAvailableException;
 import com.skybook.praveen.inventoryservice.repository.AircraftRepository;
 import com.skybook.praveen.inventoryservice.repository.AircraftSeatRepository;
 import com.skybook.praveen.inventoryservice.repository.FlightInventoryRepository;
@@ -18,7 +21,6 @@ import com.skybook.praveen.inventoryservice.service.InventoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.OptimisticLockingFailureException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,13 +34,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Proves the concurrency claim from INVENTORY_SERVICE_MODULE.md section 6:
- * "one ACTIVE hold per seat" has no DB constraint, but racing holds collide
- * on FlightInventory's @Version because every hold mutates the counts.
+ * Proves the concurrency claim from SEAT_SELECTION_MODULE.md §5: every
+ * counter-mutating hold - manual AND auto - serializes on the pessimistic
+ * flight lock (SELECT ... FOR UPDATE on the FlightInventory row). Racing holds
+ * therefore never oversell and never pick the same seat; the loser (if any)
+ * fails cleanly, and the count invariant always holds.
  *
- * Real PostgreSQL, real transactions, real threads - each holdSeat call
- * runs in its own transaction (this test class is deliberately NOT
- * @Transactional).
+ * Real PostgreSQL, real transactions, real threads - each call runs in its own
+ * transaction (this test class is deliberately NOT @Transactional).
  */
 class SeatHoldConcurrencyTest extends AbstractPostgresSpringBootTest {
 
@@ -88,6 +91,14 @@ class SeatHoldConcurrencyTest extends AbstractPostgresSpringBootTest {
         inventoryId = inventory.getId();
     }
 
+    private HoldSeatRequest manual(String seatNumber, long booking) {
+        return new HoldSeatRequest(flightId, seatNumber, booking, booking * 10, SeatType.ECONOMY);
+    }
+
+    private AutoHoldSeatRequest auto(long booking) {
+        return new AutoHoldSeatRequest(booking, booking * 10, SeatType.ECONOMY);
+    }
+
     private List<Throwable> race(List<Callable<Object>> calls) throws Exception {
         ExecutorService pool = Executors.newFixedThreadPool(calls.size());
         CountDownLatch start = new CountDownLatch(1);
@@ -114,65 +125,123 @@ class SeatHoldConcurrencyTest extends AbstractPostgresSpringBootTest {
         return failures;
     }
 
-    @Test
-    void twoBookingsRacingForTheSameSeatYieldExactlyOneHold() throws Exception {
-
-        List<Throwable> failures = race(List.of(
-                () -> inventoryService.holdSeat(new HoldSeatRequest(flightId, "12A", 111L)),
-                () -> inventoryService.holdSeat(new HoldSeatRequest(flightId, "12A", 222L))
-        ));
-
-        // Exactly one winner.
-        assertThat(failures).hasSize(1);
-
-        // The loser failed for one of the two legitimate reasons: it saw the
-        // winner's hold (serial timing) or collided on @Version (true race).
-        assertThat(failures.getFirst())
-                .isInstanceOfAny(SeatAlreadyHeldException.class, OptimisticLockingFailureException.class);
-
-        // Exactly one ACTIVE hold row exists for the seat.
-        assertThat(seatHoldRepository.findAll())
-                .filteredOn(h -> h.getStatus() == SeatHoldStatus.ACTIVE)
-                .hasSize(1);
-
-        // Counts reflect exactly one hold and the invariant holds.
-        FlightInventory inventory = flightInventoryRepository.findById(inventoryId).orElseThrow();
-        assertThat(inventory.getAvailableSeats()).isEqualTo(2);
-        assertThat(inventory.getHeldSeats()).isEqualTo(1);
+    private void assertInvariant(FlightInventory inventory) {
         assertThat(inventory.getAvailableSeats() + inventory.getHeldSeats()
                 + inventory.getReservedSeats() + inventory.getBlockedSeats())
                 .isEqualTo(inventory.getTotalSeats());
     }
 
-    @Test
-    void racesOnDifferentSeatsNeverCorruptTheCounts() throws Exception {
+    private long activeHolds() {
+        return seatHoldRepository.findAll().stream()
+                .filter(h -> h.getStatus() == SeatHoldStatus.ACTIVE).count();
+    }
 
-        // Three bookings, three different seats, same inventory row. Without
-        // retry logic some may lose the optimistic lock (documented 409
-        // behavior) - what must NEVER happen is a successful hold that isn't
-        // reflected in the counts.
+    @Test
+    void twoBookingsRacingForTheSameSeatYieldExactlyOneHold() throws Exception {
+
         List<Throwable> failures = race(List.of(
-                () -> inventoryService.holdSeat(new HoldSeatRequest(flightId, "12A", 111L)),
-                () -> inventoryService.holdSeat(new HoldSeatRequest(flightId, "12B", 222L)),
-                () -> inventoryService.holdSeat(new HoldSeatRequest(flightId, "12C", 333L))
+                () -> inventoryService.holdSeat(manual("12A", 111L)),
+                () -> inventoryService.holdSeat(manual("12A", 222L))
         ));
 
-        // Every failure, if any, is an optimistic-lock loss - nothing else.
-        assertThat(failures).allSatisfy(failure ->
-                assertThat(failure).isInstanceOf(OptimisticLockingFailureException.class));
+        // The flight lock serializes them: exactly one winner, the loser sees
+        // the winner's hold and fails cleanly (no rollback-only / lock-timeout).
+        assertThat(failures).hasSize(1);
+        assertThat(failures.getFirst()).isInstanceOf(SeatAlreadyHeldException.class);
 
-        int successes = 3 - failures.size();
+        assertThat(activeHolds()).isEqualTo(1);
+
+        FlightInventory inventory = flightInventoryRepository.findById(inventoryId).orElseThrow();
+        assertThat(inventory.getAvailableSeats()).isEqualTo(2);
+        assertThat(inventory.getHeldSeats()).isEqualTo(1);
+        assertInvariant(inventory);
+    }
+
+    @Test
+    void manualRacesOnDifferentSeatsAllSucceedUnderTheFlightLock() throws Exception {
+
+        // Three bookings, three different seats. Under the pessimistic flight
+        // lock they serialize with NO optimistic-lock loss - all three commit.
+        List<Throwable> failures = race(List.of(
+                () -> inventoryService.holdSeat(manual("12A", 111L)),
+                () -> inventoryService.holdSeat(manual("12B", 222L)),
+                () -> inventoryService.holdSeat(manual("12C", 333L))
+        ));
+
+        assertThat(failures).isEmpty();
+        assertThat(activeHolds()).isEqualTo(3);
+
+        FlightInventory inventory = flightInventoryRepository.findById(inventoryId).orElseThrow();
+        assertThat(inventory.getHeldSeats()).isEqualTo(3);
+        assertThat(inventory.getAvailableSeats()).isZero();
+        assertInvariant(inventory);
+    }
+
+    @Test
+    void twoAutoAssignsGetDifferentSeatsNeverTheSameOne() throws Exception {
+
+        // The design's headline guarantee: two atomic auto-assigns racing the
+        // same flight get DIFFERENT seats, no rollback-only error, counts right.
+        List<Throwable> failures = race(List.of(
+                () -> inventoryService.autoHoldSeat(flightId, auto(111L)),
+                () -> inventoryService.autoHoldSeat(flightId, auto(222L))
+        ));
+
+        assertThat(failures).isEmpty();
+
+        List<SeatHold> holds = seatHoldRepository.findAll().stream()
+                .filter(h -> h.getStatus() == SeatHoldStatus.ACTIVE).toList();
+        assertThat(holds).hasSize(2);
+        assertThat(holds.stream().map(h -> h.getAircraftSeat().getId()).distinct()).hasSize(2);
+        // AUTO seats are free regardless of what they list at.
+        assertThat(holds).allSatisfy(h -> assertThat(h.getChargedSurcharge()).isEqualByComparingTo("0.00"));
+
+        FlightInventory inventory = flightInventoryRepository.findById(inventoryId).orElseThrow();
+        assertThat(inventory.getHeldSeats()).isEqualTo(2);
+        assertThat(inventory.getAvailableSeats()).isEqualTo(1);
+        assertInvariant(inventory);
+    }
+
+    @Test
+    void autoVsManualRacingSerializeWithoutOversell() throws Exception {
+
+        // An auto-assign and a manual pick on the same flight serialize on the
+        // shared lock: no oversell, no rollback-only error. If they collide on
+        // the same seat exactly one wins; otherwise both hold different seats.
+        List<Throwable> failures = race(List.of(
+                () -> inventoryService.autoHoldSeat(flightId, auto(111L)),
+                () -> inventoryService.holdSeat(manual("12A", 222L))
+        ));
+
+        assertThat(failures).allSatisfy(failure -> assertThat(failure)
+                .isInstanceOfAny(SeatAlreadyHeldException.class, SeatNotAvailableException.class));
+
+        int successes = 2 - failures.size();
         assertThat(successes).isGreaterThanOrEqualTo(1);
-
-        long activeHolds = seatHoldRepository.findAll().stream()
-                .filter(h -> h.getStatus() == SeatHoldStatus.ACTIVE).count();
-        assertThat(activeHolds).isEqualTo(successes);
+        assertThat(activeHolds()).isEqualTo(successes);
 
         FlightInventory inventory = flightInventoryRepository.findById(inventoryId).orElseThrow();
         assertThat(inventory.getHeldSeats()).isEqualTo(successes);
-        assertThat(inventory.getAvailableSeats()).isEqualTo(3 - successes);
-        assertThat(inventory.getAvailableSeats() + inventory.getHeldSeats()
-                + inventory.getReservedSeats() + inventory.getBlockedSeats())
-                .isEqualTo(inventory.getTotalSeats());
+        assertInvariant(inventory);
+    }
+
+    @Test
+    void autoRetryForTheSamePassengerIsIdempotent() throws Exception {
+
+        // Two identical auto-assign calls for the SAME passenger race: money
+        // idempotency returns the one stored hold - never two seats, never two
+        // charges.
+        List<Throwable> failures = race(List.of(
+                () -> inventoryService.autoHoldSeat(flightId, auto(111L)),
+                () -> inventoryService.autoHoldSeat(flightId, auto(111L))
+        ));
+
+        assertThat(failures).isEmpty();
+        assertThat(activeHolds()).isEqualTo(1);
+
+        FlightInventory inventory = flightInventoryRepository.findById(inventoryId).orElseThrow();
+        assertThat(inventory.getHeldSeats()).isEqualTo(1);
+        assertThat(inventory.getAvailableSeats()).isEqualTo(2);
+        assertInvariant(inventory);
     }
 }

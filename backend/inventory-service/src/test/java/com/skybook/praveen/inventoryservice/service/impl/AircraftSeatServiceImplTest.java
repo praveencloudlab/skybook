@@ -1,6 +1,8 @@
 package com.skybook.praveen.inventoryservice.service.impl;
 
+import com.skybook.praveen.inventoryservice.config.SeatPricingProperties;
 import com.skybook.praveen.inventoryservice.domain.SeatMapGenerator;
+import com.skybook.praveen.inventoryservice.domain.SeatPricingPolicy;
 import com.skybook.praveen.inventoryservice.dto.request.CreateAircraftSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.CreateSeatMapRequest;
 import com.skybook.praveen.inventoryservice.dto.response.AircraftSeatResponse;
@@ -41,9 +43,11 @@ class AircraftSeatServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        // Real generator - it's pure domain logic; only repositories are mocked.
+        // Real generator + pricing policy - both are pure domain logic; only
+        // repositories are mocked.
         seatService = new AircraftSeatServiceImpl(
-                aircraftRepository, aircraftSeatRepository, new SeatMapGenerator());
+                aircraftRepository, aircraftSeatRepository, new SeatMapGenerator(),
+                new SeatPricingPolicy(new SeatPricingProperties()));
     }
 
     private Aircraft aircraftWithSeats() {

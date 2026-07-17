@@ -47,7 +47,7 @@ class CheckInConcurrencyTest extends AbstractCheckInIntegrationTest {
 
     private CreateCheckInRequest requestFor(long bookingPassengerId) {
         return new CreateCheckInRequest(42L, "SBCONC", bookingPassengerId, 7L, "BA178", "LHR", "JFK",
-                DEPARTURE, "Concurrency Test", "test@example.com", "12B", "ECONOMY", "FLEXI", true);
+                DEPARTURE, "Concurrency Test", "test@example.com", "12B", "ECONOMY", "FLEXI", new java.math.BigDecimal("12.00"), "USD", true);
     }
 
     private List<Throwable> race(List<Callable<Object>> calls) throws Exception {

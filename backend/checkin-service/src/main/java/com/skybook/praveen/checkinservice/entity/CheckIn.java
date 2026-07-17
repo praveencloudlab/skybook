@@ -22,6 +22,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -105,6 +106,19 @@ public class CheckIn extends Auditable {
 
     @Column(name = "fare_type", length = 20, updatable = false)
     private String fareType;
+
+    // Free-seat-change entitlement (SEAT_SELECTION_MODULE.md §9): the seat
+    // surcharge the passenger actually PAID at booking, snapshotted from the
+    // CONFIRMED BookingEvent. Ceiling for check-in seat changes - a target
+    // seat listing above it is rejected (downgrades forfeit the difference,
+    // v1 policy). Nullable: legacy events don't carry it => treated as 0
+    // (only free seats reachable at check-in).
+    @Column(name = "seat_surcharge_entitlement", updatable = false, precision = 19, scale = 2)
+    private BigDecimal seatSurchargeEntitlement;
+
+    /** ISO-4217 of the entitlement ("USD" v1). Nullable on legacy rows. */
+    @Column(name = "entitlement_currency", length = 3, updatable = false)
+    private String entitlementCurrency;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 15)

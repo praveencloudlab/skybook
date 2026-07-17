@@ -68,7 +68,7 @@ class RefundAndInvoiceControllerTest {
         when(invoiceService.getByPaymentId(1L)).thenReturn(new InvoiceResponse(
                 7L, "INV-2026-000123", "PAY-2026-K7M4Z9", "SBTEST",
                 new BigDecimal("100.00"), BigDecimal.ZERO, BigDecimal.ZERO,
-                new BigDecimal("100.00"), "USD", LocalDateTime.now()));
+                new BigDecimal("100.00"), "USD", null, null, LocalDateTime.now()));
 
         mockMvc.perform(get("/api/invoices/1"))
                 .andExpect(status().isOk())

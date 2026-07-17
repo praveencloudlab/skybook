@@ -19,6 +19,8 @@ public final class InvoiceMapper {
                 invoice.getDiscount(),
                 invoice.getGrandTotal(),
                 invoice.getCurrency(),
+                invoice.getBaseFareTotal(),
+                invoice.getSeatSurchargeTotal(),
                 invoice.getIssuedAt()
         );
     }

@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -54,12 +56,18 @@ public class InventoryServiceClient {
         }
     }
 
-    /** Optional.empty() = the flight has no inventory record - proceed without reserving. */
+    /**
+     * Direct check-in reservation (§9): inventory authoritatively enforces
+     * cabin match + listedSurcharge <= maxAllowedSurcharge under the flight
+     * lock. Optional.empty() = the flight has no inventory record - proceed
+     * without reserving.
+     */
     public Optional<SeatReservationDetails> reserveSeat(Long flightId, String seatNumber,
-                                                         Long bookingId, Long bookingPassengerId) {
+                                                         Long bookingId, Long bookingPassengerId,
+                                                         String travelClass, BigDecimal maxAllowedSurcharge) {
         try {
-            return Optional.of(resilientClient.reserveSeat(
-                    InventorySeatCall.reserve(flightId, seatNumber, bookingId, bookingPassengerId)));
+            return Optional.of(resilientClient.reserveSeat(InventorySeatCall.reserve(
+                    flightId, seatNumber, bookingId, bookingPassengerId, travelClass, maxAllowedSurcharge)));
 
         } catch (FeignException.NotFound notFound) {
             if (notFound.contentUTF8().contains(NO_INVENTORY_MARKER)) {
@@ -69,7 +77,11 @@ public class InventoryServiceClient {
                     "seat does not exist in the flight's seat inventory");
 
         } catch (FeignException.Conflict conflict) {
-            throw new SeatUnavailableException(flightId, seatNumber, "already held or reserved");
+            // Occupied seat, cross-cabin move, or above-entitlement seat -
+            // inventory's message names the exact rule (§9).
+            String body = conflict.contentUTF8();
+            throw new SeatUnavailableException(flightId, seatNumber,
+                    body == null || body.isBlank() ? "already held or reserved" : body);
 
         } catch (CallNotPermittedException | BulkheadFullException fastFail) {
             log.warn("inventory-service reserve rejected without attempt ({}), seat {} flight {}",
