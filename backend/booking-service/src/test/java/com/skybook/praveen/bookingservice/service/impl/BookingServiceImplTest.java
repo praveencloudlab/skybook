@@ -3,9 +3,8 @@ package com.skybook.praveen.bookingservice.service.impl;
 import com.skybook.praveen.bookingservice.domain.BookingStateMachine;
 import com.skybook.praveen.bookingservice.domain.BookingValidator;
 import com.skybook.praveen.bookingservice.domain.FareCalculator;
-import com.skybook.praveen.bookingservice.domain.ManualSeatAssignmentStrategy;
 import com.skybook.praveen.bookingservice.domain.PnrGenerator;
-import com.skybook.praveen.bookingservice.domain.SeatAssignmentStrategy;
+import com.skybook.praveen.bookingservice.domain.SeatAssignmentResult;
 import com.skybook.praveen.bookingservice.dto.request.BookingContactRequest;
 import com.skybook.praveen.bookingservice.dto.request.BookingSearchRequest;
 import com.skybook.praveen.bookingservice.dto.request.CreateBookingRequest;
@@ -20,10 +19,10 @@ import com.skybook.praveen.bookingservice.enums.BookingStatus;
 import com.skybook.praveen.bookingservice.enums.CheckInStatus;
 import com.skybook.praveen.bookingservice.enums.FareType;
 import com.skybook.praveen.bookingservice.enums.PaymentStatus;
+import com.skybook.praveen.bookingservice.enums.SeatAssignmentMode;
 import com.skybook.praveen.bookingservice.enums.TravelClass;
 import com.skybook.praveen.bookingservice.exception.BookingNotFoundException;
 import com.skybook.praveen.bookingservice.exception.BookingPassengerNotFoundException;
-import com.skybook.praveen.bookingservice.exception.SeatAlreadyBookedException;
 import com.skybook.praveen.bookingservice.repository.BookingPassengerRepository;
 import com.skybook.praveen.bookingservice.repository.BookingRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,14 +53,15 @@ import static org.mockito.Mockito.when;
 
 /**
  * Repositories are mocked; the domain services (PnrGenerator,
- * BookingStateMachine, BookingValidator, FareCalculator,
- * ManualSeatAssignmentStrategy) are real instances, not mocks - they're
- * pure/deterministic and already unit-tested on their own (see the
- * `domain` package), so exercising the real integration here is more useful
- * than restubbing every canTransition/calculateFare call.
+ * BookingStateMachine, BookingValidator, FareCalculator) are real instances,
+ * not mocks - they're pure/deterministic and already unit-tested on their own
+ * (see the `domain` package), so exercising the real integration here is more
+ * useful than restubbing every canTransition/calculateFare call.
  */
 @ExtendWith(MockitoExtension.class)
 class BookingServiceImplTest {
+
+    private static final long DRAFT_TTL_MINUTES = 15;
 
     @Mock
     private BookingRepository bookingRepository;
@@ -73,7 +73,6 @@ class BookingServiceImplTest {
     private final BookingStateMachine bookingStateMachine = new BookingStateMachine();
     private final BookingValidator bookingValidator = new BookingValidator();
     private final FareCalculator fareCalculator = new FareCalculator();
-    private final SeatAssignmentStrategy seatAssignmentStrategy = new ManualSeatAssignmentStrategy();
 
     private BookingServiceImpl bookingService;
 
@@ -81,7 +80,7 @@ class BookingServiceImplTest {
     void setUp() {
         bookingService = new BookingServiceImpl(
                 bookingRepository, bookingPassengerRepository,
-                pnrGenerator, bookingStateMachine, bookingValidator, fareCalculator, seatAssignmentStrategy);
+                pnrGenerator, bookingStateMachine, bookingValidator, fareCalculator, DRAFT_TTL_MINUTES);
     }
 
     // ---------------------------------------------------------------
@@ -111,40 +110,42 @@ class BookingServiceImplTest {
     }
 
     // ---------------------------------------------------------------
-    // createBooking
+    // createDraftBooking (stage 1 of draft -> hold -> finalize, §5.1)
     // ---------------------------------------------------------------
 
     @Nested
-    class CreateBooking {
+    class CreateDraftBooking {
 
         @Test
-        void createsBookingWithSinglePassenger() {
+        void draftHasNoSeatNoPaymentAndBaseFareOnly() {
             when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
-            when(bookingPassengerRepository.existsByFlightIdAndSeatNumber(anyLong(), anyString())).thenReturn(false);
             stubSaveReturnsArgument();
 
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = bookingService.createBooking(request, LocalDateTime.now().plusDays(30));
+            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30));
 
             assertThat(response.bookingReference()).matches("^SB[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$");
-            assertThat(response.bookingStatus()).isEqualTo(BookingStatus.CREATED);
+            assertThat(response.bookingStatus()).isEqualTo(BookingStatus.DRAFT);
             assertThat(response.customerId()).isEqualTo(100L);
             assertThat(response.flightId()).isEqualTo(1L);
             assertThat(response.totalFare()).isEqualByComparingTo("100.00");
             assertThat(response.passengers()).hasSize(1);
-            assertThat(response.passengers().get(0).seatNumber()).isEqualTo("12A");
+            // Seat resolution belongs to the facade's hold step, even when the
+            // request named one - the draft never persists a seat.
+            assertThat(response.passengers().get(0).seatNumber()).isNull();
+            assertThat(response.passengers().get(0).baseFare()).isEqualByComparingTo("100.00");
+            assertThat(response.passengers().get(0).seatSurcharge()).isEqualByComparingTo("0.00");
             assertThat(response.passengers().get(0).checkInStatus()).isEqualTo(CheckInStatus.NOT_OPEN);
             assertThat(response.contact().contactEmail()).isEqualTo("john@example.com");
-            assertThat(response.payment().paymentStatus()).isEqualTo(PaymentStatus.PENDING);
-            assertThat(response.payment().amount()).isEqualByComparingTo("100.00");
+            // No payment snapshot at draft (round 4) - finalize creates it.
+            assertThat(response.payment()).isNull();
         }
 
         @Test
-        void sumsUpFareAcrossMultiplePassengers() {
+        void sumsUpBaseFaresAcrossMultiplePassengers() {
             when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
-            when(bookingPassengerRepository.existsByFlightIdAndSeatNumber(anyLong(), anyString())).thenReturn(false);
             stubSaveReturnsArgument();
 
             CreateBookingRequest request = createRequest(List.of(
@@ -152,26 +153,28 @@ class BookingServiceImplTest {
                     passengerDetail("12B", TravelClass.BUSINESS, FareType.SAVER)   // 350 * 0.85 = 297.50
             ));
 
-            BookingResponse response = bookingService.createBooking(request, LocalDateTime.now().plusDays(30));
+            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30));
 
             assertThat(response.passengers()).hasSize(2);
             assertThat(response.totalFare()).isEqualByComparingTo("397.50");
-            assertThat(response.payment().amount()).isEqualByComparingTo("397.50");
+            assertThat(response.payment()).isNull();
         }
 
         @Test
-        void rejectsWhenSeatAlreadyBooked() {
+        void blankSeatNumberIsLegalAtDraftStage() {
+            // Blank seat = AUTO assignment (facade decides the mode) - the old
+            // "Seat number is required" strategy rejection is gone with the
+            // deleted strategy contract.
             when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
-            when(bookingPassengerRepository.existsByFlightIdAndSeatNumber(1L, "12A")).thenReturn(true);
+            stubSaveReturnsArgument();
 
             CreateBookingRequest request = createRequest(
-                    List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
+                    List.of(passengerDetail(null, TravelClass.ECONOMY, FareType.FLEXI)));
 
-            assertThatThrownBy(() -> bookingService.createBooking(request, LocalDateTime.now().plusDays(30)))
-                    .isInstanceOf(SeatAlreadyBookedException.class)
-                    .hasMessageContaining("12A");
+            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30));
 
-            verify(bookingRepository, never()).save(any());
+            assertThat(response.bookingStatus()).isEqualTo(BookingStatus.DRAFT);
+            assertThat(response.passengers().get(0).seatNumber()).isNull();
         }
 
         @Test
@@ -188,21 +191,11 @@ class BookingServiceImplTest {
 
             CreateBookingRequest request = createRequest(List.of(expiredPassport));
 
-            assertThatThrownBy(() -> bookingService.createBooking(request, departureTime))
+            assertThatThrownBy(() -> bookingService.createDraftBooking(request, departureTime))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("passport");
 
             verify(bookingRepository, never()).save(any());
-        }
-
-        @Test
-        void rejectsBlankSeatNumber() {
-            CreateBookingRequest request = createRequest(
-                    List.of(passengerDetail(null, TravelClass.ECONOMY, FareType.FLEXI)));
-
-            assertThatThrownBy(() -> bookingService.createBooking(request, LocalDateTime.now().plusDays(30)))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessageContaining("Seat number is required");
         }
 
         @Test
@@ -212,7 +205,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            assertThatThrownBy(() -> bookingService.createBooking(request, LocalDateTime.now().plusDays(30)))
+            assertThatThrownBy(() -> bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30)))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("unique PNR");
         }
@@ -224,19 +217,187 @@ class BookingServiceImplTest {
 
             when(bookingRepository.existsByBookingReference("SBAAAA")).thenReturn(true);
             when(bookingRepository.existsByBookingReference("SBBBBB")).thenReturn(false);
-            when(bookingPassengerRepository.existsByFlightIdAndSeatNumber(anyLong(), anyString())).thenReturn(false);
             stubSaveReturnsArgument();
 
             BookingServiceImpl serviceWithMockedPnr = new BookingServiceImpl(
                     bookingRepository, bookingPassengerRepository,
-                    mockPnrGenerator, bookingStateMachine, bookingValidator, fareCalculator, seatAssignmentStrategy);
+                    mockPnrGenerator, bookingStateMachine, bookingValidator, fareCalculator, DRAFT_TTL_MINUTES);
 
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = serviceWithMockedPnr.createBooking(request, LocalDateTime.now().plusDays(30));
+            BookingResponse response = serviceWithMockedPnr.createDraftBooking(request, LocalDateTime.now().plusDays(30));
 
             assertThat(response.bookingReference()).isEqualTo("SBBBBB");
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // finalizeSeatAssignments (stage 3, §5.1) + stale-draft sweep (§5.1a)
+    // ---------------------------------------------------------------
+
+    @Nested
+    class FinalizeAndSweep {
+
+        private Booking draftWithOnePassenger() {
+            BookingPassenger passenger = BookingPassenger.builder().id(10L)
+                    .passenger(Passenger.builder().id(5L).firstName("Jane").lastName("Doe").build())
+                    .flightId(1L).travelClass(TravelClass.ECONOMY).fareType(FareType.FLEXI)
+                    .baseFare(new BigDecimal("100.00")).seatSurcharge(BigDecimal.ZERO)
+                    .chargedSeatAssignmentMode(SeatAssignmentMode.MANUAL).currency("USD")
+                    .fare(new BigDecimal("100.00")).checkInStatus(CheckInStatus.NOT_OPEN)
+                    .build();
+            Booking draft = Booking.builder().id(1L).bookingReference("SBDRFT").flightId(1L)
+                    .bookingStatus(BookingStatus.DRAFT).bookingDate(LocalDateTime.now())
+                    .totalFare(new BigDecimal("100.00"))
+                    .passengers(new ArrayList<>(List.of(passenger))).history(new ArrayList<>())
+                    .build();
+            passenger.setBooking(draft);
+            return draft;
+        }
+
+        @Test
+        void finalizeWritesMoneyFieldsCreatesPaymentAndPromotesToCreated() {
+            Booking draft = draftWithOnePassenger();
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(draft));
+            when(bookingPassengerRepository.findByIdAndBooking_Id(10L, 1L))
+                    .thenReturn(Optional.of(draft.getPassengers().getFirst()));
+            stubSaveReturnsArgument();
+
+            BookingResponse response = bookingService.finalizeSeatAssignments(1L, List.of(
+                    new SeatAssignmentResult(10L, "12A",
+                            new BigDecimal("12.00"), new BigDecimal("12.00"), SeatAssignmentMode.MANUAL)));
+
+            assertThat(response.bookingStatus()).isEqualTo(BookingStatus.CREATED);
+            assertThat(response.passengers().get(0).seatNumber()).isEqualTo("12A");
+            assertThat(response.passengers().get(0).seatSurcharge()).isEqualByComparingTo("12.00");
+            assertThat(response.passengers().get(0).fare()).isEqualByComparingTo("112.00");
+            // Round-4 invariant: sum(passenger.fare) = totalFare = payment.amount.
+            assertThat(response.totalFare()).isEqualByComparingTo("112.00");
+            assertThat(response.payment().paymentStatus()).isEqualTo(PaymentStatus.PENDING);
+            assertThat(response.payment().amount()).isEqualByComparingTo("112.00");
+        }
+
+        @Test
+        void autoAssignmentFinalizesAtChargedZeroEvenIfListedHigher() {
+            Booking draft = draftWithOnePassenger();
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(draft));
+            when(bookingPassengerRepository.findByIdAndBooking_Id(10L, 1L))
+                    .thenReturn(Optional.of(draft.getPassengers().getFirst()));
+            stubSaveReturnsArgument();
+
+            BookingResponse response = bookingService.finalizeSeatAssignments(1L, List.of(
+                    new SeatAssignmentResult(10L, "14A",
+                            new BigDecimal("12.00"), new BigDecimal("0.00"), SeatAssignmentMode.AUTO)));
+
+            assertThat(response.passengers().get(0).seatSurcharge()).isEqualByComparingTo("0.00");
+            assertThat(response.passengers().get(0).chargedSeatAssignmentMode()).isEqualTo(SeatAssignmentMode.AUTO);
+            assertThat(response.totalFare()).isEqualByComparingTo("100.00");
+            assertThat(response.payment().amount()).isEqualByComparingTo("100.00");
+        }
+
+        @Test
+        void finalizeRejectsIncompletePassengerCoverage() {
+            // Review follow-up: a malformed internal call must never promote
+            // a booking while a passenger is seatless / still draft-priced.
+            Booking draft = draftWithOnePassenger();
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(draft));
+
+            assertThatThrownBy(() -> bookingService.finalizeSeatAssignments(1L, List.of()))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("exactly");
+            assertThat(draft.getBookingStatus()).isEqualTo(BookingStatus.DRAFT);
+            verify(bookingRepository, never()).save(any());
+        }
+
+        @Test
+        void finalizeRejectsAssignmentsForForeignOrDuplicatePassengers() {
+            Booking draft = draftWithOnePassenger();
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(draft));
+
+            // Foreign passenger id (999 is not on this booking).
+            assertThatThrownBy(() -> bookingService.finalizeSeatAssignments(1L, List.of(
+                    new SeatAssignmentResult(999L, "12A",
+                            new BigDecimal("12.00"), new BigDecimal("12.00"), SeatAssignmentMode.MANUAL))))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("exactly");
+
+            // Duplicate assignment for the same passenger.
+            assertThatThrownBy(() -> bookingService.finalizeSeatAssignments(1L, List.of(
+                    new SeatAssignmentResult(10L, "12A",
+                            new BigDecimal("12.00"), new BigDecimal("12.00"), SeatAssignmentMode.MANUAL),
+                    new SeatAssignmentResult(10L, "12B",
+                            new BigDecimal("0.00"), new BigDecimal("0.00"), SeatAssignmentMode.AUTO))))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Duplicate");
+        }
+
+        @Test
+        void finalizeRejectsAssignmentsMissingModeOrCharge() {
+            Booking draft = draftWithOnePassenger();
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(draft));
+
+            assertThatThrownBy(() -> bookingService.finalizeSeatAssignments(1L, List.of(
+                    new SeatAssignmentResult(10L, "12A", new BigDecimal("12.00"),
+                            new BigDecimal("12.00"), null))))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("mode/chargedSurcharge");
+        }
+
+        @Test
+        void finalizeAcceptsANullSeatOnlyAsTheNoInventoryFallback() {
+            // Documented fallback: no inventory record => AUTO with null seat
+            // is legal; the coverage check must not reject it.
+            Booking draft = draftWithOnePassenger();
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(draft));
+            when(bookingPassengerRepository.findByIdAndBooking_Id(10L, 1L))
+                    .thenReturn(Optional.of(draft.getPassengers().getFirst()));
+            stubSaveReturnsArgument();
+
+            BookingResponse response = bookingService.finalizeSeatAssignments(1L, List.of(
+                    new SeatAssignmentResult(10L, null,
+                            new BigDecimal("0.00"), new BigDecimal("0.00"), SeatAssignmentMode.AUTO)));
+
+            assertThat(response.bookingStatus()).isEqualTo(BookingStatus.CREATED);
+            assertThat(response.passengers().get(0).seatNumber()).isNull();
+        }
+
+        @Test
+        void finalizeRejectsANonDraftBooking() {
+            Booking created = draftWithOnePassenger();
+            created.setBookingStatus(BookingStatus.CREATED);
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(created));
+
+            assertThatThrownBy(() -> bookingService.finalizeSeatAssignments(1L, List.of()))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("only a DRAFT");
+        }
+
+        @Test
+        void aDraftCanNeverBeConfirmedDirectly() {
+            // §5.1a: the crash-orphan window closes structurally - DRAFT ->
+            // CONFIRMED is not a legal transition, so the back-office override
+            // cannot confirm a seatless, paymentless draft.
+            Booking draft = draftWithOnePassenger();
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(draft));
+
+            assertThatThrownBy(() -> bookingService.confirmBooking(1L))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("DRAFT");
+        }
+
+        @Test
+        void sweepCancelsDraftsPastTheirTtl() {
+            Booking stale = draftWithOnePassenger();
+            when(bookingRepository.findByBookingStatusAndBookingDateBefore(
+                    eq(BookingStatus.DRAFT), any(LocalDateTime.class)))
+                    .thenReturn(List.of(stale));
+            stubSaveReturnsArgument();
+
+            int swept = bookingService.cancelStaleDrafts();
+
+            assertThat(swept).isEqualTo(1);
+            assertThat(stale.getBookingStatus()).isEqualTo(BookingStatus.CANCELLED);
         }
     }
 

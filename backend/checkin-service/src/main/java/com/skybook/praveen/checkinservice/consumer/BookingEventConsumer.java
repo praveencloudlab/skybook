@@ -84,6 +84,10 @@ public class BookingEventConsumer {
                     passenger.getSeatNumber(),
                     passenger.getTravelClass(),
                     passenger.getFareType(),
+                    // §9: the surcharge actually PAID at booking becomes the
+                    // free-seat-change ceiling; legacy events carry null => 0.
+                    passenger.getSeatSurcharge(),
+                    passenger.getCurrency(),
                     // booking-service already validates passport data before
                     // a booking can reach CONFIRMED (BookingValidator.
                     // validatePassportValidForTravel) - true by construction.

@@ -36,6 +36,11 @@ public class BookingStateMachine {
     private static final Map<CheckInStatus, Set<CheckInStatus>> CHECK_IN_TRANSITIONS = new EnumMap<>(CheckInStatus.class);
 
     static {
+        // DRAFT (SEAT_SELECTION_MODULE.md §5.1a): finalize promotes to CREATED;
+        // assignment failure or the stale-draft sweep cancels. CONFIRMED stays
+        // reachable ONLY from CREATED - a crash-orphaned draft (no seat, no
+        // payment) is structurally unconfirmable, not just by convention.
+        BOOKING_TRANSITIONS.put(BookingStatus.DRAFT, EnumSet.of(BookingStatus.CREATED, BookingStatus.CANCELLED));
         BOOKING_TRANSITIONS.put(BookingStatus.CREATED, EnumSet.of(BookingStatus.CONFIRMED, BookingStatus.CANCELLED));
         BOOKING_TRANSITIONS.put(BookingStatus.CONFIRMED, EnumSet.of(BookingStatus.CANCELLED, BookingStatus.COMPLETED));
         BOOKING_TRANSITIONS.put(BookingStatus.CANCELLED, EnumSet.noneOf(BookingStatus.class));

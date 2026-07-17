@@ -33,6 +33,11 @@ public record PaymentResponse(
 
         String failureReason,
 
+        /** §10 charge composition: sum of base fares / of CHARGED seat surcharges. Null on legacy payments. */
+        BigDecimal baseFareTotal,
+
+        BigDecimal seatSurchargeTotal,
+
         List<PaymentTransactionResponse> transactions,
 
         List<RefundResponse> refunds,

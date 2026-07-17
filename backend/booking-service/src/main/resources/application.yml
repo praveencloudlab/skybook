@@ -24,8 +24,17 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      # Flyway owns the schema (SEAT_SELECTION_MODULE.md §8, review round 4);
+      # Hibernate only verifies entity/DB alignment at startup.
+      ddl-auto: validate
     show-sql: true
+
+  flyway:
+    # Existing Hibernate-created databases are adopted as version 1 (the V1
+    # baseline is skipped there, only V2+ runs); a fresh database runs V1+V2.
+    # Both converge on the identical schema - which ddl-auto: validate proves.
+    baseline-on-migrate: true
+    baseline-version: 1
 
   kafka:
     bootstrap-servers: localhost:9092
@@ -60,6 +69,14 @@ flight-service:
 
 inventory-service:
   base-url: http://localhost:8084
+
+# Stale-draft sweep (SEAT_SELECTION_MODULE.md §5.1a): DRAFT bookings older
+# than the TTL are cancelled by StaleDraftSweepJob - the booking-side half of
+# inventory's hold expiry (both default to 15 minutes by design).
+booking:
+  draft:
+    ttl-minutes: 15
+    sweep-interval-ms: 60000
 
 # RESILIENCE_MODULE.md §5-§7. All thresholds are reasoned defaults, expected
 # to be re-tuned against the Grafana dashboards once real load data exists.
@@ -97,6 +114,10 @@ resilience4j:
           - feign.FeignException.FeignServerException
     instances:
       flight-read:
+        base-config: reads
+      # Cabin availability lookup for /quote - read-only, so safely retryable
+      # (unlike the hold/reserve writes, which have NO retry by design).
+      inventory-read:
         base-config: reads
   bulkhead:
     configs:

@@ -7,6 +7,7 @@ import com.skybook.praveen.inventoryservice.dto.response.FlightInventoryResponse
 import com.skybook.praveen.inventoryservice.dto.response.SeatHoldResponse;
 import com.skybook.praveen.inventoryservice.dto.response.SeatReservationResponse;
 import com.skybook.praveen.inventoryservice.enums.InventoryStatus;
+import com.skybook.praveen.inventoryservice.enums.SeatAssignmentMode;
 import com.skybook.praveen.inventoryservice.enums.SeatHoldStatus;
 import com.skybook.praveen.inventoryservice.enums.SeatReservationStatus;
 import ch.qos.logback.classic.Level;
@@ -23,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.concurrent.CompletableFuture;
 
@@ -75,7 +77,9 @@ class InventoryEventProducerTest {
     @Test
     void seatHeldCarriesFlightSeatBookingAndExpiry() {
         producer.publishSeatHeld(new SeatHoldResponse(
-                5L, 100L, 2L, "12A", 42L, SeatHoldStatus.ACTIVE, now, now.plusMinutes(15)));
+                5L, 100L, 2L, "12A", 42L, 420L, SeatAssignmentMode.MANUAL,
+                new BigDecimal("12.00"), new BigDecimal("12.00"),
+                SeatHoldStatus.ACTIVE, now, now.plusMinutes(15)));
 
         InventoryEvent event = capturePublishedEvent();
         assertThat(event.getType()).isEqualTo(InventoryEventType.SEAT_HELD);
@@ -88,7 +92,9 @@ class InventoryEventProducerTest {
     @Test
     void seatReleasedCarriesCorrelationFields() {
         producer.publishSeatReleased(new SeatHoldResponse(
-                5L, 100L, 2L, "12A", 42L, SeatHoldStatus.RELEASED, now, now.plusMinutes(15)));
+                5L, 100L, 2L, "12A", 42L, 420L, SeatAssignmentMode.MANUAL,
+                new BigDecimal("12.00"), new BigDecimal("12.00"),
+                SeatHoldStatus.RELEASED, now, now.plusMinutes(15)));
 
         InventoryEvent event = capturePublishedEvent();
         assertThat(event.getType()).isEqualTo(InventoryEventType.SEAT_RELEASED);
@@ -129,7 +135,9 @@ class InventoryEventProducerTest {
 
         try {
             producer.publishSeatHeld(new SeatHoldResponse(
-                    5L, 100L, 2L, "12A", 42L, SeatHoldStatus.ACTIVE, now, now.plusMinutes(15)));
+                    5L, 100L, 2L, "12A", 42L, 420L, SeatAssignmentMode.MANUAL,
+                    new BigDecimal("12.00"), new BigDecimal("12.00"),
+                    SeatHoldStatus.ACTIVE, now, now.plusMinutes(15)));
 
             assertThat(logs.list)
                     .as("a broker-side send failure must be visible at ERROR, not silently dropped")

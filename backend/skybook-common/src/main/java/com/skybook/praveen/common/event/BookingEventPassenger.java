@@ -36,6 +36,18 @@ public class BookingEventPassenger {
 
     private BigDecimal fare;
 
+    /**
+     * The seat surcharge the passenger actually PAID at booking (0 for an
+     * AUTO-assigned seat) - SEAT_SELECTION_MODULE.md §9: checkin-service
+     * snapshots this as the passenger's free-seat-change entitlement ceiling.
+     * Nullable: pre-seat-selection events don't carry it - consumers treat
+     * null as 0 (only free seats reachable at check-in).
+     */
+    private BigDecimal seatSurcharge;
+
+    /** ISO-4217 of fare/seatSurcharge ("USD" in v1). Nullable on legacy events. */
+    private String currency;
+
     /** e.g. "NOT_OPEN", "CHECKED_IN" - snapshot at event time */
     private String checkInStatus;
 }

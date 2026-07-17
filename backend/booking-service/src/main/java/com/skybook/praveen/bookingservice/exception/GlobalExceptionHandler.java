@@ -33,12 +33,6 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, exception.getMessage(), request);
     }
 
-    @ExceptionHandler(SeatAlreadyBookedException.class)
-    public ResponseEntity<ErrorResponse> handleSeatAlreadyBookedException(
-            SeatAlreadyBookedException exception, HttpServletRequest request) {
-        return build(HttpStatus.CONFLICT, exception.getMessage(), request);
-    }
-
     @ExceptionHandler(FlightServiceUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleFlightServiceUnavailableException(
             FlightServiceUnavailableException exception, HttpServletRequest request) {

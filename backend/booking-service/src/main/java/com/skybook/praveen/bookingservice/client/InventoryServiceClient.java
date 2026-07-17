@@ -1,5 +1,6 @@
 package com.skybook.praveen.bookingservice.client;
 
+import com.skybook.praveen.bookingservice.enums.TravelClass;
 import com.skybook.praveen.bookingservice.exception.InventoryServiceUnavailableException;
 import com.skybook.praveen.bookingservice.exception.SeatUnavailableException;
 import feign.FeignException;
@@ -9,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -39,9 +41,11 @@ public class InventoryServiceClient {
     private final ResilientInventoryClient resilientClient;
 
     /** Optional.empty() = the flight has no inventory record - proceed without a hold. */
-    public Optional<InventoryHoldDetails> holdSeat(Long flightId, String seatNumber, Long bookingId) {
+    public Optional<InventoryHoldDetails> holdSeat(Long flightId, String seatNumber, Long bookingId,
+                                                   Long bookingPassengerId, TravelClass travelClass) {
         try {
-            return Optional.of(resilientClient.holdSeat(InventorySeatCall.hold(flightId, seatNumber, bookingId)));
+            return Optional.of(resilientClient.holdSeat(
+                    InventorySeatCall.hold(flightId, seatNumber, bookingId, bookingPassengerId, travelClass)));
 
         } catch (FeignException.NotFound notFound) {
             if (notFound.contentUTF8().contains(NO_INVENTORY_MARKER)) {
@@ -54,7 +58,9 @@ public class InventoryServiceClient {
                     "seat does not exist in the flight's seat inventory");
 
         } catch (FeignException.Conflict conflict) {
-            throw new SeatUnavailableException(flightId, seatNumber, "already held or reserved");
+            // Cabin mismatch, occupied seat, or a conflicting existing hold -
+            // inventory's message names the exact rule.
+            throw new SeatUnavailableException(flightId, seatNumber, conflictReason(conflict));
 
         } catch (CallNotPermittedException | BulkheadFullException fastFail) {
             log.warn("inventory-service hold rejected without attempt ({}), seat {} flight {}",
@@ -64,6 +70,76 @@ public class InventoryServiceClient {
         } catch (FeignException unreachable) {
             log.error("Could not reach inventory-service to hold seat {} on flight {}",
                     seatNumber, flightId, unreachable);
+            throw new InventoryServiceUnavailableException(flightId, unreachable);
+        }
+    }
+
+    /**
+     * Atomic auto-hold (SEAT_SELECTION_MODULE.md §5.2): inventory picks and
+     * holds a low-demand seat in the passenger's cabin - always charged 0.00.
+     * Optional.empty() = the flight has no inventory record (same hold-if-exists
+     * policy as the manual path).
+     */
+    public Optional<InventoryHoldDetails> autoHoldSeat(Long flightId, Long bookingId,
+                                                       Long bookingPassengerId, TravelClass travelClass) {
+        try {
+            return Optional.of(resilientClient.autoHoldSeat(flightId,
+                    InventorySeatCall.autoHold(bookingId, bookingPassengerId, travelClass)));
+
+        } catch (FeignException.NotFound notFound) {
+            if (notFound.contentUTF8().contains(NO_INVENTORY_MARKER)) {
+                log.info("Flight {} has no seat inventory - booking proceeds without holds", flightId);
+                return Optional.empty();
+            }
+            throw new SeatUnavailableException(flightId, "(auto)",
+                    "auto-assignment failed: " + notFound.contentUTF8());
+
+        } catch (FeignException.Conflict conflict) {
+            // Cabin exhausted / no such cabin on this aircraft / mode conflict.
+            throw new SeatUnavailableException(flightId, "(auto)", conflictReason(conflict));
+
+        } catch (CallNotPermittedException | BulkheadFullException fastFail) {
+            log.warn("inventory-service auto-hold rejected without attempt ({}), flight {}",
+                    fastFail.getClass().getSimpleName(), flightId);
+            throw new InventoryServiceUnavailableException(flightId, fastFail);
+
+        } catch (FeignException unreachable) {
+            log.error("Could not reach inventory-service to auto-hold a seat on flight {}",
+                    flightId, unreachable);
+            throw new InventoryServiceUnavailableException(flightId, unreachable);
+        }
+    }
+
+    /** Surfaces inventory's own 409 message (it names the violated rule) with a safe fallback. */
+    private String conflictReason(FeignException.Conflict conflict) {
+        String body = conflict.contentUTF8();
+        return body == null || body.isBlank() ? "already held or reserved" : body;
+    }
+
+    /**
+     * Cabin availability for the quote (§7/§11). Optional.empty() = the flight
+     * has no inventory record - the quote then reports fares without
+     * availability (same hold-if-exists spirit as the hold paths).
+     */
+    public Optional<List<InventoryCabinDetails>> getCabins(Long flightId) {
+        try {
+            return Optional.of(resilientClient.getCabins(flightId));
+
+        } catch (FeignException.NotFound notFound) {
+            if (notFound.contentUTF8().contains(NO_INVENTORY_MARKER)) {
+                log.info("Flight {} has no seat inventory - quote proceeds without availability", flightId);
+                return Optional.empty();
+            }
+            throw new InventoryServiceUnavailableException(flightId, notFound);
+
+        } catch (CallNotPermittedException | BulkheadFullException fastFail) {
+            log.warn("inventory-service cabins lookup rejected without attempt ({}), flight {}",
+                    fastFail.getClass().getSimpleName(), flightId);
+            throw new InventoryServiceUnavailableException(flightId, fastFail);
+
+        } catch (FeignException unreachable) {
+            log.error("Could not reach inventory-service for cabin availability on flight {}",
+                    flightId, unreachable);
             throw new InventoryServiceUnavailableException(flightId, unreachable);
         }
     }

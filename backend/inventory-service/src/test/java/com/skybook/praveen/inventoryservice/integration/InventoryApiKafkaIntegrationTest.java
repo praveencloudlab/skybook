@@ -160,19 +160,20 @@ class InventoryApiKafkaIntegrationTest {
 
         // 4. Hold 12A
         ResponseEntity<SeatHoldResponse> hold = rest.postForEntity("/api/inventory/hold",
-                new HoldSeatRequest(FLIGHT_ID, "12A", BOOKING_ID), SeatHoldResponse.class);
+                new HoldSeatRequest(FLIGHT_ID, "12A", BOOKING_ID, 200L, SeatType.ECONOMY),
+                SeatHoldResponse.class);
         assertThat(hold.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(hold.getBody().status()).isEqualTo(SeatHoldStatus.ACTIVE);
         assertThat(hold.getBody().expiresAt()).isAfter(LocalDateTime.now());
 
-        // 4b. Racing hold on the same seat gets 409 through the full stack.
+        // 4b. Racing hold on the same seat by a different passenger gets 409 through the full stack.
         ResponseEntity<String> conflict = rest.postForEntity("/api/inventory/hold",
-                new HoldSeatRequest(FLIGHT_ID, "12A", 99L), String.class);
+                new HoldSeatRequest(FLIGHT_ID, "12A", 99L, 990L, SeatType.ECONOMY), String.class);
         assertThat(conflict.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
 
         // 5. Reserve (auto-resolves the booking's own hold)
         ResponseEntity<SeatReservationResponse> reservation = rest.postForEntity("/api/reservations",
-                new ReserveSeatRequest(FLIGHT_ID, "12A", BOOKING_ID, 200L, null), SeatReservationResponse.class);
+                new ReserveSeatRequest(FLIGHT_ID, "12A", BOOKING_ID, 200L, null, null, null), SeatReservationResponse.class);
         assertThat(reservation.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(reservation.getBody().status()).isEqualTo(SeatReservationStatus.RESERVED);
         assertThat(reservation.getBody().originatingHoldId()).isEqualTo(hold.getBody().id());

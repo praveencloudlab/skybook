@@ -2,6 +2,7 @@ package com.skybook.praveen.inventoryservice.facade;
 
 import com.skybook.praveen.inventoryservice.client.FlightDetails;
 import com.skybook.praveen.inventoryservice.client.FlightServiceClient;
+import com.skybook.praveen.inventoryservice.dto.request.AutoHoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.CreateFlightInventoryRequest;
 import com.skybook.praveen.inventoryservice.dto.request.HoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.ReleaseSeatRequest;
@@ -10,8 +11,12 @@ import com.skybook.praveen.inventoryservice.dto.response.FlightInventoryResponse
 import com.skybook.praveen.inventoryservice.dto.response.SeatHoldResponse;
 import com.skybook.praveen.inventoryservice.dto.response.SeatReservationResponse;
 import com.skybook.praveen.inventoryservice.enums.InventoryStatus;
+import com.skybook.praveen.inventoryservice.enums.SeatAssignmentMode;
 import com.skybook.praveen.inventoryservice.enums.SeatHoldStatus;
 import com.skybook.praveen.inventoryservice.enums.SeatReservationStatus;
+import com.skybook.praveen.inventoryservice.enums.SeatType;
+
+import java.math.BigDecimal;
 import com.skybook.praveen.inventoryservice.exception.FlightNotFoundForInventoryException;
 import com.skybook.praveen.inventoryservice.producer.InventoryEventProducer;
 import com.skybook.praveen.inventoryservice.service.InventoryService;
@@ -64,7 +69,9 @@ class InventoryFacadeTest {
     }
 
     private SeatHoldResponse holdResponse() {
-        return new SeatHoldResponse(5L, 1L, 2L, "12A", 42L, SeatHoldStatus.ACTIVE, now, now.plusMinutes(15));
+        return new SeatHoldResponse(5L, 1L, 2L, "12A", 42L, 420L, SeatAssignmentMode.MANUAL,
+                new BigDecimal("12.00"), new BigDecimal("12.00"),
+                SeatHoldStatus.ACTIVE, now, now.plusMinutes(15));
     }
 
     private SeatReservationResponse reservationResponse() {
@@ -117,7 +124,7 @@ class InventoryFacadeTest {
 
     @Test
     void holdDelegatesAndPublishesSeatHeld() {
-        HoldSeatRequest request = new HoldSeatRequest(1L, "12A", 42L);
+        HoldSeatRequest request = new HoldSeatRequest(1L, "12A", 42L, 420L, SeatType.ECONOMY);
         when(inventoryService.holdSeat(request)).thenReturn(holdResponse());
 
         assertThat(facade.holdSeat(request)).isEqualTo(holdResponse());
@@ -127,8 +134,19 @@ class InventoryFacadeTest {
     }
 
     @Test
+    void autoHoldDelegatesAndPublishesSeatHeld() {
+        AutoHoldSeatRequest request = new AutoHoldSeatRequest(42L, 420L, SeatType.ECONOMY);
+        when(inventoryService.autoHoldSeat(1L, request)).thenReturn(holdResponse());
+
+        assertThat(facade.autoHoldSeat(1L, request)).isEqualTo(holdResponse());
+
+        verify(inventoryEventProducer).publishSeatHeld(holdResponse());
+        verifyNoInteractions(flightServiceClient);
+    }
+
+    @Test
     void failedHoldPublishesNothing() {
-        HoldSeatRequest request = new HoldSeatRequest(1L, "12A", 42L);
+        HoldSeatRequest request = new HoldSeatRequest(1L, "12A", 42L, 420L, SeatType.ECONOMY);
         when(inventoryService.holdSeat(request)).thenThrow(new IllegalStateException("CLOSED"));
 
         assertThatThrownBy(() -> facade.holdSeat(request)).isInstanceOf(IllegalStateException.class);
@@ -148,7 +166,7 @@ class InventoryFacadeTest {
 
     @Test
     void reserveDelegatesAndPublishesSeatReserved() {
-        ReserveSeatRequest request = new ReserveSeatRequest(1L, "12A", 42L, null, 5L);
+        ReserveSeatRequest request = new ReserveSeatRequest(1L, "12A", 42L, null, 5L, null, null);
         when(seatReservationService.reserveSeat(request)).thenReturn(reservationResponse());
 
         facade.reserveSeat(request);

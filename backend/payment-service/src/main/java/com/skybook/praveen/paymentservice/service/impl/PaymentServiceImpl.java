@@ -123,6 +123,8 @@ public class PaymentServiceImpl implements PaymentService {
         String currency = event.getCurrency() != null ? event.getCurrency() : DEFAULT_CURRENCY;
         currencyValidator.validate(currency);
 
+        BigDecimal seatSurchargeTotal = seatSurchargeTotalFrom(event);
+
         Payment payment = Payment.builder()
                 .paymentReference(uniquePaymentReference())
                 .bookingId(resolveBookingId(event))
@@ -130,6 +132,11 @@ public class PaymentServiceImpl implements PaymentService {
                 .amount(amount)
                 .currency(currency.toUpperCase())
                 .fareBreakdown(fareBreakdownFrom(event))
+                // §10 aggregates: base = the all-in total minus charged
+                // surcharges. Both stay null on legacy events that carry no
+                // per-passenger surcharges.
+                .seatSurchargeTotal(seatSurchargeTotal)
+                .baseFareTotal(seatSurchargeTotal == null ? null : amount.subtract(seatSurchargeTotal))
                 .build();
 
         stateMachine.recordHistory(payment, PaymentHistoryType.PAYMENT_CREATED,
@@ -366,5 +373,25 @@ public class PaymentServiceImpl implements PaymentService {
             }
         }
         return lines.isEmpty() ? null : RefundCalculator.serialize(lines);
+    }
+
+    /**
+     * Sum of the CHARGED seat surcharges across the event's passengers
+     * (SEAT_SELECTION_MODULE.md §10). Null - not zero - when ANY passenger
+     * lacks the field: a legacy event can't claim "no seat charges", it just
+     * doesn't know, and the aggregates must never lie.
+     */
+    private static BigDecimal seatSurchargeTotalFrom(BookingEvent event) {
+        if (event.getPassengers() == null || event.getPassengers().isEmpty()) {
+            return null;
+        }
+        BigDecimal total = BigDecimal.ZERO;
+        for (BookingEventPassenger passenger : event.getPassengers()) {
+            if (passenger.getSeatSurcharge() == null) {
+                return null;
+            }
+            total = total.add(passenger.getSeatSurcharge());
+        }
+        return total;
     }
 }

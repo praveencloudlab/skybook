@@ -4,7 +4,6 @@ import com.skybook.praveen.bookingservice.domain.BookingStateMachine;
 import com.skybook.praveen.bookingservice.domain.BookingValidator;
 import com.skybook.praveen.bookingservice.domain.FareCalculator;
 import com.skybook.praveen.bookingservice.domain.PnrGenerator;
-import com.skybook.praveen.bookingservice.domain.SeatAssignmentStrategy;
 import com.skybook.praveen.bookingservice.entity.Booking;
 import com.skybook.praveen.bookingservice.entity.BookingPayment;
 import com.skybook.praveen.bookingservice.enums.BookingStatus;
@@ -47,8 +46,6 @@ class ConfirmBookingFromPaymentTest {
     private BookingValidator bookingValidator;
     @Mock
     private FareCalculator fareCalculator;
-    @Mock
-    private SeatAssignmentStrategy seatAssignmentStrategy;
 
     private BookingServiceImpl bookingService;
 
@@ -57,7 +54,7 @@ class ConfirmBookingFromPaymentTest {
         bookingService = new BookingServiceImpl(
                 bookingRepository, bookingPassengerRepository,
                 pnrGenerator, new BookingStateMachine(), bookingValidator,
-                fareCalculator, seatAssignmentStrategy);
+                fareCalculator, 15);
     }
 
     private Booking bookingWith(BookingStatus status, PaymentStatus paymentStatus) {

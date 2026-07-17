@@ -26,6 +26,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -56,7 +58,7 @@ class CheckInFacadeTest {
     private CheckInResponse response(CheckInStatus status) {
         LocalDateTime now = LocalDateTime.now();
         return new CheckInResponse(1L, 42L, "SBTEST", 100L, 7L, "BA178", "LHR", "JFK", now.plusHours(2),
-                "Test Passenger", "test@example.com", "12B", "ECONOMY", "FLEXI", status, true, null, null, null, null, 0L, now, now);
+                "Test Passenger", "test@example.com", "12B", "ECONOMY", "FLEXI", new java.math.BigDecimal("12.00"), "USD", status, true, null, null, null, null, 0L, now, now);
     }
 
     private FlightCheckInDetails flight(FlightCheckInStatus status) {
@@ -150,14 +152,14 @@ class CheckInFacadeTest {
     @Test
     void changeSeatReservesNewSeatBeforeTouchingTheDatabase() {
         when(checkInService.getById(1L)).thenReturn(response(CheckInStatus.CHECKED_IN)); // seat 12B
-        when(inventoryServiceClient.reserveSeat(7L, "14C", 42L, 100L)).thenReturn(Optional.empty());
+        when(inventoryServiceClient.reserveSeat(7L, "14C", 42L, 100L, "ECONOMY", new java.math.BigDecimal("12.00"))).thenReturn(Optional.empty());
         CheckInResponse updated = response(CheckInStatus.CHECKED_IN);
         when(checkInService.changeSeatNumber(1L, "14C")).thenReturn(updated);
         when(boardingPassService.reissueForSeatChange(1L)).thenReturn(Optional.empty());
 
         facade.changeSeat(1L, "14C");
 
-        verify(inventoryServiceClient).reserveSeat(7L, "14C", 42L, 100L);
+        verify(inventoryServiceClient).reserveSeat(7L, "14C", 42L, 100L, "ECONOMY", new java.math.BigDecimal("12.00"));
         verify(checkInService).changeSeatNumber(1L, "14C");
         verify(inventoryServiceClient).cancelReservationQuietly(7L, "12B", 42L, "Seat changed to 14C");
     }
@@ -165,7 +167,7 @@ class CheckInFacadeTest {
     @Test
     void changeSeatDoesNotTouchTheDatabaseWhenTheNewSeatIsUnavailable() {
         when(checkInService.getById(1L)).thenReturn(response(CheckInStatus.CHECKED_IN));
-        when(inventoryServiceClient.reserveSeat(7L, "14C", 42L, 100L))
+        when(inventoryServiceClient.reserveSeat(7L, "14C", 42L, 100L, "ECONOMY", new java.math.BigDecimal("12.00")))
                 .thenThrow(new SeatUnavailableException(7L, "14C", "already reserved"));
 
         assertThatThrownBy(() -> facade.changeSeat(1L, "14C")).isInstanceOf(SeatUnavailableException.class);
@@ -175,9 +177,45 @@ class CheckInFacadeTest {
     }
 
     @Test
+    void changeSeatCompensatesTheNewReservationWhenTheLocalUpdateFails() {
+        // SEAT_SELECTION_MODULE.md §9 (round 5): the new seat is reserved,
+        // then the local update throws - the NEW reservation must be
+        // cancelled or inventory leaks a seat for a change that never happened.
+        when(checkInService.getById(1L)).thenReturn(response(CheckInStatus.CHECKED_IN)); // seat 12B
+        when(inventoryServiceClient.reserveSeat(7L, "14C", 42L, 100L, "ECONOMY", new java.math.BigDecimal("12.00")))
+                .thenReturn(Optional.empty());
+        when(checkInService.changeSeatNumber(1L, "14C"))
+                .thenThrow(new IllegalStateException("seat changes are closed"));
+
+        assertThatThrownBy(() -> facade.changeSeat(1L, "14C")).isInstanceOf(IllegalStateException.class);
+
+        // The NEW seat's reservation is compensated; the OLD one is untouched.
+        verify(inventoryServiceClient).cancelReservationQuietly(eq(7L), eq("14C"), eq(42L), contains("compensation"));
+        verify(inventoryServiceClient, never()).cancelReservationQuietly(eq(7L), eq("12B"), eq(42L), any());
+    }
+
+    @Test
+    void changeSeatUsesZeroEntitlementForLegacyCheckInsWithoutASnapshot() {
+        LocalDateTime now = LocalDateTime.now();
+        CheckInResponse legacy = new CheckInResponse(1L, 42L, "SBTEST", 100L, 7L, "BA178", "LHR", "JFK",
+                now.plusHours(2), "Test Passenger", "test@example.com", "12B", "ECONOMY", "FLEXI",
+                null, null, CheckInStatus.CHECKED_IN, true, null, null, null, null, 0L, now, now);
+        when(checkInService.getById(1L)).thenReturn(legacy);
+        when(inventoryServiceClient.reserveSeat(7L, "14C", 42L, 100L, "ECONOMY", java.math.BigDecimal.ZERO))
+                .thenReturn(Optional.empty());
+        when(checkInService.changeSeatNumber(1L, "14C")).thenReturn(legacy);
+        when(boardingPassService.reissueForSeatChange(1L)).thenReturn(Optional.empty());
+
+        facade.changeSeat(1L, "14C");
+
+        // Null snapshot => ceiling 0.00: only free seats reachable (§9).
+        verify(inventoryServiceClient).reserveSeat(7L, "14C", 42L, 100L, "ECONOMY", java.math.BigDecimal.ZERO);
+    }
+
+    @Test
     void changeSeatReissuesTheBoardingPassWhenOneExists() {
         when(checkInService.getById(1L)).thenReturn(response(CheckInStatus.CHECKED_IN));
-        when(inventoryServiceClient.reserveSeat(7L, "14C", 42L, 100L)).thenReturn(Optional.empty());
+        when(inventoryServiceClient.reserveSeat(7L, "14C", 42L, 100L, "ECONOMY", new java.math.BigDecimal("12.00"))).thenReturn(Optional.empty());
         CheckInResponse updated = response(CheckInStatus.CHECKED_IN);
         when(checkInService.changeSeatNumber(1L, "14C")).thenReturn(updated);
         BoardingPassResponse reissued = boardingPass("BP-2026-NEWONE");

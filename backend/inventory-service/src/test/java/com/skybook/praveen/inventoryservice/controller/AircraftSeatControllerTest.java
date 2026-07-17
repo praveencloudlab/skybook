@@ -18,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -40,7 +41,7 @@ class AircraftSeatControllerTest {
 
     private AircraftSeatResponse seatResponse(String seatNumber) {
         return new AircraftSeatResponse(2L, seatNumber, 12, SeatType.ECONOMY,
-                SeatPosition.WINDOW, AircraftSeatStatus.ACTIVE, false);
+                SeatPosition.WINDOW, AircraftSeatStatus.ACTIVE, false, new BigDecimal("12.00"));
     }
 
     @Test

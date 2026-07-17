@@ -1,8 +1,12 @@
 package com.skybook.praveen.inventoryservice.service.impl;
 
+import com.skybook.praveen.inventoryservice.config.SeatPricingProperties;
+import com.skybook.praveen.inventoryservice.domain.AutoSeatSelector;
 import com.skybook.praveen.inventoryservice.domain.InventoryStateMachine;
 import com.skybook.praveen.inventoryservice.domain.SeatAllocationValidator;
 import com.skybook.praveen.inventoryservice.domain.SeatHoldExpiryCalculator;
+import com.skybook.praveen.inventoryservice.domain.SeatPricingPolicy;
+import com.skybook.praveen.inventoryservice.dto.request.AutoHoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.CreateFlightInventoryRequest;
 import com.skybook.praveen.inventoryservice.dto.request.HoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.ReleaseSeatRequest;
@@ -17,12 +21,15 @@ import com.skybook.praveen.inventoryservice.enums.AircraftStatus;
 import com.skybook.praveen.inventoryservice.enums.InventoryHistoryType;
 import com.skybook.praveen.inventoryservice.enums.InventoryStatus;
 import com.skybook.praveen.inventoryservice.enums.SeatHoldStatus;
+import com.skybook.praveen.inventoryservice.enums.SeatPosition;
 import com.skybook.praveen.inventoryservice.enums.SeatReservationStatus;
+import com.skybook.praveen.inventoryservice.enums.SeatType;
 import com.skybook.praveen.inventoryservice.exception.AircraftNotFoundException;
 import com.skybook.praveen.inventoryservice.exception.FlightInventoryNotFoundException;
 import com.skybook.praveen.inventoryservice.exception.InventoryConflictException;
 import com.skybook.praveen.inventoryservice.exception.SeatAlreadyHeldException;
 import com.skybook.praveen.inventoryservice.exception.SeatAlreadyReservedException;
+import com.skybook.praveen.inventoryservice.exception.SeatCabinMismatchException;
 import com.skybook.praveen.inventoryservice.repository.AircraftRepository;
 import com.skybook.praveen.inventoryservice.repository.AircraftSeatRepository;
 import com.skybook.praveen.inventoryservice.repository.FlightInventoryRepository;
@@ -45,6 +52,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -74,18 +83,25 @@ class InventoryServiceImplTest {
     @BeforeEach
     void setUp() {
         // Real domain collaborators - only repositories are mocked.
+        SeatPricingPolicy pricingPolicy = new SeatPricingPolicy(new SeatPricingProperties());
         inventoryService = new InventoryServiceImpl(
                 flightInventoryRepository, aircraftRepository, aircraftSeatRepository,
                 seatHoldRepository, seatReservationRepository, inventoryHistoryRepository,
                 new InventoryStateMachine(), new SeatAllocationValidator(),
-                new SeatHoldExpiryCalculator(TTL_MINUTES));
+                new SeatHoldExpiryCalculator(TTL_MINUTES), pricingPolicy,
+                new AutoSeatSelector(pricingPolicy));
 
         aircraft = Aircraft.builder()
                 .id(1L).registrationNumber("VT-SKB").status(AircraftStatus.ACTIVE).totalSeats(3).build();
 
         seat = AircraftSeat.builder()
                 .id(2L).aircraft(aircraft).seatNumber("12A").rowNumber(12)
+                .seatType(SeatType.ECONOMY).position(SeatPosition.MIDDLE)
                 .status(AircraftSeatStatus.ACTIVE).exitRow(false).build();
+
+        // The pricing policy derives cabin context from the aircraft's seat map,
+        // so the chosen seat must belong to it (as it always does in production).
+        aircraft.getSeats().add(seat);
 
         inventory = FlightInventory.builder()
                 .id(10L).flightId(100L).aircraft(aircraft)
@@ -94,9 +110,61 @@ class InventoryServiceImplTest {
                 .build();
     }
 
+    // Both inventory lookups are stubbed leniently: holdSeat takes the FOR UPDATE
+    // variant, releaseHold the plain one - a given test uses only one.
     private void stubHappyPathLookups() {
-        when(flightInventoryRepository.findByFlightId(100L)).thenReturn(Optional.of(inventory));
-        when(aircraftSeatRepository.findByAircraftIdAndSeatNumber(1L, "12A")).thenReturn(Optional.of(seat));
+        lenient().when(flightInventoryRepository.findByFlightId(100L)).thenReturn(Optional.of(inventory));
+        lenient().when(flightInventoryRepository.findByFlightIdForUpdate(100L)).thenReturn(Optional.of(inventory));
+        lenient().when(aircraftSeatRepository.findByAircraftIdAndSeatNumber(1L, "12A")).thenReturn(Optional.of(seat));
+    }
+
+    // ---------------------------------------------------------------
+    // getCabinAvailability (§7/§11)
+    // ---------------------------------------------------------------
+
+    @Nested
+    class CabinAvailability {
+
+        @Test
+        void listsOnlyCabinsTheAircraftHasWithHeldSeatsExcluded() {
+            // Add a BUSINESS seat and a second economy seat to the map.
+            AircraftSeat business = AircraftSeat.builder()
+                    .id(3L).aircraft(aircraft).seatNumber("2A").rowNumber(2)
+                    .seatType(SeatType.BUSINESS).position(SeatPosition.WINDOW)
+                    .status(AircraftSeatStatus.ACTIVE).exitRow(false).build();
+            AircraftSeat economyB = AircraftSeat.builder()
+                    .id(4L).aircraft(aircraft).seatNumber("12B").rowNumber(12)
+                    .seatType(SeatType.ECONOMY).position(SeatPosition.MIDDLE)
+                    .status(AircraftSeatStatus.ACTIVE).exitRow(false).build();
+            aircraft.getSeats().add(business);
+            aircraft.getSeats().add(economyB);
+
+            when(flightInventoryRepository.findByFlightId(100L)).thenReturn(Optional.of(inventory));
+            // Seat 12A is actively held; nothing reserved.
+            when(seatHoldRepository.findByFlightInventoryIdAndStatus(10L, SeatHoldStatus.ACTIVE))
+                    .thenReturn(List.of(SeatHold.builder().id(5L).aircraftSeat(seat).build()));
+            when(seatReservationRepository.findByFlightInventoryIdAndStatus(10L, SeatReservationStatus.RESERVED))
+                    .thenReturn(List.of());
+
+            var cabins = inventoryService.getCabinAvailability(100L);
+
+            // FIRST/PREMIUM_ECONOMY absent (the aircraft has none) - that IS
+            // the "which cabins does this flight sell" answer. No fares anywhere.
+            assertThat(cabins).hasSize(2);
+            assertThat(cabins.get(0).travelClass()).isEqualTo(SeatType.ECONOMY);
+            assertThat(cabins.get(0).totalSeats()).isEqualTo(2);
+            assertThat(cabins.get(0).availableSeats()).isEqualTo(1); // 12A held
+            assertThat(cabins.get(1).travelClass()).isEqualTo(SeatType.BUSINESS);
+            assertThat(cabins.get(1).availableSeats()).isEqualTo(1);
+        }
+
+        @Test
+        void unknownFlightIs404() {
+            when(flightInventoryRepository.findByFlightId(999L)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> inventoryService.getCabinAvailability(999L))
+                    .isInstanceOf(FlightInventoryNotFoundException.class);
+        }
     }
 
     // ---------------------------------------------------------------
@@ -184,7 +252,7 @@ class InventoryServiceImplTest {
     @Nested
     class HoldSeat {
 
-        private final HoldSeatRequest request = new HoldSeatRequest(100L, "12A", 77L);
+        private final HoldSeatRequest request = new HoldSeatRequest(100L, "12A", 77L, 770L, SeatType.ECONOMY);
 
         @Test
         void holdMovesSeatFromAvailableToHeldAndSetsExpiry() {
@@ -256,10 +324,101 @@ class InventoryServiceImplTest {
 
         @Test
         void unknownFlightThrows() {
-            when(flightInventoryRepository.findByFlightId(999L)).thenReturn(Optional.empty());
+            when(flightInventoryRepository.findByFlightIdForUpdate(999L)).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> inventoryService.holdSeat(new HoldSeatRequest(999L, "12A", 77L)))
+            assertThatThrownBy(() -> inventoryService.holdSeat(
+                    new HoldSeatRequest(999L, "12A", 77L, 770L, SeatType.ECONOMY)))
                     .isInstanceOf(FlightInventoryNotFoundException.class);
+        }
+
+        @Test
+        void seatInWrongCabinIsRejected() {
+            stubHappyPathLookups();
+
+            // Seat is ECONOMY; a BUSINESS-class passenger cannot take it.
+            assertThatThrownBy(() -> inventoryService.holdSeat(
+                    new HoldSeatRequest(100L, "12A", 77L, 770L, SeatType.BUSINESS)))
+                    .isInstanceOf(SeatCabinMismatchException.class);
+            assertThat(inventory.getAvailableSeats()).isEqualTo(3);
+        }
+
+        @Test
+        void manualHoldSnapshotsModeAndChargesListedSurcharge() {
+            stubHappyPathLookups();
+            lenient().when(seatHoldRepository.existsByFlightInventoryIdAndAircraftSeatIdAndStatus(
+                    anyLong(), anyLong(), any())).thenReturn(false);
+            lenient().when(seatReservationRepository.existsByFlightInventoryIdAndAircraftSeatIdAndStatus(
+                    anyLong(), anyLong(), any())).thenReturn(false);
+            when(seatHoldRepository.save(any(SeatHold.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            SeatHoldResponse response = inventoryService.holdSeat(request);
+
+            // Middle economy lists at 0; MANUAL charges the listed amount.
+            assertThat(response.assignmentMode()).isEqualTo(
+                    com.skybook.praveen.inventoryservice.enums.SeatAssignmentMode.MANUAL);
+            assertThat(response.chargedSurcharge()).isEqualByComparingTo(response.listedSurcharge());
+            assertThat(response.bookingPassengerId()).isEqualTo(770L);
+        }
+
+        @Test
+        void replayForSamePassengerReturnsStoredHold() {
+            SeatHold stored = SeatHold.builder()
+                    .id(9L).flightInventory(inventory).aircraftSeat(seat).bookingId(77L)
+                    .bookingPassengerId(770L)
+                    .assignmentMode(com.skybook.praveen.inventoryservice.enums.SeatAssignmentMode.MANUAL)
+                    .listedSurcharge(new java.math.BigDecimal("0.00"))
+                    .chargedSurcharge(new java.math.BigDecimal("0.00"))
+                    .status(SeatHoldStatus.ACTIVE)
+                    .heldAt(LocalDateTime.now()).expiresAt(LocalDateTime.now().plusMinutes(TTL_MINUTES))
+                    .build();
+            lenient().when(flightInventoryRepository.findByFlightIdForUpdate(100L))
+                    .thenReturn(Optional.of(inventory));
+            lenient().when(aircraftSeatRepository.findByAircraftIdAndSeatNumber(1L, "12A"))
+                    .thenReturn(Optional.of(seat));
+            when(seatHoldRepository.findByFlightInventoryIdAndBookingPassengerIdAndStatus(
+                    10L, 770L, SeatHoldStatus.ACTIVE)).thenReturn(Optional.of(stored));
+
+            SeatHoldResponse response = inventoryService.holdSeat(request);
+
+            // Idempotent: the stored hold is returned, no new save, counts untouched.
+            assertThat(response.id()).isEqualTo(9L);
+            assertThat(inventory.getAvailableSeats()).isEqualTo(3);
+            org.mockito.Mockito.verify(seatHoldRepository, org.mockito.Mockito.never())
+                    .save(any(SeatHold.class));
+        }
+
+        @Test
+        void autoHoldForACabinTheAircraftDoesNotHaveIsAClearError() {
+            // A320 with only ECONOMY seats; a FIRST-class auto-assign must say
+            // "no such cabin" (§7), not a generic mismatch.
+            when(flightInventoryRepository.findByFlightIdForUpdate(100L)).thenReturn(Optional.of(inventory));
+            when(seatHoldRepository.findByFlightInventoryIdAndBookingPassengerIdAndStatus(
+                    10L, 770L, SeatHoldStatus.ACTIVE)).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> inventoryService.autoHoldSeat(100L,
+                    new AutoHoldSeatRequest(77L, 770L, SeatType.FIRST)))
+                    .isInstanceOf(SeatCabinMismatchException.class)
+                    .hasMessageContaining("no FIRST cabin");
+        }
+
+        @Test
+        void autoRequestAgainstAManualHoldIsAConflict() {
+            SeatHold manualHold = SeatHold.builder()
+                    .id(9L).flightInventory(inventory).aircraftSeat(seat).bookingId(77L)
+                    .bookingPassengerId(770L)
+                    .assignmentMode(com.skybook.praveen.inventoryservice.enums.SeatAssignmentMode.MANUAL)
+                    .status(SeatHoldStatus.ACTIVE)
+                    .heldAt(LocalDateTime.now()).expiresAt(LocalDateTime.now().plusMinutes(TTL_MINUTES))
+                    .build();
+            lenient().when(flightInventoryRepository.findByFlightIdForUpdate(100L))
+                    .thenReturn(Optional.of(inventory));
+            when(seatHoldRepository.findByFlightInventoryIdAndBookingPassengerIdAndStatus(
+                    10L, 770L, SeatHoldStatus.ACTIVE)).thenReturn(Optional.of(manualHold));
+
+            assertThatThrownBy(() -> inventoryService.autoHoldSeat(100L,
+                    new AutoHoldSeatRequest(77L, 770L, SeatType.ECONOMY)))
+                    .isInstanceOf(InventoryConflictException.class)
+                    .hasMessageContaining("conflicting");
         }
     }
 
@@ -335,19 +494,27 @@ class InventoryServiceImplTest {
                     .anySatisfy(entry -> assertThat(entry.getHistoryType()).isEqualTo(InventoryHistoryType.INVENTORY_REOPENED));
         }
 
-        @Test
-        void expireHoldsSweepsEveryOverdueHoldAndRestoresCounts() {
-            inventory.setAvailableSeats(1);
-            inventory.setHeldSeats(2);
-            SeatHold first = activeHold();
-            SeatHold second = SeatHold.builder()
-                    .id(6L).flightInventory(inventory)
-                    .aircraftSeat(AircraftSeat.builder().id(3L).aircraft(aircraft).seatNumber("12B").build())
+        private SeatHold overdueHold(long id, long seatId, String seatNumber) {
+            return SeatHold.builder()
+                    .id(id).flightInventory(inventory)
+                    .aircraftSeat(AircraftSeat.builder().id(seatId).aircraft(aircraft).seatNumber(seatNumber).build())
                     .bookingId(88L).status(SeatHoldStatus.ACTIVE)
                     .heldAt(LocalDateTime.now().minusMinutes(30))
                     .expiresAt(LocalDateTime.now().minusMinutes(15))
                     .build();
+        }
+
+        @Test
+        void expireHoldsLocksEachFlightAndSweepsEveryOverdueHold() {
+            inventory.setAvailableSeats(1);
+            inventory.setHeldSeats(2);
+            SeatHold first = overdueHold(5L, 2L, "12A");
+            SeatHold second = overdueHold(6L, 3L, "12B");
             when(seatHoldRepository.findByStatusAndExpiresAtBefore(any(), any()))
+                    .thenReturn(List.of(first, second));
+            // §5.3: the sweep re-reads under the flight's pessimistic lock.
+            when(flightInventoryRepository.findByFlightIdForUpdate(100L)).thenReturn(Optional.of(inventory));
+            when(seatHoldRepository.findByFlightInventoryIdAndStatus(10L, SeatHoldStatus.ACTIVE))
                     .thenReturn(List.of(first, second));
 
             int expired = inventoryService.expireHolds();
@@ -357,13 +524,38 @@ class InventoryServiceImplTest {
             assertThat(second.getStatus()).isEqualTo(SeatHoldStatus.EXPIRED);
             assertThat(inventory.getAvailableSeats()).isEqualTo(3);
             assertThat(inventory.getHeldSeats()).isZero();
+            verify(flightInventoryRepository).findByFlightIdForUpdate(100L);
         }
 
         @Test
-        void expireHoldsWithNothingOverdueReturnsZero() {
+        void expireHoldsReChecksUnderTheLockAndSkipsRacedHolds() {
+            // The candidate scan saw an overdue ACTIVE hold, but by the time
+            // the flight lock is acquired it was confirmed/released (or its
+            // TTL bumped) - the locked re-read must be the authority.
+            inventory.setAvailableSeats(1);
+            inventory.setHeldSeats(2);
+            SeatHold overdue = overdueHold(5L, 2L, "12A");
+            SeatHold stillCurrent = activeHold(); // expires in the future
+            when(seatHoldRepository.findByStatusAndExpiresAtBefore(any(), any()))
+                    .thenReturn(List.of(overdue));
+            when(flightInventoryRepository.findByFlightIdForUpdate(100L)).thenReturn(Optional.of(inventory));
+            when(seatHoldRepository.findByFlightInventoryIdAndStatus(10L, SeatHoldStatus.ACTIVE))
+                    .thenReturn(List.of(overdue, stillCurrent));
+
+            int expired = inventoryService.expireHolds();
+
+            assertThat(expired).isEqualTo(1);
+            assertThat(overdue.getStatus()).isEqualTo(SeatHoldStatus.EXPIRED);
+            assertThat(stillCurrent.getStatus()).isEqualTo(SeatHoldStatus.ACTIVE);
+            assertThat(inventory.getHeldSeats()).isEqualTo(1);
+        }
+
+        @Test
+        void expireHoldsWithNothingOverdueLocksNothingAndReturnsZero() {
             when(seatHoldRepository.findByStatusAndExpiresAtBefore(any(), any())).thenReturn(List.of());
 
             assertThat(inventoryService.expireHolds()).isZero();
+            verify(flightInventoryRepository, never()).findByFlightIdForUpdate(any());
         }
     }
 
