@@ -52,6 +52,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -492,19 +494,27 @@ class InventoryServiceImplTest {
                     .anySatisfy(entry -> assertThat(entry.getHistoryType()).isEqualTo(InventoryHistoryType.INVENTORY_REOPENED));
         }
 
-        @Test
-        void expireHoldsSweepsEveryOverdueHoldAndRestoresCounts() {
-            inventory.setAvailableSeats(1);
-            inventory.setHeldSeats(2);
-            SeatHold first = activeHold();
-            SeatHold second = SeatHold.builder()
-                    .id(6L).flightInventory(inventory)
-                    .aircraftSeat(AircraftSeat.builder().id(3L).aircraft(aircraft).seatNumber("12B").build())
+        private SeatHold overdueHold(long id, long seatId, String seatNumber) {
+            return SeatHold.builder()
+                    .id(id).flightInventory(inventory)
+                    .aircraftSeat(AircraftSeat.builder().id(seatId).aircraft(aircraft).seatNumber(seatNumber).build())
                     .bookingId(88L).status(SeatHoldStatus.ACTIVE)
                     .heldAt(LocalDateTime.now().minusMinutes(30))
                     .expiresAt(LocalDateTime.now().minusMinutes(15))
                     .build();
+        }
+
+        @Test
+        void expireHoldsLocksEachFlightAndSweepsEveryOverdueHold() {
+            inventory.setAvailableSeats(1);
+            inventory.setHeldSeats(2);
+            SeatHold first = overdueHold(5L, 2L, "12A");
+            SeatHold second = overdueHold(6L, 3L, "12B");
             when(seatHoldRepository.findByStatusAndExpiresAtBefore(any(), any()))
+                    .thenReturn(List.of(first, second));
+            // §5.3: the sweep re-reads under the flight's pessimistic lock.
+            when(flightInventoryRepository.findByFlightIdForUpdate(100L)).thenReturn(Optional.of(inventory));
+            when(seatHoldRepository.findByFlightInventoryIdAndStatus(10L, SeatHoldStatus.ACTIVE))
                     .thenReturn(List.of(first, second));
 
             int expired = inventoryService.expireHolds();
@@ -514,13 +524,38 @@ class InventoryServiceImplTest {
             assertThat(second.getStatus()).isEqualTo(SeatHoldStatus.EXPIRED);
             assertThat(inventory.getAvailableSeats()).isEqualTo(3);
             assertThat(inventory.getHeldSeats()).isZero();
+            verify(flightInventoryRepository).findByFlightIdForUpdate(100L);
         }
 
         @Test
-        void expireHoldsWithNothingOverdueReturnsZero() {
+        void expireHoldsReChecksUnderTheLockAndSkipsRacedHolds() {
+            // The candidate scan saw an overdue ACTIVE hold, but by the time
+            // the flight lock is acquired it was confirmed/released (or its
+            // TTL bumped) - the locked re-read must be the authority.
+            inventory.setAvailableSeats(1);
+            inventory.setHeldSeats(2);
+            SeatHold overdue = overdueHold(5L, 2L, "12A");
+            SeatHold stillCurrent = activeHold(); // expires in the future
+            when(seatHoldRepository.findByStatusAndExpiresAtBefore(any(), any()))
+                    .thenReturn(List.of(overdue));
+            when(flightInventoryRepository.findByFlightIdForUpdate(100L)).thenReturn(Optional.of(inventory));
+            when(seatHoldRepository.findByFlightInventoryIdAndStatus(10L, SeatHoldStatus.ACTIVE))
+                    .thenReturn(List.of(overdue, stillCurrent));
+
+            int expired = inventoryService.expireHolds();
+
+            assertThat(expired).isEqualTo(1);
+            assertThat(overdue.getStatus()).isEqualTo(SeatHoldStatus.EXPIRED);
+            assertThat(stillCurrent.getStatus()).isEqualTo(SeatHoldStatus.ACTIVE);
+            assertThat(inventory.getHeldSeats()).isEqualTo(1);
+        }
+
+        @Test
+        void expireHoldsWithNothingOverdueLocksNothingAndReturnsZero() {
             when(seatHoldRepository.findByStatusAndExpiresAtBefore(any(), any())).thenReturn(List.of());
 
             assertThat(inventoryService.expireHolds()).isZero();
+            verify(flightInventoryRepository, never()).findByFlightIdForUpdate(any());
         }
     }
 

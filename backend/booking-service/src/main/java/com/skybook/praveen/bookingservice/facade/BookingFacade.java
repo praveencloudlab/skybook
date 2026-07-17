@@ -236,9 +236,17 @@ public class BookingFacade {
                                 draft.id(), passenger.id(), detail.travelClass());
 
                 if (hold.isEmpty()) {
-                    // No inventory record for this flight: nothing is held or
-                    // priced for ANY passenger (the policy is per-flight).
-                    return noInventoryAssignments(draft, request);
+                    // "No inventory" is a per-flight fact, so it is only
+                    // acceptable BEFORE any hold was taken. After a successful
+                    // hold it signals an inconsistent downstream state
+                    // (review hardening) - never finalize the unpriced
+                    // fallback while earlier passengers hold real seats.
+                    if (heldSeats.isEmpty()) {
+                        return noInventoryAssignments(draft, request);
+                    }
+                    throw new IllegalStateException("inventory reported no inventory for flight "
+                            + draft.flightId() + " after " + heldSeats.size()
+                            + " seat(s) were already held - inconsistent inventory state");
                 }
 
                 InventoryHoldDetails held = hold.get();

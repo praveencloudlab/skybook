@@ -52,6 +52,15 @@ public class SeatReservationServiceImpl implements SeatReservationService {
     @Transactional
     public SeatReservationResponse reserveSeat(ReserveSeatRequest request) {
 
+        // §9 contract: travelClass + maxAllowedSurcharge come as a PAIR -
+        // both null (hold-confirmation semantics) or both set (direct
+        // check-in semantics). One without the other would silently bypass
+        // either the cabin check or the entitlement ceiling.
+        if ((request.travelClass() == null) != (request.maxAllowedSurcharge() == null)) {
+            throw new IllegalArgumentException(
+                    "travelClass and maxAllowedSurcharge must be supplied together (check-in) or omitted together");
+        }
+
         // Shared pessimistic flight lock (§5.3): reservations mutate the same
         // counters as holds, so they serialize on the same lock - and the §9
         // check-in cabin/ceiling validation below runs under it.
@@ -91,7 +100,11 @@ public class SeatReservationServiceImpl implements SeatReservationService {
     @Transactional
     public SeatReservationResponse cancelReservation(ReleaseSeatRequest request) {
 
-        FlightInventory inventory = inventoryService.findByFlightId(request.flightId());
+        // §5.3 policy: cancellation returns a seat to the pool - a counter
+        // mutation - so it serializes on the same flight lock as everything
+        // else. Quiet cleanup callers would otherwise swallow an optimistic
+        // failure and leave the reservation live.
+        FlightInventory inventory = inventoryService.findByFlightIdForUpdate(request.flightId());
         AircraftSeat seat = inventoryService.findSeat(inventory, request.seatNumber());
 
         SeatReservation reservation = seatReservationRepository
