@@ -8,7 +8,8 @@
 |---|---|
 | **Scope** | Close the fleet's real security gaps: every service authenticates requests (not just the gateway), role-based authorization, hardened JWT issuance/validation, input validation + safe error handling on the auth surface, non-root/read-only containers, network isolation of internal ports, and supply-chain scanning in CI |
 | **Branch** | `feature/security-hardening` |
-| **Status** | **DRAFT — round 3 (revised after review 2, 8.8/10).** R2's four blockers + two localized fixes applied: (1) **asymmetric RS256** signing — auth-service holds the private key, every other service gets the public key only, so `JWT_SECRET`-style local forgery of `ROLE_SERVICE` is impossible; per-service client credentials replace the single service secret, with `sub` derived from the authenticated client and a caller→audience allowlist; (2) Feign identity is chosen **per operation** — user-token propagation for reads, the caller's own `ROLE_SERVICE` token for inventory writes (which the matrix denies to USER); (3) **two-rule audience model** — user tokens `aud = skybook-api-*`, service tokens `aud = <exact receiving service>`, gateway rejects `token_type=service`; (4) ownership **propagated** via `ownerSubject` on the booking event into `Payment`/`CheckIn`, with the full real check-in/payment/booking HTTP surfaces frozen in §4.4 (booking `/confirm` is ADMIN, not SERVICE); (5) actuator endpoints **move** to the internal management port (health/probes/metrics there; k8s probes re-exposed on main via `add-additional-paths`); (6) email-normalization migration gets a **collision-abort** pre-check + a `CHECK(email = lower(trim(email)))` constraint. **TTL settled: USER/ADMIN 60 min, SERVICE 10 min auto-refreshed.** R1 corrections retained. Nothing implemented yet — freeze this, then build. |
+| **Status** | **DRAFT — round 4 (revised after review 3, "architecture sound").** R3's three blockers + localized fixes applied: (1) Feign identity is **technically** frozen — booking's mixed inventory client is split into `InventoryQueryFeignClient` (propagates USER token) and `InventoryCommandFeignClient` (attaches the `inventory-service`-audience `ROLE_SERVICE` token), each its own `contextId` + config; the token endpoint uses an isolated `ServiceTokenClient` that inherits neither; ambiguous-origin reads use explicit `…AsUser`/`…AsService` wrappers, never servlet-context inference; (2) `/api/auth/service-token` is de-routed from the gateway (route narrows to `/register`+`/login`) and authenticated by an `@Order(1)` **client-credential** filter chain (BCrypt-hashed per-client secrets, `sub`+allowlist from the client id, never the body) — matrix label `CLIENT_CREDENTIAL`; (3) the **inventory→flight** outbound call gets an identity (ADMIN-token propagation, or an `inventory-service`→`flight-service` service token) and is added to the allowlist, verification, and pre-flip test list. Plus: audience tests corrected (USER accepted on GETs, 403 on writes by role), `ownerSubject` on CREATED+CONFIRMED+CANCELLED, strict token_type↔role coherence, and doc cleanups. R1/R2 retained. Freeze this, then build. |
+| **Superseded status** | ~~DRAFT — round 3 (revised after review 2, 8.8/10).~~ R2's four blockers + two localized fixes applied: (1) **asymmetric RS256** signing — auth-service holds the private key, every other service gets the public key only, so `JWT_SECRET`-style local forgery of `ROLE_SERVICE` is impossible; per-service client credentials replace the single service secret, with `sub` derived from the authenticated client and a caller→audience allowlist; (2) Feign identity is chosen **per operation** — user-token propagation for reads, the caller's own `ROLE_SERVICE` token for inventory writes (which the matrix denies to USER); (3) **two-rule audience model** — user tokens `aud = skybook-api-*`, service tokens `aud = <exact receiving service>`, gateway rejects `token_type=service`; (4) ownership **propagated** via `ownerSubject` on the booking event into `Payment`/`CheckIn`, with the full real check-in/payment/booking HTTP surfaces frozen in §4.4 (booking `/confirm` is ADMIN, not SERVICE); (5) actuator endpoints **move** to the internal management port (health/probes/metrics there; k8s probes re-exposed on main via `add-additional-paths`); (6) email-normalization migration gets a **collision-abort** pre-check + a `CHECK(email = lower(trim(email)))` constraint. **TTL settled: USER/ADMIN 60 min, SERVICE 10 min auto-refreshed.** R1 corrections retained. Nothing implemented yet — freeze this, then build. |
 
 Goal: take SkyBook from "secured at the front door only" to **defense in depth**.
 Today a valid JWT is checked in exactly one place — the API gateway — and every
@@ -178,7 +179,7 @@ or `@Import`. Module contents:
 skybook-security
 ├── JwtTokenValidator                 # verify signature+alg+iss+aud+exp+iat+role
 ├── JwtAuthenticationFilter           # populates the SecurityContext from the token
-├── JwtSecurityProperties             # secret, issuer, audience, enforcement flag
+├── JwtSecurityProperties             # public key, issuer, user/service audiences, enforcement flag
 ├── JsonAuthenticationEntryPoint      # 401 as the fleet ErrorResponse shape
 ├── JsonAccessDeniedHandler           # 403 as the fleet ErrorResponse shape
 ├── BearerTokenFeignInterceptor       # §3.3 token propagation
@@ -237,6 +238,15 @@ by "is there a request context lying around?"** (review 1, correction #2):
   contradiction fix below).
 - **Kafka/scheduler origin** (no user token exists): the caller uses its
   `ROLE_SERVICE` token — event-driven finalize, stale-draft/hold sweeps.
+- **inventory → flight** (review 3, blocker #3): inventory-service already calls
+  `GET /api/flights/{id}` (verified — its only downstream). Once flight-service
+  authenticates, this call needs an identity too. It runs inside the
+  **ADMIN-originated** inventory-creation flow, so it **propagates the ADMIN
+  token** (`getFlightAsUser`); if it is ever reused from a scheduler/Kafka origin
+  it takes an `inventory-service → flight-service` service token
+  (`getFlightAsService`). Without this, aircraft/inventory administration would
+  fail with an internal 401 even while the passenger booking E2E stays green — so
+  it is verified **before** flight-service flips to `authenticated()` (§13).
 
 Identity is chosen **explicitly per Feign operation**, never by "is a request
 context lying around?".
@@ -281,10 +291,45 @@ payment-service   → client-id + secret
   for an audience that caller is allowed to target:
 
   ```
-  booking-service → { flight-service, inventory-service }
-  checkin-service → { flight-service, inventory-service }
-  payment-service → { booking-service }
+  booking-service   → { flight-service, inventory-service }
+  checkin-service   → { flight-service, inventory-service }
+  payment-service   → { booking-service }
+  inventory-service → { flight-service }        # inventory→flight, review 3 blocker #3
   ```
+
+### Isolating and authenticating the token endpoint (review 3, blocker #2)
+
+Two concrete exposures must close, or the endpoint is reachable and/or
+un-authenticable:
+
+1. **De-route it from the gateway.** The gateway currently forwards the wildcard
+   `path("/api/auth/**")` to auth-service (verified) — so adding
+   `/api/auth/service-token` would publish it on `:8080`. The gateway route
+   **narrows to exactly `/api/auth/register` and `/api/auth/login`**; everything
+   else under `/api/auth/**` (incl. `/service-token`) is no longer routed and is
+   reachable only service-to-service on the internal network.
+2. **A separate credential-authenticated filter chain** — the caller is
+   obtaining its *first* SERVICE token and therefore cannot already present
+   `ROLE_SERVICE`, so this endpoint is **not** JWT-authenticated. Spring Security
+   runs only the first matching `SecurityFilterChain`, so ordering + matcher are
+   deliberate:
+
+   ```java
+   @Order(1)
+   securityMatcher("/api/auth/service-token")   // client-credential chain, NO JWT
+     → authenticate per-service client credentials → issue ROLE_SERVICE token
+
+   @Order(2)
+   // register/login (public) + any future JWT-guarded auth admin
+   ```
+
+- **Credential storage.** Each caller service holds a **high-entropy plaintext
+  client secret** (its own env); auth-service stores a **BCrypt/Argon2 hash per
+  client id**, verified in constant time. The **client id determines `sub` and
+  the allowlist** — the request body is never trusted for identity. Service
+  secrets are *not* all kept as plaintext env vars in auth-service.
+- In the matrix, this endpoint is labelled **`CLIENT_CREDENTIAL`**, not
+  `SERVICE`.
 
 - `ServiceTokenProvider` (in `skybook-security`) fetches per target audience on
   first use, **caches, and refreshes shortly before expiry** — never per call,
@@ -317,6 +362,52 @@ check-in-service already authenticate *and* authorize the user (ownership, §4.2
 later, add an on-behalf-of token carrying an **`act` claim** (RFC 8693) rather
 than letting USER tokens onto internal inventory writes — noted as a §14
 follow-up.
+
+### Feign identity is frozen at the client-interface level, not by a global interceptor (review 3, blocker #1)
+
+The danger: booking's **current single** `InventoryServiceFeignClient` mixes a
+read (`getCabins()`) with five writes (`holdSeat`, `autoHoldSeat`, `releaseHold`,
+`reserveSeat`, `cancelReservation`). A globally-registered
+`BearerTokenFeignInterceptor` would forward the USER token to **every** method —
+including the writes the matrix denies to USER — producing the exact 403 this
+whole design is meant to avoid. So identity is bound to **separate client
+interfaces**, each with its own `contextId` and its own Feign configuration:
+
+```
+InventoryQueryFeignClient    (contextId = "inventoryQuery")
+  → @Configuration UserTokenFeignConfiguration
+  → propagates the incoming USER/ADMIN bearer token
+  → getCabins(...)                             [read]
+
+InventoryCommandFeignClient  (contextId = "inventoryCommand")
+  → @Configuration ServiceTokenFeignConfiguration(audience = "inventory-service")
+  → attaches a ROLE_SERVICE token, aud = inventory-service
+  → holdSeat / autoHoldSeat / releaseHold / reserveSeat / cancelReservation  [writes]
+
+ServiceTokenClient           (contextId = "authServiceToken")
+  → isolated config; uses client-credentials only
+  → inherits NEITHER interceptor (or it would loop / attach the wrong identity)
+```
+
+Spring Cloud OpenFeign supports per-client configuration and multiple clients
+against the same target via distinct `contextId`s — this is the standard
+mechanism, not a workaround. `ServiceTokenFeignConfiguration` is
+audience-parameterised so check-in reuses it with `aud = inventory-service` for
+*its* command client.
+
+**Ambiguous-origin calls are made explicit, never inferred.** A flight read can
+happen inside a USER request *or* an event-driven flow, so the wrapper exposes
+two methods rather than letting an interceptor guess from "does a servlet request
+exist?":
+
+```
+flightClient.getFlightAsUser(id)     → propagate the incoming USER/ADMIN token
+flightClient.getFlightAsService(id)  → request an aud=flight-service ROLE_SERVICE token
+```
+
+(equivalently, the resolved `Authorization` value is passed as an explicit Feign
+method argument). Privilege is chosen by the **calling code path**, which knows
+its origin — the transport layer never elevates on its own.
 
 ---
 
@@ -354,10 +445,16 @@ scope for this branch** (review 1, correction #4).
   ```
 
 - **Ownership must reach payment and check-in too** (review 2, blocker #4). Those
-  services don't know the owner today. `ownerSubject` is added to the
-  `BookingCreated` event and **snapshotted** into **`Payment.ownerSubject`** and
-  **`CheckIn.ownerSubject`** when each service consumes it — so each service
-  enforces ownership from its own row, no cross-service lookup.
+  services don't know the owner today. `ownerSubject` is snapshotted into
+  **`Payment.ownerSubject`** and **`CheckIn.ownerSubject`** when each service
+  consumes its event — so each enforces ownership from its own row, no
+  cross-service lookup.
+- **`ownerSubject` goes on the event for CREATED, CONFIRMED, *and* CANCELLED**
+  (review 3), not just "BookingCreated": payment consumes `CREATED` but **check-in
+  manifest creation consumes `CONFIRMED`** (verified), and a consumer of
+  `CANCELLED` may need it too. The shared `BookingEventProducer.publish(...)`
+  private method builds every event type, so `BookingEvent.ownerSubject` is set
+  **there once** and is present on all three.
 - **Legacy rows** (`ownerSubject = null` in booking, payment, or check-in):
   **ADMIN/SERVICE only** across all three — a USER cannot act on an unowned
   object. Safest documented policy; a one-time backfill is out of scope (no
@@ -409,10 +506,10 @@ check).
 
 | Endpoint | USER | ADMIN | SERVICE |
 |---|---|---|---|
-| **auth** `POST /register`, `/login` | public | public | — |
-| `POST /api/auth/service-token` | — | — | ✓ (per-service client credential, not gateway-routed; issues only for an allowlisted audience) |
-| **flight** `GET /flights/**`, `/search` | ✓ | ✓ | ✓ |
-| `POST/PUT/PATCH/DELETE /flights/**` (create/update/cancel schedule) | — | ✓ | — |
+| **auth** `POST /api/auth/register`, `/login` (gateway routes ONLY these two) | public | public | — |
+| `POST /api/auth/service-token` (de-routed from gateway; internal only) | **CLIENT_CREDENTIAL** — per-service client secret, BCrypt-verified; issues only for an allowlisted audience | | |
+| **flight** `GET /api/flights/**`, `/api/flight-schedules/**`, `/search` | ✓ | ✓ | ✓ |
+| `POST/PUT/PATCH/DELETE /api/flights/**`, `/api/flight-schedules/**` (create/update/cancel) | — | ✓ | — |
 | **inventory** `GET /seat-map`, `/cabins`, `/flight/{id}` | ✓ | ✓ | ✓ |
 | `POST /inventory` (create), close/reopen, block; `POST /aircraft`, `/seat-map`, seat status | — | ✓ | — |
 | `POST /inventory/hold`, `/holds/auto`, `/release`, `/reservations`, `/reservations/cancel` | — | ✓ | ✓ (booking/checkin call these) |
@@ -488,10 +585,21 @@ in-process method calls, NOT HTTP, so they need no HTTP role at all.**
   aud matches the token-type rule above
   sub present
   token_type present and recognized (user | service)
-  a recognized role                 → else FAIL CLOSED (never default to USER)
+  token_type ↔ role COHERENCE (below)   → else FAIL CLOSED (never default to USER)
   exp in the future
   iat present
   ```
+
+  **Token-type ↔ role coherence** — a recognized type *and* a recognized role is
+  not enough; only these exact combinations are valid, everything else (incl.
+  mixed-role tokens) is rejected:
+
+  ```
+  token_type = user     → roles is exactly { ROLE_USER } or { ROLE_ADMIN };  never ROLE_SERVICE
+  token_type = service  → roles is exactly { ROLE_SERVICE };                 never ROLE_USER/ROLE_ADMIN
+  ```
+
+  e.g. `{"token_type":"service","roles":["ROLE_SERVICE","ROLE_ADMIN"]}` → rejected.
 
 - **TTL (settled, review 2):** **USER/ADMIN access token = 60 min**;
   **`ROLE_SERVICE` token = 10 min, auto-refreshed** by `ServiceTokenProvider`
@@ -652,7 +760,7 @@ follow-up branch (§14).
 
 ---
 
-# 12. Decisions Settled (rounds 1–2)
+# 12. Decisions Settled (rounds 1–3)
 
 All open forks are now resolved into the design above; recorded for traceability:
 
@@ -676,6 +784,16 @@ All open forks are now resolved into the design above; recorded for traceability
 - **H. Audience (R2 blocker #3)** — **two rules**: user `aud = skybook-api-*`,
   service `aud = exact receiving service`; gateway rejects `token_type=service`
   (§5).
+- **I. Feign identity binding (R3 blocker #1)** — frozen at the **client
+  interface** level (`InventoryQueryFeignClient` vs `InventoryCommandFeignClient`
+  + isolated `ServiceTokenClient`), explicit `…AsUser`/`…AsService` for
+  ambiguous origins; no global privilege-inferring interceptor (§3.3).
+- **J. Token endpoint isolation (R3 blocker #2)** — gateway route narrowed to
+  `/register`+`/login`; `@Order(1)` client-credential chain, BCrypt-hashed
+  per-client secrets, matrix label `CLIENT_CREDENTIAL` (§3.3).
+- **K. inventory→flight identity (R3 blocker #3)** — ADMIN-token propagation
+  (service token if ever scheduler-origin); verified before flipping flight
+  (§3.3, §13).
 
 ---
 
@@ -693,22 +811,31 @@ test profile) lets each chain be built and merged before it's switched live.
    service-token provider), registered via `AutoConfiguration.imports`. **Do not
    switch enforcement on fleet-wide yet.** Migrate the gateway onto the shared
    validator.
-2. **Service identity: per-service credentials + `POST /api/auth/service-token`**
-   (§3.3) — auth authenticates the client credential, derives `sub`, enforces the
-   caller→audience allowlist, issues a 10-min `ROLE_SERVICE` token;
-   `ServiceTokenProvider` fetches/caches/refreshes per audience.
-3. **Feign identity per operation** (§3.3) — `BearerTokenFeignInterceptor` for
-   user-token reads; the caller's `ROLE_SERVICE` token for inventory writes and
-   event/scheduler origins; fail closed. Verify booking→flight (user),
-   booking→inventory + checkin→inventory (service), and the finalize path.
+2. **Service-token endpoint, isolated** (§3.3) — **narrow the gateway route to
+   `/api/auth/register` + `/api/auth/login`** (drop the `/api/auth/**` wildcard so
+   `/service-token` is not published); add the `@Order(1)` client-credential
+   `SecurityFilterChain` for `/service-token` (BCrypt-hashed per-client secrets,
+   `sub`+allowlist from the client id, no JWT); auth issues a 10-min
+   `ROLE_SERVICE` token; `ServiceTokenProvider` fetches/caches/refreshes per
+   audience.
+3. **Feign identity, frozen per client interface** (§3.3) — split booking's mixed
+   inventory client into `InventoryQueryFeignClient` (`UserTokenFeignConfiguration`)
+   + `InventoryCommandFeignClient` (`ServiceTokenFeignConfiguration`, aud=inventory-service),
+   distinct `contextId`s; isolated `ServiceTokenClient` inheriting neither;
+   explicit `getFlightAsUser`/`getFlightAsService` wrappers for ambiguous-origin
+   reads. Verify booking→flight (user), booking→inventory + checkin→inventory
+   (service), **inventory→flight (ADMIN-propagated) — before flight is flipped**,
+   and the finalize path.
 4. **Flip each service to `authenticated()`** (§3.2), one dependency chain at a
    time, each with its local `SecurityConfig` (STATELESS, OPTIONS permit,
    formLogin/httpBasic disabled). Add security to flight/notification. Stop
-   trusting `X-Auth-User`. Gateway rejects `token_type=service`.
+   trusting `X-Auth-User`. Gateway rejects `token_type=service`. **flight-service
+   is flipped only after step 3's inventory→flight path is proven**, or aircraft/
+   inventory admin 401s internally.
 5. **Full gateway E2E** — every existing seat-selection/booking/check-in flow
    still passes *through the gateway*; a direct-to-service call now 401s; a
    forged `X-Auth-User` alone still 401s; a forged/locally-signed token fails
-   (no private key downstream).
+   (no private key downstream); a USER token to `/inventory/hold` → 403.
 6. **Network isolation** (§3.1) — unpublish all internal ports incl.
    Postgres/Kafka + management ports; document the override file.
 7. **Roles + ownership** (§4) — auth Flyway V1+V2 (`role`, email collision-abort
@@ -761,7 +888,8 @@ test profile) lets each chain be built and merged before it's switched live.
 | Ownership | USER reading/cancelling **another** user's booking → 403; own → 200; ADMIN any → 200; legacy null-owner + USER → 403 — asserted in booking **and** payment (`/authorize`, `/capture`) **and** check-in (`/checkin`, `/seat`) |
 | Asymmetric forgery | a token signed with any key other than auth's private key → rejected everywhere (services hold only the public key); `alg:none` and RS→HS confusion → rejected; a downstream service cannot mint any valid token |
 | Service identity | `ROLE_SERVICE` accepted only on matrix-allowed internal endpoints; no-token/no-service-request call site → fails closed (401); **auth issues a service token only for an allowlisted (caller→audience) pair, `sub` from the authenticated client credential**; booking's credential cannot obtain a `payment-service`-audience token |
-| Audience model | a `token_type=user` token (`aud=skybook-api-*`) → **rejected** by inventory's service-audience rule; a `token_type=service` token (`aud=inventory-service`) → **rejected** at the public gateway and by flight's own audience; correct pairs → accepted |
+| Audience + role model | USER token (`aud=skybook-api-prod`) → **GET /inventory/cabins accepted**, **POST /inventory/hold → 403** (denied by *role*, not audience); SERVICE token (`aud=inventory-service`) → POST hold **accepted**; SERVICE token (`aud=flight-service`) sent to inventory → **401** (wrong service-audience); `token_type=service` at the public gateway → rejected |
+| Token coherence | `token_type=user` carrying `ROLE_SERVICE`, or `token_type=service` carrying `ROLE_ADMIN`, or a mixed-role `{ROLE_SERVICE,ROLE_ADMIN}` token → all rejected |
 | JWT hardening | auth boot fails on missing/malformed/<2048-bit private key; service boot fails on missing/default public key; `alg` ≠ RS256 → rejected; wrong `iss` → rejected; missing role/token_type → rejected (not defaulted); expired → rejected; 60-min USER / 10-min SERVICE TTLs asserted |
 | Auth surface | invalid email/blank/short password → 400 field messages; duplicate email → 409; concurrent double-register race → 409 (DB unique); wrong password AND unknown user → **identical** 401; `Alice@X.com` and `alice@x.com` resolve to one account; login password `@NotBlank` only (old-policy accounts still log in) |
 | Auth migration | fresh DB → V1+V2; existing populated DB → baselined at 1, V2 backfills every user to `USER` then NOT NULL; **email-collision pre-check aborts the migration** when two rows collapse together; `CHECK(email = lower(trim(email)))` present; `ddl-auto: validate` passes both; `SKYBOOK_BOOTSTRAP_ADMIN_EMAIL` promotes once, warns when no admin exists |
