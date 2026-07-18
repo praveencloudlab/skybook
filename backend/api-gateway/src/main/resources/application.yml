@@ -19,8 +19,15 @@ services:
   checkin-service:
     base-url: http://localhost:8087
 
-jwt:
-  secret: ${JWT_SECRET}
+# Shared JWT validation (SECURITY_HARDENING_MODULE.md §5). Verify-only: the
+# gateway holds the PUBLIC key, never a signing key. accept-service-tokens=false
+# so a machine token can never enter through the public edge.
+skybook:
+  security:
+    public-key: ${JWT_PUBLIC_KEY}
+    issuer: ${JWT_ISSUER:skybook-auth}
+    user-audience: ${JWT_AUDIENCE:skybook-api}
+    accept-service-tokens: false
 
 gateway:
   cors:
