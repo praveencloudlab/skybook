@@ -21,42 +21,46 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ResilientInventoryClient {
 
-    private final InventoryServiceFeignClient feignClient;
+    // Split by identity (SECURITY_HARDENING_MODULE.md §3.3): writes carry a
+    // ROLE_SERVICE token (command client), the cabin read propagates the user
+    // token (query client). The resilience wrapping is identical for both.
+    private final InventoryCommandFeignClient commandClient;
+    private final InventoryQueryFeignClient queryClient;
 
     @Bulkhead(name = "inventory")
     @CircuitBreaker(name = "inventory")
     public InventoryHoldDetails holdSeat(InventorySeatCall call) {
-        return feignClient.holdSeat(call);
+        return commandClient.holdSeat(call);
     }
 
     @Bulkhead(name = "inventory")
     @CircuitBreaker(name = "inventory")
     public InventoryHoldDetails autoHoldSeat(Long flightId, InventorySeatCall call) {
-        return feignClient.autoHoldSeat(flightId, call);
+        return commandClient.autoHoldSeat(flightId, call);
     }
 
     @Bulkhead(name = "inventory")
     @CircuitBreaker(name = "inventory")
     public InventoryHoldDetails releaseHold(InventorySeatCall call) {
-        return feignClient.releaseHold(call);
+        return commandClient.releaseHold(call);
     }
 
     @Bulkhead(name = "inventory")
     @CircuitBreaker(name = "inventory")
     public InventoryReservationDetails reserveSeat(InventorySeatCall call) {
-        return feignClient.reserveSeat(call);
+        return commandClient.reserveSeat(call);
     }
 
     @Bulkhead(name = "inventory")
     @CircuitBreaker(name = "inventory")
     public InventoryReservationDetails cancelReservation(InventorySeatCall call) {
-        return feignClient.cancelReservation(call);
+        return commandClient.cancelReservation(call);
     }
 
     @Bulkhead(name = "inventory")
     @CircuitBreaker(name = "inventory")
     @Retry(name = "inventory-read")
     public List<InventoryCabinDetails> getCabins(Long flightId) {
-        return feignClient.getCabins(flightId);
+        return queryClient.getCabins(flightId);
     }
 }

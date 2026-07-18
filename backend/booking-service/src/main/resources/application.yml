@@ -139,6 +139,11 @@ skybook:
     issuer: ${JWT_ISSUER:skybook-auth}
     user-audience: ${JWT_AUDIENCE:skybook-api}
     service-audience: booking-service
+    # Client credential for obtaining ROLE_SERVICE tokens for inventory writes (§3.3).
+    service-client:
+      auth-base-url: ${AUTH_SERVICE_BASE_URL:http://localhost:8081}
+      client-id: booking-service
+      client-secret: ${BOOKING_SERVICE_CLIENT_SECRET:dev-booking-secret}
   kafka:
     topics:
       # Consumed by PaymentEventConsumer - PAYMENT_SUCCEEDED confirms bookings.
