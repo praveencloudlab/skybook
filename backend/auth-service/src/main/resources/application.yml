@@ -33,11 +33,28 @@ jwt:
   public-key: ${JWT_PUBLIC_KEY}
   issuer: ${JWT_ISSUER:skybook-auth}
   audience: ${JWT_AUDIENCE:skybook-api}
-  expiration: 3600000   # 60 min (USER token TTL, §5)
+  expiration: 3600000          # 60 min (USER token TTL, §5)
+  service-expiration: 600000   # 10 min (ROLE_SERVICE token TTL, §5)
 
-# Promote this already-registered user to ADMIN once at startup (§4.3).
 skybook:
+  # Promote this already-registered user to ADMIN once at startup (§4.3).
   bootstrap-admin-email: ${SKYBOOK_BOOTSTRAP_ADMIN_EMAIL:}
+  # Service-client registry (§3.3/§4.5): provisioned at startup, secrets
+  # BCrypt-hashed. Each caller may only request tokens for its allowed audiences.
+  service-registry:
+    clients:
+      - client-id: booking-service
+        secret: ${BOOKING_SERVICE_CLIENT_SECRET:dev-booking-secret}
+        allowed-audiences: flight-service,inventory-service
+      - client-id: checkin-service
+        secret: ${CHECKIN_SERVICE_CLIENT_SECRET:dev-checkin-secret}
+        allowed-audiences: flight-service,inventory-service
+      - client-id: payment-service
+        secret: ${PAYMENT_SERVICE_CLIENT_SECRET:dev-payment-secret}
+        allowed-audiences: booking-service
+      - client-id: inventory-service
+        secret: ${INVENTORY_SERVICE_CLIENT_SECRET:dev-inventory-secret}
+        allowed-audiences: flight-service
 
 management:
   endpoints:

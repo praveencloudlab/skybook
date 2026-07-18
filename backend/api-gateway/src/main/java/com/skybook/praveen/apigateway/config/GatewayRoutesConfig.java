@@ -35,8 +35,12 @@ public class GatewayRoutesConfig {
 
     @Bean
     public RouterFunction<ServerResponse> authServiceRoute(ServicesProperties services) {
+        // Only the two public auth endpoints are routed (SECURITY_HARDENING_MODULE.md
+        // §3.3): the wildcard is dropped so /api/auth/service-token is NOT reachable
+        // through the public edge - it is internal-network only, on the
+        // client-credential chain.
         return route("auth-service")
-                .route(path("/api/auth/**"), http(services.getAuthService().getBaseUrl()))
+                .route(path("/api/auth/register", "/api/auth/login"), http(services.getAuthService().getBaseUrl()))
                 .filter(new DownstreamErrorHandlingFilter())
                 .build();
     }
