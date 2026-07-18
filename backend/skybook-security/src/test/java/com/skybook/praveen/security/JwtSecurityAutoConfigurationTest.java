@@ -40,10 +40,38 @@ class JwtSecurityAutoConfigurationTest {
     }
 
     @Test
-    void failsClosedOnAMissingPublicKey() {
+    void skipsValidationWhenNoPublicKeyConfigured() {
+        // A propagation-only service (e.g. inventory before step 6) has no key -
+        // it must start WITHOUT a validator, not fail (§3.3 refactor).
         runner.withPropertyValues(
                         "skybook.security.issuer=" + TestTokens.ISSUER,
                         "skybook.security.user-audience=" + TestTokens.USER_AUDIENCE)
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    assertThat(context).doesNotHaveBean(JwtTokenValidator.class);
+                    assertThat(context).doesNotHaveBean(RSAPublicKey.class);
+                });
+    }
+
+    @Test
+    void failsClosedOnAMalformedPublicKey() {
+        // A service that DOES configure a key but supplies garbage must fail at
+        // boot rather than run unable to verify anything.
+        runner.withPropertyValues(
+                        "skybook.security.public-key=not-a-real-key",
+                        "skybook.security.issuer=" + TestTokens.ISSUER,
+                        "skybook.security.user-audience=" + TestTokens.USER_AUDIENCE)
                 .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    void registersTheServiceTokenProviderWhenAClientCredentialIsSet() {
+        // The outbound-identity concern activates independently of validation:
+        // a client-id present + Feign on the classpath -> a token provider.
+        runner.withPropertyValues(
+                        "skybook.security.service-client.client-id=booking-service",
+                        "skybook.security.service-client.client-secret=secret",
+                        "skybook.security.service-client.auth-base-url=http://localhost:8081")
+                .run(context -> assertThat(context).hasSingleBean(ServiceTokenProvider.class));
     }
 }

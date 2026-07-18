@@ -138,6 +138,9 @@ services:
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
       JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
+      # Client credential for ROLE_SERVICE tokens on inventory writes (§3.3).
+      AUTH_SERVICE_BASE_URL: http://auth-service:8081
+      BOOKING_SERVICE_CLIENT_SECRET: ${BOOKING_SERVICE_CLIENT_SECRET:-dev-booking-secret}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: booking-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317

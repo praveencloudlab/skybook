@@ -79,6 +79,15 @@
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
+        <!-- Feign RequestInterceptor for token propagation (§3.3). Optional:
+             only services that use Feign pull it in; the interceptor beans are
+             @ConditionalOnClass so auth/notification (no Feign) skip them. -->
+        <dependency>
+            <groupId>io.github.openfeign</groupId>
+            <artifactId>feign-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

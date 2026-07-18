@@ -60,7 +60,9 @@ class ResilientClientBehaviorTest {
     @MockitoBean
     private FlightServiceFeignClient flightFeign;
     @MockitoBean
-    private InventoryServiceFeignClient inventoryFeign;
+    private InventoryCommandFeignClient inventoryFeign;
+    @MockitoBean
+    private InventoryQueryFeignClient inventoryQueryFeign;
 
     @Autowired
     private FlightServiceClient flightClient;
