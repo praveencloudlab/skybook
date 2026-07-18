@@ -1,10 +1,11 @@
 package com.skybook.praveen.apigateway.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.skybook.praveen.apigateway.security.GatewayJwtValidator;
 import com.skybook.praveen.apigateway.security.HeaderAddingRequestWrapper;
 import com.skybook.praveen.common.exception.ErrorResponse;
-import io.jsonwebtoken.JwtException;
+import com.skybook.praveen.security.AuthenticatedPrincipal;
+import com.skybook.praveen.security.InvalidTokenException;
+import com.skybook.praveen.security.JwtTokenValidator;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,24 +25,18 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * The gateway's actual JWT enforcement point (design doc §4) - this is the
- * ONE place in the whole fleet that currently rejects an unauthenticated
- * request to a protected route; every downstream service's SecurityConfig
- * is still permitAll() (see the design doc's second load-bearing finding).
+ * The gateway's JWT enforcement point (SECURITY_HARDENING_MODULE.md §3.2). As
+ * of the security-hardening branch it verifies with the shared
+ * {@link JwtTokenValidator} - the exact logic every downstream service uses -
+ * instead of a gateway-local validator, so the edge and the services can never
+ * drift. The gateway's validator is configured with
+ * {@code accept-service-tokens=false}, so a machine token can never enter
+ * through the public edge (§5).
  *
- * Public routes (auth-service's register/login, this gateway's own
- * actuator) bypass validation entirely. Everything else needs a valid
- * "Authorization: Bearer <token>" that GatewayJwtValidator accepts; on
- * success the validated subject is attached as X-Auth-User for downstream
- * services to optionally trust later.
- *
- * CORS preflight (OPTIONS) requests also bypass validation unconditionally,
- * regardless of path - browsers never attach an Authorization header to a
- * preflight request, so without this every real cross-origin call from a
- * browser would fail CORS entirely (the preflight itself would 401 before
- * CorsConfig's headers ever got a chance to apply). Found live: the first
- * manual CORS test against this filter returned 401 for the preflight
- * instead of the expected CORS headers.
+ * Public routes (auth register/login, this gateway's own actuator) and CORS
+ * preflight (OPTIONS) bypass validation. Everything else needs a valid
+ * "Authorization: Bearer <token>"; on success the validated subject is attached
+ * as X-Auth-User for logging/tracing (never trusted downstream as identity - §3.2).
  */
 @Slf4j
 @Component
@@ -56,10 +51,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             new PathPatternParser().parse("/actuator/**")
     );
 
-    private final GatewayJwtValidator jwtValidator;
+    private final JwtTokenValidator jwtValidator;
     private final ObjectMapper objectMapper;
 
-    public JwtAuthenticationFilter(GatewayJwtValidator jwtValidator, ObjectMapper objectMapper) {
+    public JwtAuthenticationFilter(JwtTokenValidator jwtValidator, ObjectMapper objectMapper) {
         this.jwtValidator = jwtValidator;
         this.objectMapper = objectMapper;
     }
@@ -83,10 +78,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = authHeader.substring("Bearer ".length());
         try {
-            String subject = jwtValidator.validateAndExtractSubject(token);
-            HttpServletRequest forwarded = wrapWithAuthUser(request, subject);
+            AuthenticatedPrincipal principal = jwtValidator.validate(token);
+            HttpServletRequest forwarded = wrapWithAuthUser(request, principal.subject());
             filterChain.doFilter(forwarded, response);
-        } catch (JwtException | IllegalArgumentException e) {
+        } catch (InvalidTokenException e) {
             log.warn("JWT rejected for {} {}: {}", request.getMethod(), path, e.getMessage());
             reject(request, response, "Invalid or expired token");
         }

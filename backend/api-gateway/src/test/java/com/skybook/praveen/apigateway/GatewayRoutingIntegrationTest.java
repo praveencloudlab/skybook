@@ -3,7 +3,6 @@ package com.skybook.praveen.apigateway;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -18,12 +17,16 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
-import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.interfaces.RSAPrivateKey;
+import java.util.Base64;
 import java.util.Date;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -38,13 +41,28 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GatewayRoutingIntegrationTest {
 
-    private static final String JWT_SECRET = "integration-test-secret-key-thats-long-enough-for-hmac";
+    private static final String ISSUER = "skybook-auth-test";
+    private static final String AUDIENCE = "skybook-api-test";
+
+    // RS256 keypair generated once: the gateway verifies with the public key,
+    // the test signs valid tokens with the matching private key.
+    private static final KeyPair KEY_PAIR = generateRsa();
 
     private static HttpServer stubDownstream;
     private static int closedPort;
 
     @Autowired
     private TestRestTemplate restTemplate;
+
+    private static KeyPair generateRsa() {
+        try {
+            KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
+            gen.initialize(2048);
+            return gen.generateKeyPair();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     @BeforeAll
     static void startStubDownstream() throws IOException {
@@ -65,7 +83,11 @@ class GatewayRoutingIntegrationTest {
 
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
-        registry.add("jwt.secret", () -> JWT_SECRET);
+        registry.add("skybook.security.public-key",
+                () -> Base64.getEncoder().encodeToString(KEY_PAIR.getPublic().getEncoded()));
+        registry.add("skybook.security.issuer", () -> ISSUER);
+        registry.add("skybook.security.user-audience", () -> AUDIENCE);
+        registry.add("skybook.security.accept-service-tokens", () -> "false");
         registry.add("services.auth-service.base-url", GatewayRoutingIntegrationTest::stubBaseUrl);
         registry.add("services.flight-service.base-url", GatewayRoutingIntegrationTest::stubBaseUrl);
         registry.add("services.inventory-service.base-url", GatewayRoutingIntegrationTest::stubBaseUrl);
@@ -91,12 +113,15 @@ class GatewayRoutingIntegrationTest {
     }
 
     private static String validTokenFor(String subject) {
-        SecretKey key = Keys.hmacShaKeyFor(JWT_SECRET.getBytes(StandardCharsets.UTF_8));
         return Jwts.builder()
                 .subject(subject)
+                .issuer(ISSUER)
+                .audience().add(AUDIENCE).and()
+                .claim("token_type", "user")
+                .claim("roles", List.of("ROLE_USER"))
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + 60_000))
-                .signWith(key)
+                .signWith((RSAPrivateKey) KEY_PAIR.getPrivate(), Jwts.SIG.RS256)
                 .compact();
     }
 

@@ -1,8 +1,10 @@
 package com.skybook.praveen.apigateway.filter;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.skybook.praveen.apigateway.security.GatewayJwtValidator;
-import io.jsonwebtoken.JwtException;
+import com.skybook.praveen.security.AuthenticatedPrincipal;
+import com.skybook.praveen.security.InvalidTokenException;
+import com.skybook.praveen.security.JwtTokenValidator;
+import com.skybook.praveen.security.TokenType;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,6 +13,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -18,7 +22,7 @@ import static org.mockito.Mockito.when;
 
 class JwtAuthenticationFilterTest {
 
-    private final GatewayJwtValidator jwtValidator = mock(GatewayJwtValidator.class);
+    private final JwtTokenValidator jwtValidator = mock(JwtTokenValidator.class);
     private final JwtAuthenticationFilter filter =
             new JwtAuthenticationFilter(jwtValidator, new ObjectMapper().findAndRegisterModules());
 
@@ -40,6 +44,10 @@ class JwtAuthenticationFilterTest {
             chainInvoked = true;
             forwardedRequest = req;
         };
+    }
+
+    private static AuthenticatedPrincipal userPrincipal(String subject) {
+        return new AuthenticatedPrincipal(subject, TokenType.USER, List.of("ROLE_USER"), "skybook-api");
     }
 
     @Test
@@ -103,7 +111,7 @@ class JwtAuthenticationFilterTest {
         request.setMethod("GET");
         request.setRequestURI("/api/flights/123");
         request.addHeader("Authorization", "Bearer bad-token");
-        when(jwtValidator.validateAndExtractSubject("bad-token")).thenThrow(new JwtException("expired"));
+        when(jwtValidator.validate("bad-token")).thenThrow(new InvalidTokenException("expired"));
 
         filter.doFilter(request, response, chain());
 
@@ -117,7 +125,7 @@ class JwtAuthenticationFilterTest {
         request.setMethod("GET");
         request.setRequestURI("/api/flights/123");
         request.addHeader("Authorization", "Bearer good-token");
-        when(jwtValidator.validateAndExtractSubject("good-token")).thenReturn("traveler@skybook.com");
+        when(jwtValidator.validate("good-token")).thenReturn(userPrincipal("traveler@skybook.com"));
 
         filter.doFilter(request, response, chain());
 

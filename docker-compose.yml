@@ -61,7 +61,14 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_auth
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      JWT_SECRET: ${JWT_SECRET}
+      # RS256 (SECURITY_HARDENING_MODULE.md §5): auth-service is the only holder
+      # of the private signing key. The insecure ${VAR:?required} fail-fast form
+      # lands with the secret-defaults cleanup (step 11).
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
+      SKYBOOK_BOOTSTRAP_ADMIN_EMAIL: ${SKYBOOK_BOOTSTRAP_ADMIN_EMAIL:-}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: auth-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
@@ -291,7 +298,10 @@ services:
     ports:
       - "8080:8080"
     environment:
-      JWT_SECRET: ${JWT_SECRET}
+      # Verify-only: the gateway holds the PUBLIC key, never a signing key (§5).
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
       SERVICES_AUTH_SERVICE_BASE_URL: http://auth-service:8081
       SERVICES_FLIGHT_SERVICE_BASE_URL: http://flight-service:8082
       SERVICES_BOOKING_SERVICE_BASE_URL: http://booking-service:8083

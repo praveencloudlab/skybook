@@ -14,14 +14,30 @@ spring:
     username: postgres
     password: postgres
 
+  # Flyway owns the schema (SECURITY_HARDENING_MODULE.md §4.3): V1 baseline +
+  # V2 role/email delta. An existing Hibernate-created DB adopts V1 and runs
+  # only V2; a fresh DB runs both. Hibernate validates, never mutates.
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 1
+
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: true
 
+# RS256 (§5). Only auth-service holds the private key; the public key is the
+# same one every other service verifies with. iss/aud are environment-specific.
 jwt:
-  secret: ${JWT_SECRET}
-  expiration: 3600000
+  private-key: ${JWT_PRIVATE_KEY}
+  public-key: ${JWT_PUBLIC_KEY}
+  issuer: ${JWT_ISSUER:skybook-auth}
+  audience: ${JWT_AUDIENCE:skybook-api}
+  expiration: 3600000   # 60 min (USER token TTL, §5)
+
+# Promote this already-registered user to ADMIN once at startup (§4.3).
+skybook:
+  bootstrap-admin-email: ${SKYBOOK_BOOTSTRAP_ADMIN_EMAIL:}
 
 management:
   endpoints:
