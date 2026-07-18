@@ -72,6 +72,9 @@ public class BookingEventProducer {
                 // and payment-service's consumer.
                 .bookingId(booking.id())
                 .bookingStatus(booking.bookingStatus() != null ? booking.bookingStatus().name() : null)
+                // Ownership rides EVERY event type (§4.2) so payment (CREATED)
+                // and check-in (CONFIRMED) can snapshot it; null on legacy.
+                .ownerSubject(booking.ownerSubject())
                 .flightId(booking.flightId())
                 .bookingDate(booking.bookingDate() != null
                         ? booking.bookingDate().format(EVENT_TIME) : null)

@@ -131,6 +131,14 @@ resilience4j:
         base-config: default
 
 skybook:
+  # Shared JWT validation (SECURITY_HARDENING_MODULE.md §3.2/§5). Verify-only:
+  # the public key, never a signing key. Authentication-only rollout for now
+  # (§13 step 4) - only booking creation is enforced (SecurityConfig).
+  security:
+    public-key: ${JWT_PUBLIC_KEY}
+    issuer: ${JWT_ISSUER:skybook-auth}
+    user-audience: ${JWT_AUDIENCE:skybook-api}
+    service-audience: booking-service
   kafka:
     topics:
       # Consumed by PaymentEventConsumer - PAYMENT_SUCCEEDED confirms bookings.

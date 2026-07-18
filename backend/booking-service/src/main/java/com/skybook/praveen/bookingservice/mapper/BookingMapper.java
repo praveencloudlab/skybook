@@ -24,6 +24,7 @@ public final class BookingMapper {
                 booking.getBookingDate(),
                 booking.getTotalFare(),
                 booking.getRemarks(),
+                booking.getOwnerSubject(),
                 booking.getPassengers().stream().map(BookingMapper::toPassengerResponse).toList(),
                 booking.getContact() != null ? toContactResponse(booking.getContact()) : null,
                 booking.getPayment() != null ? toPaymentResponse(booking.getPayment()) : null,

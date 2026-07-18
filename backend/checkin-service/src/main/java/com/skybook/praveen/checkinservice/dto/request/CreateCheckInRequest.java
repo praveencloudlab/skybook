@@ -58,6 +58,12 @@ public record CreateCheckInRequest(
         /** ISO-4217 of the entitlement; null on legacy events. */
         String entitlementCurrency,
 
+        /**
+         * The booking owner's JWT subject (SECURITY_HARDENING_MODULE.md §4.2),
+         * from the CONFIRMED event. Null on legacy events => ADMIN/SERVICE-only.
+         */
+        String ownerSubject,
+
         boolean documentVerified
 
 ) {
