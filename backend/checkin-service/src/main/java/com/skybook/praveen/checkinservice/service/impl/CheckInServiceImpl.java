@@ -70,6 +70,7 @@ public class CheckInServiceImpl implements CheckInService {
                 .fareType(request.fareType())
                 .seatSurchargeEntitlement(request.seatSurchargeEntitlement())
                 .entitlementCurrency(request.entitlementCurrency())
+                .ownerSubject(request.ownerSubject())
                 .documentVerified(request.documentVerified())
                 .build();
 

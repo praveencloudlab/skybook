@@ -12,8 +12,14 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate   # Flyway owns the schema (SECURITY_HARDENING_MODULE.md §4.5)
     show-sql: true
+
+  flyway:
+    # Existing Hibernate-created DB is adopted at V1 (the guarded baseline is a
+    # no-op there, only V2+ runs); a fresh DB runs V1+V2.
+    baseline-on-migrate: true
+    baseline-version: 1
 
   kafka:
     bootstrap-servers: localhost:9092

@@ -75,6 +75,13 @@ public class Booking extends Auditable {
     @Column(length = 500)
     private String remarks;
 
+    // Ownership (SECURITY_HARDENING_MODULE.md §4.2): the authenticated JWT
+    // subject captured at booking creation. Immutable; a USER may act only on
+    // bookings whose ownerSubject equals their token subject. Legacy rows are
+    // null and reachable only by ADMIN/SERVICE.
+    @Column(name = "owner_subject", updatable = false)
+    private String ownerSubject;
+
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
     private List<BookingPassenger> passengers = new ArrayList<>();

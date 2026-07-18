@@ -124,7 +124,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30));
+            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com");
 
             assertThat(response.bookingReference()).matches("^SB[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$");
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.DRAFT);
@@ -153,7 +153,7 @@ class BookingServiceImplTest {
                     passengerDetail("12B", TravelClass.BUSINESS, FareType.SAVER)   // 350 * 0.85 = 297.50
             ));
 
-            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30));
+            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com");
 
             assertThat(response.passengers()).hasSize(2);
             assertThat(response.totalFare()).isEqualByComparingTo("397.50");
@@ -171,7 +171,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail(null, TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30));
+            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com");
 
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.DRAFT);
             assertThat(response.passengers().get(0).seatNumber()).isNull();
@@ -191,7 +191,7 @@ class BookingServiceImplTest {
 
             CreateBookingRequest request = createRequest(List.of(expiredPassport));
 
-            assertThatThrownBy(() -> bookingService.createDraftBooking(request, departureTime))
+            assertThatThrownBy(() -> bookingService.createDraftBooking(request, departureTime, "owner@test.com"))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("passport");
 
@@ -205,7 +205,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            assertThatThrownBy(() -> bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30)))
+            assertThatThrownBy(() -> bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com"))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("unique PNR");
         }
@@ -226,7 +226,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = serviceWithMockedPnr.createDraftBooking(request, LocalDateTime.now().plusDays(30));
+            BookingResponse response = serviceWithMockedPnr.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com");
 
             assertThat(response.bookingReference()).isEqualTo("SBBBBB");
         }

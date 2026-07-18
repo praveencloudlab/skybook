@@ -59,16 +59,25 @@ class FlywayMigrationIntegrationTest {
     @Test
     void freshDatabaseGetsBaselinePlusDeltasAndSurvivesHibernateValidate() {
         // Reaching here at all means ddl-auto: validate accepted the
-        // Flyway-built schema. Now prove all four migrations actually ran.
+        // Flyway-built schema. Now prove all five migrations actually ran.
         List<Map<String, Object>> applied = jdbc.queryForList(
                 "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank");
 
-        assertThat(applied).hasSize(4);
-        for (int i = 0; i < 4; i++) {
+        assertThat(applied).hasSize(5);
+        for (int i = 0; i < 5; i++) {
             assertThat(applied.get(i))
                     .containsEntry("version", String.valueOf(i + 1))
                     .containsEntry("success", true);
         }
+    }
+
+    @Test
+    void ownerSubjectColumnIsAddedNullable() {
+        // V5 (§4.2): ownership snapshot, nullable so legacy rows stay ADMIN-only.
+        String nullable = jdbc.queryForObject("""
+                SELECT is_nullable FROM information_schema.columns
+                WHERE table_name = 'bookings' AND column_name = 'owner_subject'""", String.class);
+        assertThat(nullable).isEqualTo("YES");
     }
 
     @Test

@@ -24,6 +24,8 @@ public record BookingResponse(
 
         String remarks,
 
+        String ownerSubject,
+
         List<BookingPassengerResponse> passengers,
 
         BookingContactResponse contact,

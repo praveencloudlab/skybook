@@ -19,6 +19,9 @@ import com.skybook.praveen.bookingservice.producer.BookingEventProducer;
 import com.skybook.praveen.bookingservice.service.BookingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -80,7 +83,8 @@ public class BookingFacade {
             throw new IllegalArgumentException("Cannot book a cancelled flight");
         }
 
-        BookingResponse draft = bookingService.createDraftBooking(request, flight.departureTime());
+        BookingResponse draft = bookingService.createDraftBooking(
+                request, flight.departureTime(), currentSubject());
 
         List<SeatAssignmentResult> assignments = holdSeatsOrCompensate(draft, request);
 
@@ -178,6 +182,18 @@ public class BookingFacade {
         }
         BigDecimal fromFare = baseFares.values().stream().min(BigDecimal::compareTo).orElseThrow();
         return new QuoteResponse.CabinQuote(travelClass, availableSeats, baseFares, fromFare);
+    }
+
+    /**
+     * The authenticated JWT subject captured as the booking owner (§4.2). The
+     * create endpoint is {@code authenticated()} (§13 step 4), so a real
+     * principal is present for every new booking; null only defensively (e.g.
+     * enforcement disabled in a test), which yields a legacy-style unowned row.
+     */
+    private String currentSubject() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return (auth != null && auth.isAuthenticated() && !(auth instanceof AnonymousAuthenticationToken))
+                ? auth.getName() : null;
     }
 
     /**
