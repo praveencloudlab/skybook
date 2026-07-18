@@ -30,4 +30,7 @@ public class JwtProperties {
 
     /** Access-token lifetime in ms. USER tokens = 60 min (§5). */
     private long expiration;
+
+    /** ROLE_SERVICE token lifetime in ms. Machine tokens = 10 min, auto-refreshed (§5). */
+    private long serviceExpiration = 600000;
 }

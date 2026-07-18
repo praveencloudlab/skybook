@@ -36,6 +36,7 @@ class JwtServiceTest {
         props.setIssuer("skybook-auth-test");
         props.setAudience("skybook-api-test");
         props.setExpiration(3600000L);
+        props.setServiceExpiration(600000L);
 
         jwtService = new JwtService(props);
         jwtService.loadKeys();
@@ -84,5 +85,19 @@ class JwtServiceTest {
     void rejectsTokenForADifferentEmail() {
         String token = jwtService.generateToken("test123@gmail.com", UserRole.USER);
         assertFalse(jwtService.isTokenValid(token, "wrong@gmail.com"));
+    }
+
+    @Test
+    void generatesAServiceTokenWithRoleServiceAndTheTargetAudience() {
+        String token = jwtService.generateServiceToken("booking-service", "inventory-service");
+
+        Claims claims = Jwts.parser().verifyWith(publicKey).build().parseSignedClaims(token).getPayload();
+        assertEquals("booking-service", claims.getSubject());
+        assertEquals("service", claims.get("token_type", String.class));
+        assertEquals(List.of("ROLE_SERVICE"), claims.get("roles", List.class));
+        assertTrue(claims.getAudience().contains("inventory-service"));
+        // 10-min service TTL, well under the 60-min user TTL.
+        long lifetimeMs = claims.getExpiration().getTime() - claims.getIssuedAt().getTime();
+        assertEquals(600000L, lifetimeMs);
     }
 }
