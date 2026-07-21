@@ -175,6 +175,10 @@ services:
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       FLIGHT_SERVICE_BASE_URL: http://flight-service:8082
+      # JWT validation (§4.4/§5): verify-only public key + issuer/audience.
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: inventory-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317

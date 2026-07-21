@@ -83,6 +83,21 @@ class InventoryApiKafkaIntegrationTest {
         KAFKA.start();
     }
 
+    // RS256 keypair: the app verifies with the public key, the test signs an
+    // ADMIN token with the matching private key (ADMIN satisfies every rule in
+    // the §4.4 inventory matrix, so all existing requests keep passing).
+    private static final java.security.KeyPair KEYS = generateRsa();
+
+    private static java.security.KeyPair generateRsa() {
+        try {
+            var gen = java.security.KeyPairGenerator.getInstance("RSA");
+            gen.initialize(2048);
+            return gen.generateKeyPair();
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
     @DynamicPropertySource
     static void containerProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.datasource.url", AbstractPostgresSpringBootTest.POSTGRES::getJdbcUrl);
@@ -91,6 +106,22 @@ class InventoryApiKafkaIntegrationTest {
         registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
         registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
         registry.add("inventory.hold.sweep-interval-ms", () -> "600000");
+        registry.add("skybook.security.public-key",
+                () -> java.util.Base64.getEncoder().encodeToString(KEYS.getPublic().getEncoded()));
+        registry.add("skybook.security.issuer", () -> "skybook-auth");
+        registry.add("skybook.security.user-audience", () -> "skybook-api");
+        registry.add("skybook.security.service-audience", () -> "inventory-service");
+    }
+
+    private String adminToken() {
+        return io.jsonwebtoken.Jwts.builder()
+                .subject("admin@skybook.com").issuer("skybook-auth")
+                .audience().add("skybook-api").and()
+                .claim("token_type", "user").claim("roles", java.util.List.of("ROLE_ADMIN"))
+                .issuedAt(new java.util.Date())
+                .expiration(new java.util.Date(System.currentTimeMillis() + 300_000))
+                .signWith((java.security.interfaces.RSAPrivateKey) KEYS.getPrivate(), io.jsonwebtoken.Jwts.SIG.RS256)
+                .compact();
     }
 
     private static final long FLIGHT_ID = 555L;
@@ -121,6 +152,14 @@ class InventoryApiKafkaIntegrationTest {
                 FLIGHT_ID, "AI131", "LHR", "DEL",
                 LocalDateTime.now().plusDays(7), LocalDateTime.now().plusDays(7).plusHours(9),
                 "SCHEDULED"));
+
+        // Every request carries an ADMIN token - ADMIN satisfies all §4.4 rules,
+        // so the existing assertions hold now that the endpoints are protected.
+        rest.getRestTemplate().getInterceptors().clear();
+        rest.getRestTemplate().getInterceptors().add((request, body, execution) -> {
+            request.getHeaders().setBearerAuth(adminToken());
+            return execution.execute(request, body);
+        });
     }
 
     @Test

@@ -1,6 +1,6 @@
 package com.skybook.praveen.inventoryservice.controller;
 
-import com.skybook.praveen.inventoryservice.config.SecurityConfig;
+import com.skybook.praveen.inventoryservice.config.WebSliceSecurityConfig;
 import com.skybook.praveen.inventoryservice.dto.request.AutoHoldSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.CreateFlightInventoryRequest;
 import com.skybook.praveen.inventoryservice.dto.request.HoldSeatRequest;
@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(FlightInventoryController.class)
-@Import(SecurityConfig.class)
+@Import(WebSliceSecurityConfig.class)
 class FlightInventoryControllerTest {
 
     @Autowired
