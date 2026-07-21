@@ -107,3 +107,13 @@ inventory:
     ttl-minutes: 15
     # How often SeatHoldExpiryJob sweeps for expired holds.
     sweep-interval-ms: 60000
+
+# JWT validation (SECURITY_HARDENING_MODULE.md §4.4/§5). Verify-only public key;
+# USER/ADMIN tokens carry aud=user-audience, ROLE_SERVICE tokens from booking/
+# check-in carry aud=inventory-service (this service's own name).
+skybook:
+  security:
+    public-key: ${JWT_PUBLIC_KEY}
+    issuer: ${JWT_ISSUER:skybook-auth}
+    user-audience: ${JWT_AUDIENCE:skybook-api}
+    service-audience: inventory-service
