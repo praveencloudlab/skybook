@@ -282,6 +282,9 @@ services:
       FLIGHT_SERVICE_BASE_URL: http://flight-service:8082
       INVENTORY_SERVICE_BASE_URL: http://inventory-service:8084
       CHECKIN_BOARDING_PASS_KEY: ${CHECKIN_BOARDING_PASS_KEY:-dev-only-insecure-signing-key-change-me}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: checkin-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317

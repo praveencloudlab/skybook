@@ -32,6 +32,7 @@ public class CheckInController {
 
     private final CheckInService checkInService;
     private final CheckInFacade checkInFacade;
+    private final com.skybook.praveen.checkinservice.security.CheckInAccessGuard accessGuard;
 
     /** Manual/direct creation - the normal path is the BookingEvent CONFIRMED consumer. */
     @PostMapping
@@ -42,11 +43,13 @@ public class CheckInController {
 
     @GetMapping("/{id}")
     public ResponseEntity<CheckInResponse> getById(@PathVariable Long id) {
+        accessGuard.requireOwnerOfCheckIn(id);
         return ResponseEntity.ok(checkInService.getById(id));
     }
 
     @GetMapping("/booking/{bookingId}")
     public ResponseEntity<List<CheckInResponse>> getByBookingId(@PathVariable Long bookingId) {
+        accessGuard.requireOwnerOfBooking(bookingId);
         return ResponseEntity.ok(checkInService.getByBookingId(bookingId));
     }
 
@@ -62,6 +65,7 @@ public class CheckInController {
 
     @PatchMapping("/{id}/checkin")
     public ResponseEntity<CheckInResponse> checkIn(@PathVariable Long id) {
+        accessGuard.requireOwnerOfCheckIn(id);
         return ResponseEntity.ok(checkInFacade.checkIn(id));
     }
 
@@ -73,6 +77,7 @@ public class CheckInController {
     @PatchMapping("/{id}/seat")
     public ResponseEntity<CheckInResponse> changeSeat(
             @PathVariable Long id, @Valid @RequestBody SeatChangeRequest request) {
+        accessGuard.requireOwnerOfCheckIn(id);
         return ResponseEntity.ok(checkInFacade.changeSeat(id, request.newSeatNumber()));
     }
 
