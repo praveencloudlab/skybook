@@ -1,5 +1,6 @@
 package com.skybook.praveen.bookingservice.config;
 
+import com.skybook.praveen.security.JsonAccessDeniedHandler;
 import com.skybook.praveen.security.JsonAuthenticationEntryPoint;
 import com.skybook.praveen.security.JwtAuthenticationFilter;
 import com.skybook.praveen.security.JwtTokenValidator;
@@ -30,7 +31,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    JwtTokenValidator validator,
-                                                   JsonAuthenticationEntryPoint entryPoint) throws Exception {
+                                                   JsonAuthenticationEntryPoint entryPoint,
+                                                   JsonAccessDeniedHandler deniedHandler) throws Exception {
 
         JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(validator, entryPoint);
 
@@ -42,13 +44,21 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/actuator/health/**").permitAll()
-                        // Only booking creation is enforced now - it must have a
-                        // principal to own the booking. The rest of the matrix
-                        // flips in step 6 (authentication-only rollout).
-                        .requestMatchers(HttpMethod.POST, "/api/bookings").authenticated()
-                        .anyRequest().permitAll()
+
+                        // Back-office - ADMIN. list-all + search + confirm + complete.
+                        .requestMatchers(HttpMethod.GET, "/api/bookings").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/api/bookings/search").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PATCH, "/api/bookings/*/confirm", "/api/bookings/*/complete")
+                        .hasRole("ADMIN")
+
+                        // Everything else (create, quote, own get/reference/cancel,
+                        // passenger check-in/board) - authenticated; OWNER enforced in
+                        // the controller via BookingAccessGuard.
+                        .anyRequest().authenticated()
                 )
-                .exceptionHandling(e -> e.authenticationEntryPoint(entryPoint))
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint(entryPoint)
+                        .accessDeniedHandler(deniedHandler))
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
