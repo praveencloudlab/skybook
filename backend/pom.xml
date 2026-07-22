@@ -16,6 +16,10 @@
         <spring.boot.version>3.5.16</spring.boot.version>
         <spring.cloud.version>2025.0.0</spring.cloud.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Override Spring Boot 3.5.16's managed pgjdbc 42.7.11, which carries
+             CVE-2026-54291 (SCRAM-SHA-256-PLUS downgrade MITM, fixed in 42.7.12)
+             flagged by the Trivy CI gate (SECURITY_HARDENING_MODULE.md §9). -->
+        <postgresql.version>42.7.12</postgresql.version>
         <!-- Relative paths, inherited by every child module and resolved
              against each module's own target/ - the unit report is at
              Sonar's auto-detected default location already, but the
@@ -51,6 +55,33 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- Declared BEFORE the spring-boot-dependencies import so this
+                 version wins over the BOM's managed 42.7.11: importing a BOM
+                 (vs inheriting the parent) means a postgresql.version property
+                 override is ignored, so the pin has to be an explicit management
+                 entry. CVE-2026-54291 fix (SECURITY_HARDENING_MODULE.md §9). -->
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${postgresql.version}</version>
+            </dependency>
+
+            <!-- Transitive via spring-cloud-starter (openfeign / gateway), flagged
+                 by the Trivy CI gate (SECURITY_HARDENING_MODULE.md §9). Pinned here,
+                 before the BOM import, so the fixed versions win fleet-wide:
+                   bcprov-jdk18on 1.80    -> CVE-2025-14813 (GOSTCTR), fixed 1.80.2
+                   commons-fileupload 1.5 -> CVE-2025-48976 (DoS),     fixed 1.6.0 -->
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk18on</artifactId>
+                <version>1.80.2</version>
+            </dependency>
+            <dependency>
+                <groupId>commons-fileupload</groupId>
+                <artifactId>commons-fileupload</artifactId>
+                <version>1.6.0</version>
+            </dependency>
+
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>

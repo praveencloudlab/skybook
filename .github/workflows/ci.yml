@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      security-events: write   # Trivy dependency-scan SARIF upload (§9)
     env:
       # secrets.* isn't a valid context in a step-level `if:` (only env,
       # github, job, etc. are) - routing it through a job-level env var
@@ -64,15 +65,46 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: mvn -B sonar:sonar
 
-  docker-build-push:
-    name: Docker build & push (${{ matrix.service }})
+      # Dependency scan (SECURITY_HARDENING_MODULE.md §9): Trivy fs over the
+      # built artifacts (the -exec fat jars produced by `verify` above), so the
+      # transitive, actually-packaged dependencies are what's scanned - not just
+      # the source pom. Fails the build on fixable HIGH/CRITICAL (CVSS >= 7);
+      # .trivyignore holds accepted findings so the gate stays actionable.
+      - name: Trivy dependency scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: backend
+          format: sarif
+          output: trivy-fs.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: '1'
+
+      - name: Upload dependency-scan SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+  # Build -> scan -> (only then) push (SECURITY_HARDENING_MODULE.md §9).
+  # Runs on PRs to main (build + scan, NO push) and on push to main (build +
+  # scan + push only after the scan passes). An image is never pushed unscanned.
+  docker-build-scan-push:
+    name: Docker build, scan & push (${{ matrix.service }})
     needs: build-and-verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      security-events: write   # image-scan SARIF upload (§9)
     strategy:
+      fail-fast: false
       matrix:
         service:
           - api-gateway
@@ -83,23 +115,58 @@ jobs:
           - inventory-service
           - notification-service
           - payment-service
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/skybook-${{ matrix.service }}
+      IS_MAIN_PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Build into the local daemon only (load, not push) so the image can be
+      # scanned before it ever leaves the runner.
+      - name: Build image (local, not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/${{ matrix.service }}/Dockerfile
+          load: true
+          push: false
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+
+      # Gate: fail on fixable HIGH/CRITICAL (CVSS >= 7). Because this step fails
+      # before the push steps (which are not `if: always()`), a vulnerable image
+      # is never pushed. SARIF still uploads via the always() step below.
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          format: sarif
+          output: trivy-image-${{ matrix.service }}.sarif
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          exit-code: '1'
+
+      - name: Upload image-scan SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image-${{ matrix.service }}.sarif
+          category: trivy-image-${{ matrix.service }}
+
+      # Push only on main, and only reached if the scan above passed.
       - name: Log in to GHCR
+        if: ${{ env.IS_MAIN_PUSH == 'true' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: ./backend
-          file: ./backend/${{ matrix.service }}/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/skybook-${{ matrix.service }}:${{ github.sha }}
-            ghcr.io/${{ github.repository_owner }}/skybook-${{ matrix.service }}:latest
+      - name: Push scanned image
+        if: ${{ env.IS_MAIN_PUSH == 'true' }}
+        run: |
+          docker tag "${IMAGE}:${GITHUB_SHA}" "${IMAGE}:latest"
+          docker push "${IMAGE}:${GITHUB_SHA}"
+          docker push "${IMAGE}:latest"
