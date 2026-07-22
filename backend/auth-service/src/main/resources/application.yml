@@ -57,6 +57,19 @@ skybook:
         allowed-audiences: flight-service
 
 management:
+  # Actuator on a separate, internal-only port (SECURITY_HARDENING_MODULE.md §7):
+  # the entire actuator surface moves off the main business port. expose:-only in
+  # compose/k8s, never host-mapped; Docker health + Prometheus scrape it here.
+  server:
+    port: 9081
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+        # /livez + /readyz on the MAIN port for k8s kubelet probes; all other
+        # actuator endpoints stay on the management port only.
+        add-additional-paths: true
   endpoints:
     web:
       exposure:

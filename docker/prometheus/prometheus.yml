@@ -10,21 +10,21 @@ scrape_configs:
   - job_name: skybook-services
     metrics_path: /actuator/prometheus
     static_configs:
-      - targets: ['api-gateway:8080']
+      - targets: ['api-gateway:9080']
         labels: { service: api-gateway }
-      - targets: ['auth-service:8081']
+      - targets: ['auth-service:9081']
         labels: { service: auth-service }
-      - targets: ['flight-service:8082']
+      - targets: ['flight-service:9082']
         labels: { service: flight-service }
-      - targets: ['booking-service:8083']
+      - targets: ['booking-service:9083']
         labels: { service: booking-service }
-      - targets: ['inventory-service:8084']
+      - targets: ['inventory-service:9084']
         labels: { service: inventory-service }
-      - targets: ['notification-service:8085']
+      - targets: ['notification-service:9085']
         labels: { service: notification-service }
-      - targets: ['payment-service:8086']
+      - targets: ['payment-service:9086']
         labels: { service: payment-service }
-      - targets: ['checkin-service:8087']
+      - targets: ['checkin-service:9087']
         labels: { service: checkin-service }
 
   - job_name: prometheus

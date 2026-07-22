@@ -48,7 +48,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final List<PathPattern> PUBLIC_PATHS = List.of(
             new PathPatternParser().parse("/api/auth/register"),
             new PathPatternParser().parse("/api/auth/login"),
-            new PathPatternParser().parse("/actuator/**")
+            // Actuator moved to the internal management port (§7); /livez + /readyz
+            // are the k8s probe paths re-exposed on this main port.
+            new PathPatternParser().parse("/actuator/**"),
+            new PathPatternParser().parse("/livez"),
+            new PathPatternParser().parse("/readyz")
     );
 
     private final JwtTokenValidator jwtValidator;

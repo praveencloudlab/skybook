@@ -16,6 +16,15 @@ spring:
     show-sql: true
 
 management:
+  # Actuator on a separate internal-only port (SECURITY_HARDENING_MODULE.md §7).
+  server:
+    port: 9082
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+        add-additional-paths: true   # /livez + /readyz on the MAIN port (k8s probes)
   endpoints:
     web:
       exposure:
