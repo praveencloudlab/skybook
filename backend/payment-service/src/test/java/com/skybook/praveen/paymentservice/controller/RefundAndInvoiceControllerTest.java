@@ -1,17 +1,19 @@
 package com.skybook.praveen.paymentservice.controller;
 
-import com.skybook.praveen.paymentservice.config.SecurityConfig;
+import com.skybook.praveen.paymentservice.config.WebSliceSecurityConfig;
 import com.skybook.praveen.paymentservice.dto.response.InvoiceResponse;
 import com.skybook.praveen.paymentservice.dto.response.RefundResponse;
 import com.skybook.praveen.paymentservice.enums.RefundStatus;
 import com.skybook.praveen.paymentservice.exception.InvoiceNotFoundException;
 import com.skybook.praveen.paymentservice.exception.RefundNotFoundException;
 import com.skybook.praveen.paymentservice.service.InvoiceService;
+import com.skybook.praveen.paymentservice.service.PaymentService;
 import com.skybook.praveen.paymentservice.service.RefundService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -24,8 +26,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest({RefundController.class, InvoiceController.class})
-@Import(SecurityConfig.class)
+@WebMvcTest(controllers = {RefundController.class, InvoiceController.class},
+        excludeAutoConfiguration = com.skybook.praveen.security.JwtSecurityAutoConfiguration.class)
+@Import(WebSliceSecurityConfig.class)
+@WithMockUser(roles = "ADMIN")
 class RefundAndInvoiceControllerTest {
 
     @Autowired
@@ -36,6 +40,9 @@ class RefundAndInvoiceControllerTest {
 
     @MockitoBean
     private InvoiceService invoiceService;
+
+    @MockitoBean
+    private PaymentService paymentService;
 
     private RefundResponse refund() {
         return new RefundResponse(5L, "REF-2026-L3Q9XE", "PAY-2026-K7M4Z9", 42L, "SBTEST",

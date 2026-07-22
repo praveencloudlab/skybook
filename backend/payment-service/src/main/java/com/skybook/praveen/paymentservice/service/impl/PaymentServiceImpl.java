@@ -164,6 +164,12 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional(readOnly = true)
+    public String ownerSubjectOf(Long id) {
+        return find(id).getOwnerSubject();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PaymentResponse getByReference(String paymentReference) {
         return PaymentMapper.toResponse(paymentRepository.findByPaymentReference(paymentReference)
                 .orElseThrow(() -> PaymentNotFoundException.byReference(paymentReference)));
