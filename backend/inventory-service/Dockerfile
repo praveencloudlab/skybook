@@ -19,4 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
 # executable fat jar is the -exec one, the only jar actually runnable here.
 COPY --from=builder /workspace/inventory-service/target/*-exec.jar app.jar
 EXPOSE 8084
+# Run as a non-root user (SECURITY_HARDENING_MODULE.md §8); the read-only
+# rootfs + writable /tmp tmpfs is applied at runtime in docker-compose.yml.
+RUN useradd -r -u 1001 skybook && chown -R skybook /app
+USER skybook
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
