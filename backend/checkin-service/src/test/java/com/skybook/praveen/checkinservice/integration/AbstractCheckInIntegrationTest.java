@@ -72,6 +72,10 @@ public abstract class AbstractCheckInIntegrationTest {
         registry.add("skybook.security.issuer", () -> ISSUER);
         registry.add("skybook.security.user-audience", () -> AUDIENCE);
         registry.add("skybook.security.service-audience", () -> "checkin-service");
+        // Real (>= 32-byte, non-default) boarding-pass key - BoardingPassTokenSigner
+        // now fails boot on a missing/weak/default key (§5/§10).
+        registry.add("checkin.boarding-pass.signing-key",
+                () -> "integration-test-boarding-pass-signing-key-32bytes+");
     }
 
     @BeforeEach

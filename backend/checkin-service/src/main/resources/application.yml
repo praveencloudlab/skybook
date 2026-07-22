@@ -164,6 +164,7 @@ checkin:
       business: 32
     excess-charge-per-kg: 10
   boarding-pass:
-    # Symmetric HMAC key (design doc section 6) - dev-only default here;
-    # override via CHECKIN_BOARDING_PASS_KEY in any real deployment.
-    signing-key: ${CHECKIN_BOARDING_PASS_KEY:dev-only-insecure-signing-key-change-me}
+    # Symmetric HMAC key (design doc section 6). No committed default
+    # (SECURITY_HARDENING_MODULE.md §10): BoardingPassTokenSigner rejects boot if
+    # CHECKIN_BOARDING_PASS_KEY is missing, < 32 bytes, or the known dev default.
+    signing-key: ${CHECKIN_BOARDING_PASS_KEY:}

@@ -28,6 +28,11 @@ public class BoardingPassTokenSigner {
     private static final Base64.Encoder ENCODER = Base64.getUrlEncoder().withoutPadding();
     private static final Base64.Decoder DECODER = Base64.getUrlDecoder();
 
+    /** Reject boot with the committed dev placeholder (SECURITY_HARDENING_MODULE.md §5/§10). */
+    private static final String KNOWN_DEV_DEFAULT = "dev-only-insecure-signing-key-change-me";
+    /** HMAC-SHA256 wants a full-entropy key; anything shorter is rejected at boot. */
+    private static final int MIN_KEY_BYTES = 32;
+
     /** One decoded field per pipe-delimited payload segment. */
     public record TokenPayload(String boardingPassNumber, String bookingReference,
                                 Long flightId, String seatNumber, Long checkInId) {
@@ -36,8 +41,23 @@ public class BoardingPassTokenSigner {
     private final byte[] signingKey;
 
     public BoardingPassTokenSigner(
-            @Value("${checkin.boarding-pass.signing-key:dev-only-insecure-signing-key-change-me}") String signingKey) {
-        this.signingKey = signingKey.getBytes(StandardCharsets.UTF_8);
+            @Value("${checkin.boarding-pass.signing-key:}") String signingKey) {
+        // Boot-time strength check (SECURITY_HARDENING_MODULE.md §5/§10): fail
+        // fast rather than sign boarding passes with a missing/weak/default key.
+        if (signingKey == null || signingKey.isBlank()) {
+            throw new IllegalStateException(
+                    "CHECKIN_BOARDING_PASS_KEY (checkin.boarding-pass.signing-key) is required");
+        }
+        if (KNOWN_DEV_DEFAULT.equals(signingKey)) {
+            throw new IllegalStateException(
+                    "CHECKIN_BOARDING_PASS_KEY is the known insecure dev default; set a real secret");
+        }
+        byte[] keyBytes = signingKey.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < MIN_KEY_BYTES) {
+            throw new IllegalStateException(
+                    "CHECKIN_BOARDING_PASS_KEY must be at least " + MIN_KEY_BYTES + " bytes");
+        }
+        this.signingKey = keyBytes;
     }
 
     public String sign(String boardingPassNumber, String bookingReference,
