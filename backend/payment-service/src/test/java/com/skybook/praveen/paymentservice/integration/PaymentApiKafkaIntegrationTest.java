@@ -43,6 +43,16 @@ class PaymentApiKafkaIntegrationTest extends AbstractPaymentIntegrationTest {
     @Autowired
     private TestRestTemplate rest;
 
+    /** Attach a valid ADMIN token to every request so the §4.4 rules are satisfied. */
+    @org.junit.jupiter.api.BeforeEach
+    void authenticateAsAdmin() {
+        rest.getRestTemplate().getInterceptors().clear();
+        rest.getRestTemplate().getInterceptors().add((request, body, execution) -> {
+            request.getHeaders().setBearerAuth(adminToken());
+            return execution.execute(request, body);
+        });
+    }
+
     @Test
     void bookingEventDrivesTheFullPaymentLifecycle() {
 

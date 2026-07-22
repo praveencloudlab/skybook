@@ -38,6 +38,9 @@ public record PaymentResponse(
 
         BigDecimal seatSurchargeTotal,
 
+        /** JWT subject of the booking owner (§4.2), snapshotted from the event. Null on legacy rows. */
+        String ownerSubject,
+
         List<PaymentTransactionResponse> transactions,
 
         List<RefundResponse> refunds,

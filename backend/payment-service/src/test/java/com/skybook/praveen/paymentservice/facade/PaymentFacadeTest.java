@@ -66,7 +66,7 @@ class PaymentFacadeTest {
                 status == PaymentStatus.CAPTURED ? new BigDecimal("100.00") : BigDecimal.ZERO,
                 BigDecimal.ZERO, status, PaymentMethod.CARD, "SIM-ref",
                 status == PaymentStatus.AUTHORIZATION_FAILED ? "declined" : null,
-                null, null, List.of(), List.of(), 0L, now, now);
+                null, null, "owner@test.com", List.of(), List.of(), 0L, now, now);
     }
 
     private GatewayResult success() {

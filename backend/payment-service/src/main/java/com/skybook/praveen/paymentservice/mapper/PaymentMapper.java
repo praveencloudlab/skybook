@@ -25,6 +25,7 @@ public final class PaymentMapper {
                 payment.getFailureReason(),
                 payment.getBaseFareTotal(),
                 payment.getSeatSurchargeTotal(),
+                payment.getOwnerSubject(),
                 payment.getTransactions().stream().map(PaymentTransactionMapper::toResponse).toList(),
                 payment.getRefunds().stream().map(RefundMapper::toResponse).toList(),
                 payment.getVersion(),

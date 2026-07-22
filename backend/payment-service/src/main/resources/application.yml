@@ -55,6 +55,12 @@ skybook:
   kafka:
     topics:
       booking-events: skybook.booking.events
+  # JWT validation (SECURITY_HARDENING_MODULE.md §4.4/§5): verify-only public key.
+  security:
+    public-key: ${JWT_PUBLIC_KEY}
+    issuer: ${JWT_ISSUER:skybook-auth}
+    user-audience: ${JWT_AUDIENCE:skybook-api}
+    service-audience: payment-service
 
 payment:
   # ISO-4217 codes accepted by CurrencyValidator.

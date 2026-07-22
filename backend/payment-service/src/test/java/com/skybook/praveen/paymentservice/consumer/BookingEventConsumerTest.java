@@ -58,7 +58,7 @@ class BookingEventConsumerTest {
         LocalDateTime now = LocalDateTime.now();
         return new PaymentResponse(1L, "PAY-2026-TESTAA", 42L, "SBTEST",
                 new BigDecimal("100.00"), "USD", BigDecimal.ZERO, BigDecimal.ZERO,
-                status, PaymentMethod.CARD, null, null, null, null, List.of(), List.of(), 0L, now, now);
+                status, PaymentMethod.CARD, null, null, null, null, "owner@test.com", List.of(), List.of(), 0L, now, now);
     }
 
     @Test
