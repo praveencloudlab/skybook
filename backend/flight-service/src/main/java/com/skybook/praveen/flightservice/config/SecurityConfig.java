@@ -43,7 +43,10 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/actuator/health/**").permitAll()
+                        // All of actuator (health,info,metrics,prometheus,circuitbreakers)
+                        // is scraped tokenless by Prometheus over the internal network (§7);
+                        // step 10 isolates it to an internal-only management port.
+                        .requestMatchers("/actuator/**").permitAll()
                         // Reads of reference data - any authenticated caller.
                         .requestMatchers(HttpMethod.GET, "/api/**").authenticated()
                         // Everything else (create/update/cancel/delete/generate) - ADMIN.
