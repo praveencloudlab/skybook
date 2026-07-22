@@ -101,6 +101,9 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_flight
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+      JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: flight-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
@@ -285,6 +288,8 @@ services:
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
       JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
+      AUTH_SERVICE_BASE_URL: http://auth-service:8081
+      CHECKIN_SERVICE_CLIENT_SECRET: ${CHECKIN_SERVICE_CLIENT_SECRET:-dev-checkin-secret}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: checkin-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
