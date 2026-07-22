@@ -7,12 +7,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
@@ -60,13 +62,21 @@ public class SecurityConfig {
         provider.setUserDetailsService(clientDetailsService);
         provider.setPasswordEncoder(passwordEncoder);
 
+        // Authentication failures on this Basic-auth endpoint must return 401,
+        // not 403 (SECURITY_HARDENING_MODULE.md §6). Without an explicit entry
+        // point, an anonymous request tripping .authenticated() surfaces as an
+        // access-denied 403; a bad/unknown/missing credential all now return an
+        // identical, indistinguishable 401 (no client enumeration, §3.3).
+        AuthenticationEntryPoint entryPoint = new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED);
+
         http
                 .securityMatcher("/api/auth/service-token")
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
                 .authenticationProvider(provider)
-                .httpBasic(Customizer.withDefaults());
+                .httpBasic(basic -> basic.authenticationEntryPoint(entryPoint))
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(entryPoint));
 
         return http.build();
     }
