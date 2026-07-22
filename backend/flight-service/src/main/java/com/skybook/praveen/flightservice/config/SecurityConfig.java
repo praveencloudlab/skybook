@@ -46,7 +46,7 @@ public class SecurityConfig {
                         // All of actuator (health,info,metrics,prometheus,circuitbreakers)
                         // is scraped tokenless by Prometheus over the internal network (§7);
                         // step 10 isolates it to an internal-only management port.
-                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/actuator/**", "/livez", "/readyz").permitAll()
                         // Reads of reference data - any authenticated caller.
                         .requestMatchers(HttpMethod.GET, "/api/**").authenticated()
                         // Everything else (create/update/cancel/delete/generate) - ADMIN.

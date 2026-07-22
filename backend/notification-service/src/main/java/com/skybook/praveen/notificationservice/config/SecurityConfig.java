@@ -34,7 +34,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // Actuator stays scrapeable over the internal network
                         // (isolated to an internal management port in step 10).
-                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/actuator/**", "/livez", "/readyz").permitAll()
                         // No business endpoints exist; deny by default.
                         .anyRequest().denyAll()
                 );

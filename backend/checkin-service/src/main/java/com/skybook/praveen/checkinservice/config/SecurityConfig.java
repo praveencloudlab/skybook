@@ -49,7 +49,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // All of actuator scraped tokenless by Prometheus over the
                         // internal network (§7); step 10 isolates the management port.
-                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/actuator/**", "/livez", "/readyz").permitAll()
 
                         // Back-office / gate - ADMIN.
                         .requestMatchers(HttpMethod.POST, "/api/checkins").hasRole("ADMIN")

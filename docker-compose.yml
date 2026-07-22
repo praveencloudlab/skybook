@@ -62,6 +62,7 @@ services:
     # Internal-only (§3.1): all auth traffic enters via the gateway (8080).
     expose:
       - "8081"
+      - "9081"   # management port (u{00A7}7, internal-only)
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_auth
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
@@ -91,7 +92,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9081/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -104,6 +105,7 @@ services:
     # Internal-only (§3.1): reached as flight-service:8082 on the compose network.
     expose:
       - "8082"
+      - "9082"   # management port (u{00A7}7, internal-only)
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_flight
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
@@ -125,7 +127,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9082/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -138,6 +140,7 @@ services:
     # Internal-only (§3.1): reached as booking-service:8083 on the compose network.
     expose:
       - "8083"
+      - "9083"   # management port (u{00A7}7, internal-only)
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_booking
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
@@ -168,7 +171,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9083/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -181,6 +184,7 @@ services:
     # Internal-only (§3.1): reached as inventory-service:8084 on the compose network.
     expose:
       - "8084"
+      - "9084"   # management port (u{00A7}7, internal-only)
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_inventory
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
@@ -207,7 +211,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9084/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -220,6 +224,7 @@ services:
     # Internal-only (§3.1): pure Kafka consumer, no inbound business traffic.
     expose:
       - "8085"
+      - "9085"   # management port (u{00A7}7, internal-only)
     environment:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MAIL_USERNAME: ${MAIL_USERNAME}
@@ -239,7 +244,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9085/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -252,6 +257,7 @@ services:
     # Internal-only (§3.1): reached as payment-service:8086 on the compose network.
     expose:
       - "8086"
+      - "9086"   # management port (u{00A7}7, internal-only)
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_payment
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
@@ -276,7 +282,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8086/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9086/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -289,6 +295,7 @@ services:
     # Internal-only (§3.1): reached as checkin-service:8087 on the compose network.
     expose:
       - "8087"
+      - "9087"   # management port (u{00A7}7, internal-only)
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_checkin
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
@@ -318,7 +325,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8087/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9087/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -354,7 +361,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9080/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
