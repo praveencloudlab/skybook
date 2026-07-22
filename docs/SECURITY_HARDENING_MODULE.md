@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | Close the fleet's real security gaps: every service authenticates requests (not just the gateway), role-based authorization, hardened JWT issuance/validation, input validation + safe error handling on the auth surface, non-root/read-only containers, network isolation of internal ports, and supply-chain scanning in CI |
 | **Branch** | `feature/security-hardening` |
-| **Status** | **🔒 FROZEN — 10/10 (approved after review 5). Implementation may begin at §13 build order step 1.** R5's two sequencing corrections applied: (1) step 1 builds the RS256/`skybook-security` infrastructure **without** swapping the live gateway validator; hardened issuance **and** the gateway migration happen together in an atomic step 2, so there is no checkpoint where the gateway demands claims auth can't yet mint; (2) ownership capture is gated on a `SecurityContext` — booking's JWT filter is turned on in authentication-only mode and the create endpoint made `authenticated()` in step 4 *before* `ownerSubject` capture is introduced, so a new booking can never snapshot a null owner. Plus: `inventory-service` added to the client-credential env table, and the risk-section step references corrected. No architecture change. |
+| **Status** | **✅ Implemented and verified** — all 14 build-order steps (§13) complete on `feature/security-hardening`. Every service validates the JWT itself (RS256, verify-only public key), enforces the §4.4 role + OWNER + SERVICE matrix, and the auth surface is hardened (validation, typed errors, constant-time login). Internal ports (services + Postgres + Kafka + management) are unpublished; actuator lives on an internal-only management port; containers run non-root on a read-only rootfs; committed secret defaults are gone (fail-fast); CI runs Trivy dependency + image scans with scan-before-push. Live-certified 23/23 on the running fleet (see §16). Design frozen at 10/10 after review 5; see §16 for the handful of implementation-time deviations. |
 | **Revision history** | R1 (8.3): build-order-before-propagation, `ROLE_SERVICE` identity, auto-config module, ownership in scope, HS384/48-byte, port isolation. R2 (8.8): RS256 + per-service credentials, per-operation Feign identity, two-rule audience, ownership→Payment/CheckIn, management port, email-collision migration, TTL 60/10. R3 (9.5): Feign identity frozen at client-interface level, `/service-token` de-routed + client-credential chain, inventory→flight identity, token↔role coherence. R4 (9.5→9.8): build order reordered, Feign/filter registration isolation, security-persistence migrations. R5 (10/10, FROZEN): atomic issuer/verifier switch, `SecurityContext`-before-capture ordering, client-cred env + risk cleanups. |
 
 Goal: take SkyBook from "secured at the front door only" to **defense in depth**.
@@ -1040,3 +1040,96 @@ profile) lets each chain be built and merged before it's switched live.
   the scrape; §7 keeps the scrape working over the internal network.
 - **Legacy null-owner bookings** become USER-inaccessible (§4.2) — intended, but
   worth stating: any pre-branch booking can only be managed by ADMIN afterward.
+
+---
+
+# 17. Implementation Notes
+
+All 14 build-order steps landed on `feature/security-hardening`, each with a
+container rebuild + live verification + its own commit. Below is an honest
+account of what the frozen design got slightly wrong or under-specified and a
+closer pass caught — in the spirit of this project's other module post-mortems.
+
+**Live certification.** A final end-to-end run against the fully-hardened running
+fleet passed **23/23**: gateway is the only public surface; no-token / forged-sig
+/ `X-Auth-User`-spoof → 401; every internal service port + Postgres (5432) +
+Kafka (9092) + the management ports are unreachable from the host; an in-network
+direct call to a service still needs a valid token (401); actuator is off the
+main port (404) and only reachable on the internal management port; the role
+matrix holds (USER → 403 on reference-writes / seat-ops / back-office, ADMIN →
+200); a `token_type=service` token is refused at the gateway; and OWNER isolation
+holds (A reads own 200, B reads A's 403, ADMIN override 200, anon 401). Full
+reactor `mvn clean verify` is green.
+
+**Deviations and things the first pass got wrong:**
+
+1. **The step-5 Feign identity split was incomplete.** Only `booking→inventory`
+   was split onto a `ROLE_SERVICE` token; `booking→flight`, `checkin→flight` and
+   `checkin→inventory` were left as bare clients. This surfaced as a live 502 on
+   booking-create the moment flight-service started enforcing auth ("could not
+   reach flight-service to validate flight"). Caught precisely because the build
+   order enforces **flight last**; fixed by giving every cross-service client the
+   correct outbound identity (user-token propagation for reads, service-token for
+   inventory writes).
+
+2. **Only booking and checkin actually make outbound service calls.** The §10
+   env table lists client secrets for booking/checkin/payment/inventory, but in
+   the built system payment and inventory make no outbound `ROLE_SERVICE` calls —
+   their secrets are consumed only by **auth-service's client registry** (which
+   seeds all four). So all four secrets are required in *auth's* env; only
+   booking and checkin additionally carry their own. inventory→flight turned out
+   to be a user-token read, not a service call.
+
+3. **`/service-token` bad credentials returned 403, not 401.** Spring Security 6
+   turns an unauthenticated request tripping `.authenticated()` into an
+   access-denied (403) via the anonymous authentication, not an auth challenge.
+   Fixed with an explicit `HttpStatusEntryPoint(UNAUTHORIZED)` on the
+   client-credential chain, so bad / unknown / missing client credentials are now
+   an identical, indistinguishable **401** (no client enumeration).
+
+4. **`management.endpoint.health.probes.add-additional-paths: true` is not enough
+   on its own.** After moving actuator to the management port, `/livez` and
+   `/readyz` still 401'd — the liveness/readiness probe groups have to be
+   *enabled* (`probes.enabled: true`) before the additional paths resolve.
+
+5. **Main-port actuator returns 401, not 404, once moved.** With actuator on the
+   management port, `/actuator/**` on the main port has no handler → Spring
+   forwards to `/error`, which the security chain guards → 401. It is genuinely
+   not served on the main port; the status is just 401 rather than 404.
+
+6. **An imported BOM ignores a version-property override.** Because the reactor
+   *imports* `spring-boot-dependencies` (rather than inheriting the parent),
+   setting `<postgresql.version>` in `<properties>` had no effect. The pin had to
+   be an explicit `dependencyManagement` entry declared **before** the BOM import
+   (first-declared wins).
+
+7. **The Trivy gate paid for itself on day one.** The first scan surfaced three
+   *fixable* findings — pgjdbc 42.7.11 (CVE-2026-54291, SCRAM downgrade MITM),
+   bouncycastle 1.80 (CVE-2025-14813, GOSTCTR, CRITICAL) and commons-fileupload
+   1.5 (CVE-2025-48976, DoS), the latter two transitive via
+   `spring-cloud-starter`. All three were pinned to fixed versions; the
+   `.trivyignore` stayed empty. `ignore-unfixed: true` keeps the gate on fixable
+   issues rather than a wall of unpatchable base-OS noise.
+
+8. **Postgres password propagation.** Services hard-coded `postgres/postgres` in
+   `application.yml`, so making `POSTGRES_PASSWORD` a required, defaultless secret
+   meant also injecting `SPRING_DATASOURCE_PASSWORD` into every service — not just
+   the postgres container.
+
+9. **`@WebMvcTest` auto-registers servlet `Filter` beans.** The auth-service
+   controller slice failed to load a context because it pulled in the
+   `JwtAuthenticationFilter` component (which needs `JwtService`); excluded via
+   `excludeFilters` + `addFilters=false`.
+
+10. **Windows PowerShell 5.1 gotchas** (tooling, not product): `Set-Content`
+    re-encodes UTF-8 `§` to mojibake, and the `` `u{…} `` escape doesn't exist —
+    both silently corrupted comments until the edits were redone with
+    `[System.IO.File]::WriteAllText(..., UTF8Encoding($false))` and a literal
+    `[char]0x00A7`.
+
+**One known, unrelated flake:** `PaymentReferenceGeneratorTest.
+collisionsAreRareAcrossManyGenerations` asserts 10 000 generated references are
+*all* unique and occasionally hits a birthday-paradox collision (9 999). It is
+`SecureRandom`-based and independent of anything in this branch; it passes on
+re-run and is tracked as a separate cleanup (loosen the assertion to match the
+test's own "rare" wording, or widen the reference entropy).
