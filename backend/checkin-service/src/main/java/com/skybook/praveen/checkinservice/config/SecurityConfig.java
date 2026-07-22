@@ -47,7 +47,9 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/actuator/health/**").permitAll()
+                        // All of actuator scraped tokenless by Prometheus over the
+                        // internal network (§7); step 10 isolates the management port.
+                        .requestMatchers("/actuator/**").permitAll()
 
                         // Back-office / gate - ADMIN.
                         .requestMatchers(HttpMethod.POST, "/api/checkins").hasRole("ADMIN")
