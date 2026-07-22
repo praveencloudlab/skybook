@@ -1,0 +1,11 @@
+# Trivy vulnerability suppressions (SECURITY_HARDENING_MODULE.md §9).
+#
+# The CI gate fails the build on fixable HIGH/CRITICAL (CVSS >= 7) findings from
+# both the dependency (fs) scan and the image scan. List a CVE id here (one per
+# line) only to accept a finding we have consciously triaged - each with a dated
+# justification - so the gate stays actionable instead of a wall of red.
+#
+# Format:
+#   CVE-2024-XXXXX   # <yyyy-mm-dd> why accepted (e.g. not reachable / awaiting upstream)
+#
+# (none accepted yet)
