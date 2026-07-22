@@ -122,6 +122,12 @@ resilience4j:
         base-config: default
 
 skybook:
+  # JWT validation (§4.4/§5) - verify-only public key, this service's audience.
+  security:
+    public-key: ${JWT_PUBLIC_KEY}
+    issuer: ${JWT_ISSUER:skybook-auth}
+    user-audience: ${JWT_AUDIENCE:skybook-api}
+    service-audience: checkin-service
   kafka:
     topics:
       # Consumed - BookingEvent CONFIRMED creates CheckIn rows, CANCELLED cascades.

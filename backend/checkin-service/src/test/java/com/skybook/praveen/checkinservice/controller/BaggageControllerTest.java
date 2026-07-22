@@ -1,6 +1,7 @@
 package com.skybook.praveen.checkinservice.controller;
 
-import com.skybook.praveen.checkinservice.config.SecurityConfig;
+import com.skybook.praveen.checkinservice.config.WebSliceSecurityConfig;
+import org.springframework.security.test.context.support.WithMockUser;
 import com.skybook.praveen.checkinservice.dto.request.CreateBaggageRequest;
 import com.skybook.praveen.checkinservice.dto.response.BaggageResponse;
 import com.skybook.praveen.checkinservice.service.BaggageService;
@@ -22,9 +23,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(BaggageController.class)
-@Import(SecurityConfig.class)
+@WebMvcTest(controllers = BaggageController.class,
+        excludeAutoConfiguration = com.skybook.praveen.security.JwtSecurityAutoConfiguration.class)
+@Import(WebSliceSecurityConfig.class)
+@WithMockUser(roles = "ADMIN")
 class BaggageControllerTest {
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.skybook.praveen.checkinservice.security.CheckInAccessGuard accessGuard;
 
     @Autowired
     private MockMvc mockMvc;

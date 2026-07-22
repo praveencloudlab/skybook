@@ -22,14 +22,17 @@ import java.util.List;
 public class BaggageController {
 
     private final BaggageService baggageService;
+    private final com.skybook.praveen.checkinservice.security.CheckInAccessGuard accessGuard;
 
     @PostMapping
     public ResponseEntity<BaggageResponse> addBaggage(@Valid @RequestBody CreateBaggageRequest request) {
+        accessGuard.requireOwnerOfCheckIn(request.checkInId());
         return ResponseEntity.status(HttpStatus.CREATED).body(baggageService.addBaggage(request));
     }
 
     @GetMapping("/checkin/{checkInId}")
     public ResponseEntity<List<BaggageResponse>> getByCheckInId(@PathVariable Long checkInId) {
+        accessGuard.requireOwnerOfCheckIn(checkInId);
         return ResponseEntity.ok(baggageService.getByCheckInId(checkInId));
     }
 }
