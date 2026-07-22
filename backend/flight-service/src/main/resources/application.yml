@@ -33,3 +33,10 @@ springdoc:
     path: /swagger-ui.html
 
   packages-to-scan: com.skybook.praveen.flightservice.controller
+# JWT validation (§4.4/§5) - verify-only public key, this service's audience.
+skybook:
+  security:
+    public-key: ${JWT_PUBLIC_KEY}
+    issuer: ${JWT_ISSUER:skybook-auth}
+    user-audience: ${JWT_AUDIENCE:skybook-api}
+    service-audience: flight-service

@@ -128,6 +128,11 @@ skybook:
     issuer: ${JWT_ISSUER:skybook-auth}
     user-audience: ${JWT_AUDIENCE:skybook-api}
     service-audience: checkin-service
+    # Client credential for fetching ROLE_SERVICE tokens (checkin -> inventory, §3.3).
+    service-client:
+      auth-base-url: ${AUTH_SERVICE_BASE_URL:http://localhost:8081}
+      client-id: checkin-service
+      client-secret: ${CHECKIN_SERVICE_CLIENT_SECRET:dev-checkin-secret}
   kafka:
     topics:
       # Consumed - BookingEvent CONFIRMED creates CheckIn rows, CANCELLED cascades.
