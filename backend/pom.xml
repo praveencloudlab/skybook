@@ -69,12 +69,17 @@
             <!-- Transitive via spring-cloud-starter (openfeign / gateway), flagged
                  by the Trivy CI gate (SECURITY_HARDENING_MODULE.md §9). Pinned here,
                  before the BOM import, so the fixed versions win fleet-wide:
-                   bcprov-jdk18on 1.80    -> CVE-2025-14813 (GOSTCTR), fixed 1.80.2
+                   bcprov-jdk18on 1.80 -> CVE-2025-14813 (GOSTCTR) + CVE-2026-0636
+                                     (LDAP injection). The advisory patches the
+                                     1.74-1.80 branch in 1.80.2, but Trivy records
+                                     only the top fixed version (1.84) and flags
+                                     anything below it, so we go to 1.84 (also the
+                                     GOSTCTR fix - unused LDAPStoreHelper path here).
                    commons-fileupload 1.5 -> CVE-2025-48976 (DoS),     fixed 1.6.0 -->
             <dependency>
                 <groupId>org.bouncycastle</groupId>
                 <artifactId>bcprov-jdk18on</artifactId>
-                <version>1.80.2</version>
+                <version>1.84</version>
             </dependency>
             <dependency>
                 <groupId>commons-fileupload</groupId>
