@@ -82,6 +82,29 @@
                 <version>1.6.0</version>
             </dependency>
 
+            <!-- Runtime deps managed by the Spring Boot BOM but flagged by the
+                 Trivy CI gate on a fresher DB than the local image scan
+                 (SECURITY_HARDENING_MODULE.md §9). Pinned here, before the BOM
+                 import, so the fixed versions win:
+                   jackson 2.21.4  -> CVE-2026-54515/54517/54518/59889
+                                      (jackson-databind property/view bypasses),
+                                      fixed 2.21.5 - the whole jackson-bom is
+                                      imported so every jackson module stays aligned.
+                   commons-lang3 3.17.0 -> CVE-2025-48924 (uncontrolled recursion /
+                                      StackOverflow), fixed 3.18.0. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>2.21.5</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>3.18.0</version>
+            </dependency>
+
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
