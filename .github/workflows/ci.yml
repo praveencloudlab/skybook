@@ -78,6 +78,10 @@ jobs:
           format: sarif
           output: trivy-fs.sarif
           severity: HIGH,CRITICAL
+          # Without this, trivy-action reports (and gates via exit-code on) ALL
+          # severities when format=sarif - so the build would fail on MEDIUM/LOW
+          # base-image noise, not just the HIGH/CRITICAL the gate is meant for.
+          limit-severities-for-sarif: true
           ignore-unfixed: true
           trivyignores: .trivyignore
           exit-code: '1'
@@ -144,6 +148,10 @@ jobs:
           format: sarif
           output: trivy-image-${{ matrix.service }}.sarif
           severity: HIGH,CRITICAL
+          # Gate on HIGH/CRITICAL only - without this, format=sarif makes the
+          # exit-code fire on all severities (the base image's MEDIUM/LOW Ubuntu
+          # package CVEs would fail every build though the gate targets HIGH/CRIT).
+          limit-severities-for-sarif: true
           ignore-unfixed: true
           trivyignores: .trivyignore
           exit-code: '1'
