@@ -77,11 +77,11 @@ services:
       JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
       SKYBOOK_BOOTSTRAP_ADMIN_EMAIL: ${SKYBOOK_BOOTSTRAP_ADMIN_EMAIL:-}
       # Service-client registry secrets (SECURITY_HARDENING_MODULE.md §3.3/§10):
-      # auth hashes these into the client registry so booking/checkin/payment/
-      # inventory can obtain ROLE_SERVICE tokens. Required - no committed default.
+      # auth hashes these into the client registry so booking/checkin/inventory
+      # can obtain ROLE_SERVICE tokens. Required - no committed default. payment
+      # is intentionally absent: it makes no outbound service calls.
       BOOKING_SERVICE_CLIENT_SECRET: ${BOOKING_SERVICE_CLIENT_SECRET:?BOOKING_SERVICE_CLIENT_SECRET is required}
       CHECKIN_SERVICE_CLIENT_SECRET: ${CHECKIN_SERVICE_CLIENT_SECRET:?CHECKIN_SERVICE_CLIENT_SECRET is required}
-      PAYMENT_SERVICE_CLIENT_SECRET: ${PAYMENT_SERVICE_CLIENT_SECRET:?PAYMENT_SERVICE_CLIENT_SECRET is required}
       INVENTORY_SERVICE_CLIENT_SECRET: ${INVENTORY_SERVICE_CLIENT_SECRET:?INVENTORY_SERVICE_CLIENT_SECRET is required}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: auth-service

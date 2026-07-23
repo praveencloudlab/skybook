@@ -20,7 +20,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/skybook_checkin
     username: postgres
-    password: postgres
+    password: ${SPRING_DATASOURCE_PASSWORD}
 
   jpa:
     hibernate:
@@ -141,7 +141,7 @@ skybook:
     service-client:
       auth-base-url: ${AUTH_SERVICE_BASE_URL:http://localhost:8081}
       client-id: checkin-service
-      client-secret: ${CHECKIN_SERVICE_CLIENT_SECRET:dev-checkin-secret}
+      client-secret: ${CHECKIN_SERVICE_CLIENT_SECRET}
   kafka:
     topics:
       # Consumed - BookingEvent CONFIRMED creates CheckIn rows, CANCELLED cascades.

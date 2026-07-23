@@ -72,6 +72,9 @@ public abstract class AbstractCheckInIntegrationTest {
         registry.add("skybook.security.issuer", () -> ISSUER);
         registry.add("skybook.security.user-audience", () -> AUDIENCE);
         registry.add("skybook.security.service-audience", () -> "checkin-service");
+        // Test-only service-client secret - the committed default was removed (§10),
+        // so the full-context boot needs an explicit value to resolve it.
+        registry.add("skybook.security.service-client.client-secret", () -> "test-checkin-secret");
         // Real (>= 32-byte, non-default) boarding-pass key - BoardingPassTokenSigner
         // now fails boot on a missing/weak/default key (§5/§10).
         registry.add("checkin.boarding-pass.signing-key",

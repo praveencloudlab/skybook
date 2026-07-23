@@ -54,6 +54,9 @@ public final class RsaKeys {
             if (!(key instanceof RSAPublicKey rsa)) {
                 throw new IllegalStateException("jwt.public-key must be an RSA key");
             }
+            if (rsa.getModulus().bitLength() < MIN_RSA_BITS) {
+                throw new IllegalStateException("jwt.public-key is weaker than " + MIN_RSA_BITS + " bits");
+            }
             return rsa;
         } catch (IllegalStateException e) {
             throw e;

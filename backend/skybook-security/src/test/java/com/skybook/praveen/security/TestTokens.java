@@ -82,6 +82,7 @@ final class TestTokens {
         private Instant issuedAt = Instant.now();
         private Instant expiry = Instant.now().plus(60, ChronoUnit.MINUTES);
         private boolean omitIssuedAt = false;
+        private boolean omitExpiry = false;
 
         Builder(RSAPrivateKey signingKey) {
             this.signingKey = signingKey;
@@ -94,12 +95,15 @@ final class TestTokens {
         Builder roles(String... r) { this.roles = List.of(r); return this; }
         Builder expiry(Instant i) { this.expiry = i; return this; }
         Builder noIssuedAt() { this.omitIssuedAt = true; return this; }
+        Builder noExpiry() { this.omitExpiry = true; return this; }
 
         String sign() {
             var b = Jwts.builder()
                     .claims(claims())
-                    .expiration(Date.from(expiry))
                     .signWith(signingKey, Jwts.SIG.RS256);
+            if (!omitExpiry) {
+                b.expiration(Date.from(expiry));
+            }
             if (subject != null) {
                 b.subject(subject);
             }

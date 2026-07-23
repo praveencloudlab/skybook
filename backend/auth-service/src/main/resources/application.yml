@@ -12,7 +12,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/skybook_auth
     username: postgres
-    password: postgres
+    password: ${SPRING_DATASOURCE_PASSWORD}
 
   # Flyway owns the schema (SECURITY_HARDENING_MODULE.md §4.3): V1 baseline +
   # V2 role/email delta. An existing Hibernate-created DB adopts V1 and runs
@@ -41,19 +41,23 @@ skybook:
   bootstrap-admin-email: ${SKYBOOK_BOOTSTRAP_ADMIN_EMAIL:}
   # Service-client registry (§3.3/§4.5): provisioned at startup, secrets
   # BCrypt-hashed. Each caller may only request tokens for its allowed audiences.
+  # Only services that make outbound service-to-service HTTP calls are registered,
+  # each scoped to the exact audience(s) it calls - least privilege. payment-service
+  # is intentionally NOT here: it makes no outbound service calls (booking learns of
+  # payment via Kafka, not HTTP), so granting it any audience - previously the
+  # booking-service audience - was an unused privilege that let a payment credential
+  # mint a booking-service token and read any user's booking. Secrets are required
+  # with no committed default (§10); auth fails fast if one is unset.
   service-registry:
     clients:
       - client-id: booking-service
-        secret: ${BOOKING_SERVICE_CLIENT_SECRET:dev-booking-secret}
+        secret: ${BOOKING_SERVICE_CLIENT_SECRET}
         allowed-audiences: flight-service,inventory-service
       - client-id: checkin-service
-        secret: ${CHECKIN_SERVICE_CLIENT_SECRET:dev-checkin-secret}
+        secret: ${CHECKIN_SERVICE_CLIENT_SECRET}
         allowed-audiences: flight-service,inventory-service
-      - client-id: payment-service
-        secret: ${PAYMENT_SERVICE_CLIENT_SECRET:dev-payment-secret}
-        allowed-audiences: booking-service
       - client-id: inventory-service
-        secret: ${INVENTORY_SERVICE_CLIENT_SECRET:dev-inventory-secret}
+        secret: ${INVENTORY_SERVICE_CLIENT_SECRET}
         allowed-audiences: flight-service
 
 management:
