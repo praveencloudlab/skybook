@@ -76,6 +76,11 @@ public class JwtTokenValidator {
         if (claims.getIssuedAt() == null) {
             throw new InvalidTokenException("token has no iat");
         }
+        // jjwt only *checks* exp when it is present, so a token minted without an
+        // exp claim would never expire. Require it explicitly - fail closed.
+        if (claims.getExpiration() == null) {
+            throw new InvalidTokenException("token has no exp");
+        }
 
         TokenType tokenType = TokenType.fromClaim(claims.get("token_type", String.class));
         if (tokenType == null) {

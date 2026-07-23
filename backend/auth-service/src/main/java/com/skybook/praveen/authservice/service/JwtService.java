@@ -36,6 +36,13 @@ public class JwtService {
     void loadKeys() {
         this.privateKey = RsaKeys.privateKey(properties.getPrivateKey());
         this.publicKey = RsaKeys.publicKey(properties.getPublicKey());
+        // Fail closed at boot if the configured public key is not the counterpart
+        // of the private signing key: otherwise auth would happily mint tokens
+        // that every downstream verifier (all holding this public key) rejects.
+        if (!privateKey.getModulus().equals(publicKey.getModulus())) {
+            throw new IllegalStateException(
+                    "jwt.private-key and jwt.public-key are not a matching RSA keypair");
+        }
     }
 
     public String generateToken(String email, UserRole role) {

@@ -3,8 +3,10 @@ package com.skybook.praveen.security;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Map;
@@ -24,8 +26,14 @@ public class HttpServiceTokenFetcher implements ServiceTokenProvider.ServiceToke
 
     public HttpServiceTokenFetcher(ServiceClientProperties properties) {
         this.properties = properties;
+        // Bounded timeouts (fail closed): a hung auth-service must not stall the
+        // caller's request thread indefinitely while it waits for a token.
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(2));
+        requestFactory.setReadTimeout(Duration.ofSeconds(5));
         this.restClient = RestClient.builder()
                 .baseUrl(properties.getAuthBaseUrl())
+                .requestFactory(requestFactory)
                 .build();
     }
 
@@ -45,16 +53,28 @@ public class HttpServiceTokenFetcher implements ServiceTokenProvider.ServiceToke
         return new ServiceTokenProvider.ServiceToken(token, expiryOf(token));
     }
 
-    /** Reads the {@code exp} (epoch seconds) from the JWT payload. */
+    /**
+     * Reads the {@code exp} (epoch seconds) from the JWT payload. Fail closed: a
+     * token we cannot parse, or one carrying no {@code exp}, is rejected outright
+     * rather than being trusted for a fixed grace window - the downstream
+     * validator requires {@code exp}, so caching an unparseable token would just
+     * yield a token that is rejected on every use.
+     */
     private Instant expiryOf(String jwt) {
-        try {
-            String[] parts = jwt.split("\\.");
-            byte[] payload = Base64.getUrlDecoder().decode(parts[1]);
-            JsonNode node = objectMapper.readTree(payload);
-            return Instant.ofEpochSecond(node.get("exp").asLong());
-        } catch (Exception e) {
-            // Fall back to a conservative short lifetime if the token can't be parsed.
-            return Instant.now().plusSeconds(60);
+        String[] parts = jwt.split("\\.");
+        if (parts.length < 2) {
+            throw new IllegalStateException("auth-service returned a malformed service token");
         }
+        JsonNode expNode;
+        try {
+            byte[] payload = Base64.getUrlDecoder().decode(parts[1]);
+            expNode = objectMapper.readTree(payload).get("exp");
+        } catch (Exception e) {
+            throw new IllegalStateException("auth-service returned a malformed service token", e);
+        }
+        if (expNode == null || !expNode.canConvertToLong()) {
+            throw new IllegalStateException("service token has no usable exp claim");
+        }
+        return Instant.ofEpochSecond(expNode.asLong());
     }
 }

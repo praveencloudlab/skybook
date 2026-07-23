@@ -1133,3 +1133,68 @@ collisionsAreRareAcrossManyGenerations` asserts 10 000 generated references are
 `SecureRandom`-based and independent of anything in this branch; it passes on
 re-run and is tracked as a separate cleanup (loosen the assertion to match the
 test's own "rare" wording, or widen the reference entropy).
+
+## 17.1 Pre-merge review fixes
+
+A pre-merge security review caught several fail-closed gaps the first pass
+missed. All were fixed in one review-fix commit before the PR was opened;
+re-certified live afterward.
+
+1. **JWTs with no `exp` were accepted.** jjwt only *checks* `exp` when present,
+   so a token minted without one never expired. The shared `JwtTokenValidator`
+   now rejects a missing `exp` explicitly (mirroring the existing `iat` check),
+   with a regression test.
+
+2. **A SERVICE token could read any user's booking (object-level escalation).**
+   `SecurityAccess.requireOwnerOrAdmin` treats `ROLE_SERVICE` as privileged, and
+   booking's owner routes were `authenticated()` - and `payment-service` was
+   allowlisted for the `booking-service` audience, so a payment machine
+   credential could mint a booking-service token and bypass ownership. Fixed at
+   two layers: (a) `payment-service` is removed from the service-client registry
+   entirely - it makes **no** outbound service-to-service HTTP calls (booking
+   learns of payments via Kafka), so it needed no audience at all; and (b)
+   booking now requires `hasAnyRole("USER","ADMIN")` on every non-ADMIN route, so
+   a `ROLE_SERVICE` token is rejected at booking's edge regardless of audience
+   (booking has no inbound service API). This is the object-level authorization
+   hole review 1 warned authentication+role alone would leave. The registry
+   bootstrap was also made **authoritative** - it now deprovisions (deletes) any
+   DB client no longer in the config, so removing `payment-service` from config
+   actually revokes it; previously the seeder was insert/update-only and a
+   retired client kept its credential and audiences in the DB forever.
+
+3. **auth did not verify its keypair was consistent.** The private key had a
+   2048-bit floor but the public key parser did not, and the two were loaded
+   independently. auth now bit-checks the public key too and fails boot if the
+   private and public moduli do not match - otherwise auth would mint tokens the
+   whole fleet rejects.
+
+4. **The service-token fetch was not fail-closed.** `HttpServiceTokenFetcher`
+   had no connect/read timeouts (a hung auth-service would stall the caller) and,
+   on a parse failure, treated a malformed / `exp`-less token as valid for 60s.
+   It now uses bounded timeouts (2s/5s) and throws on a malformed or `exp`-less
+   token rather than caching it.
+
+5. **Booking's Kafka-driven confirmation lost flight enrichment.** The
+   `PAYMENT_SUCCEEDED -> confirm` path runs on a Kafka consumer thread with no
+   incoming user token, so the user-token flight client 401'd and the
+   confirmation event/email silently dropped its route details. Booking gained a
+   second, service-token flight client (`FlightCommandFeignClient`, aud=
+   flight-service) used only for this off-request-thread enrichment; the
+   must-succeed create-path validation keeps propagating the user's token.
+   (check-in has no equivalent gap - its booking-event consumer reads flight
+   fields straight off the event, it does not call flight-service.)
+
+6. **Committed insecure defaults in `application.yml` (not just compose).** The
+   datasource password (`postgres`) and the per-service client secrets
+   (`dev-*-secret`) were still hard-coded / defaulted in the service YAMLs, so a
+   run outside compose silently used publicly known credentials. All are now
+   `${VAR}` with no committed default (fail closed); tests supply explicit
+   test-only values (Testcontainers `@DynamicPropertySource` for the datasource,
+   test properties for the client secrets).
+
+**Documented deviation (not a fix):** the frozen §4.4 matrix lists boarding-pass
+GET/verify as OWNER/ADMIN, but the implementation makes those two operations
+ADMIN-only. This is *more* restrictive, not an exposure - passenger self-service
+boarding-pass retrieval is intentionally deferred (it needs ownership resolution
+against the check-in's booking owner); tracked as a follow-up, and called out
+here so the deviation from the matrix is on the record rather than silent.

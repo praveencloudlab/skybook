@@ -54,9 +54,12 @@ public class SecurityConfig {
                         .hasRole("ADMIN")
 
                         // Everything else (create, quote, own get/reference/cancel,
-                        // passenger check-in/board) - authenticated; OWNER enforced in
-                        // the controller via BookingAccessGuard.
-                        .anyRequest().authenticated()
+                        // passenger check-in/board) - a USER or ADMIN token; OWNER
+                        // enforced in the controller via BookingAccessGuard. Booking
+                        // has NO inbound service-to-service API, so a ROLE_SERVICE
+                        // token is rejected here rather than being treated as
+                        // owner-privileged by SecurityAccess (defense in depth).
+                        .anyRequest().hasAnyRole("USER", "ADMIN")
                 )
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(entryPoint)

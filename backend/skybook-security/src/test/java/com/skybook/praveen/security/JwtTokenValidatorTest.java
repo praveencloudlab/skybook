@@ -141,6 +141,16 @@ class JwtTokenValidatorTest {
     }
 
     @Test
+    void rejectsATokenWithNoExpiry() {
+        // jjwt only validates exp when it is present; an otherwise-valid RS256
+        // token minted without exp would never expire, so the validator must
+        // require it explicitly.
+        assertThatThrownBy(() -> validator.validate(tokens.token().noExpiry().sign()))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("exp");
+    }
+
+    @Test
     void rejectsATokenSignedByADifferentKey() {
         // A token minted with another RSA private key (a would-be forger who does
         // NOT hold auth's private key) fails signature verification.

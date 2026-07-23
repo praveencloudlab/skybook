@@ -203,7 +203,10 @@ public class BookingFacade {
      */
     private FlightDetails flightOrNull(Long flightId) {
         try {
-            return flightServiceClient.getFlight(flightId);
+            // Service-token call: this runs during event publication, which for the
+            // PAYMENT_SUCCEEDED->confirm path is a Kafka consumer thread with no
+            // incoming user token to propagate (§3.3/§4.2).
+            return flightServiceClient.getFlightAsService(flightId);
         } catch (RuntimeException e) {
             log.warn("Could not fetch flight {} for event enrichment: {}", flightId, e.getMessage());
             return null;

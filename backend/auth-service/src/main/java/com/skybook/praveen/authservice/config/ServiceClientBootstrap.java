@@ -11,6 +11,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Provisions the service-client registry at startup from
@@ -32,10 +34,12 @@ public class ServiceClientBootstrap {
 
     @EventListener(ApplicationReadyEvent.class)
     public void provision() {
+        Set<String> configuredIds = new HashSet<>();
         for (ServiceRegistryProperties.Client def : properties.getClients()) {
             if (def.getClientId() == null || def.getClientId().isBlank()) {
                 continue;
             }
+            configuredIds.add(def.getClientId());
             repository.findById(def.getClientId()).ifPresentOrElse(existing -> {
                 if (!existing.getAllowedAudiences().equals(def.getAllowedAudiences())) {
                     existing.setAllowedAudiences(def.getAllowedAudiences());
@@ -53,6 +57,18 @@ public class ServiceClientBootstrap {
                 log.info("Registered service client {} (audiences: {})",
                         def.getClientId(), def.getAllowedAudiences());
             });
+        }
+
+        // Reconcile: the config is authoritative, so a client removed from it is
+        // DEPROVISIONED here rather than lingering in the DB. Without this a
+        // once-registered client (e.g. a retired payment-service) would keep its
+        // credential and audiences forever, defeating a config-level revocation.
+        for (ServiceClient existing : repository.findAll()) {
+            if (!configuredIds.contains(existing.getClientId())) {
+                repository.delete(existing);
+                log.warn("Deprovisioned service client {} - no longer in the registry config",
+                        existing.getClientId());
+            }
         }
     }
 }

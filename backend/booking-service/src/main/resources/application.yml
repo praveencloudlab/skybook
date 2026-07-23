@@ -20,7 +20,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/skybook_booking
     username: postgres
-    password: postgres
+    password: ${SPRING_DATASOURCE_PASSWORD}
 
   jpa:
     hibernate:
@@ -152,7 +152,7 @@ skybook:
     service-client:
       auth-base-url: ${AUTH_SERVICE_BASE_URL:http://localhost:8081}
       client-id: booking-service
-      client-secret: ${BOOKING_SERVICE_CLIENT_SECRET:dev-booking-secret}
+      client-secret: ${BOOKING_SERVICE_CLIENT_SECRET}
   kafka:
     topics:
       # Consumed by PaymentEventConsumer - PAYMENT_SUCCEEDED confirms bookings.
