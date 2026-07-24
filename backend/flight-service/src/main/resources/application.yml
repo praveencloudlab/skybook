@@ -8,7 +8,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/skybook_flight
     username: postgres
-    password: postgres
+    password: ${SPRING_DATASOURCE_PASSWORD}
 
   jpa:
     hibernate:
@@ -16,6 +16,15 @@ spring:
     show-sql: true
 
 management:
+  # Actuator on a separate internal-only port (SECURITY_HARDENING_MODULE.md §7).
+  server:
+    port: 9082
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+        add-additional-paths: true   # /livez + /readyz on the MAIN port (k8s probes)
   endpoints:
     web:
       exposure:
@@ -33,3 +42,10 @@ springdoc:
     path: /swagger-ui.html
 
   packages-to-scan: com.skybook.praveen.flightservice.controller
+# JWT validation (§4.4/§5) - verify-only public key, this service's audience.
+skybook:
+  security:
+    public-key: ${JWT_PUBLIC_KEY}
+    issuer: ${JWT_ISSUER:skybook-auth}
+    user-audience: ${JWT_AUDIENCE:skybook-api}
+    service-audience: flight-service

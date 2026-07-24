@@ -29,7 +29,9 @@ import static org.mockito.Mockito.when;
 class InventoryServiceClientTest {
 
     @Mock
-    private InventoryServiceFeignClient feignClient;
+    private InventoryCommandFeignClient command;
+    @Mock
+    private InventoryQueryFeignClient query;
 
     private InventoryServiceClient client;
 
@@ -39,7 +41,7 @@ class InventoryServiceClientTest {
         // pass-through here, so these tests keep exercising exactly the
         // wrapper's translation logic they always did. Aspect behavior
         // (breaker/bulkhead/retry) is covered by ResilientClientBehaviorTest.
-        client = new InventoryServiceClient(new ResilientInventoryClient(feignClient));
+        client = new InventoryServiceClient(new ResilientInventoryClient(command, query));
     }
 
     private static Request dummyRequest() {
@@ -64,7 +66,7 @@ class InventoryServiceClientTest {
 
     @Test
     void successfulHoldPassesThrough() {
-        when(feignClient.holdSeat(any())).thenReturn(
+        when(command.holdSeat(any())).thenReturn(
                 new InventoryHoldDetails(5L, "12A", "MANUAL", new BigDecimal("12.00"), new BigDecimal("12.00"), "ACTIVE", LocalDateTime.now().plusMinutes(15)));
 
         Optional<InventoryHoldDetails> hold = client.holdSeat(10L, "12A", 42L, 1L, TravelClass.ECONOMY);
@@ -76,7 +78,7 @@ class InventoryServiceClientTest {
     @Test
     void missingFlightInventoryMeansSkipHolds() {
         // The hold-if-exists policy hinges on distinguishing this 404...
-        when(feignClient.holdSeat(any())).thenThrow(notFound(
+        when(command.holdSeat(any())).thenThrow(notFound(
                 "{\"message\":\"Flight inventory not found for flight id: 10\"}"));
 
         assertThat(client.holdSeat(10L, "12A", 42L, 1L, TravelClass.ECONOMY)).isEmpty();
@@ -85,7 +87,7 @@ class InventoryServiceClientTest {
     @Test
     void unknownSeatIn404IsAConflictNotASkip() {
         // ...from this one: inventory exists but the seat doesn't.
-        when(feignClient.holdSeat(any())).thenThrow(notFound(
+        when(command.holdSeat(any())).thenThrow(notFound(
                 "{\"message\":\"Seat 99Z not found on aircraft with id: 1\"}"));
 
         assertThatThrownBy(() -> client.holdSeat(10L, "99Z", 42L, 1L, TravelClass.ECONOMY))
@@ -95,7 +97,7 @@ class InventoryServiceClientTest {
 
     @Test
     void heldOrReservedSeatBecomesSeatUnavailable() {
-        when(feignClient.holdSeat(any())).thenThrow(conflict());
+        when(command.holdSeat(any())).thenThrow(conflict());
 
         // Inventory's own 409 message (naming the violated rule) is surfaced.
         assertThatThrownBy(() -> client.holdSeat(10L, "12A", 42L, 1L, TravelClass.ECONOMY))
@@ -105,7 +107,7 @@ class InventoryServiceClientTest {
 
     @Test
     void unreachableInventoryBecomes502() {
-        when(feignClient.holdSeat(any())).thenThrow(down());
+        when(command.holdSeat(any())).thenThrow(down());
 
         assertThatThrownBy(() -> client.holdSeat(10L, "12A", 42L, 1L, TravelClass.ECONOMY))
                 .isInstanceOf(InventoryServiceUnavailableException.class);
@@ -113,7 +115,7 @@ class InventoryServiceClientTest {
 
     @Test
     void autoHoldPassesThroughWithItsPricingSnapshot() {
-        when(feignClient.autoHoldSeat(eq(10L), any())).thenReturn(
+        when(command.autoHoldSeat(eq(10L), any())).thenReturn(
                 new InventoryHoldDetails(6L, "20B", "AUTO", new BigDecimal("12.00"),
                         new BigDecimal("0.00"), "ACTIVE", LocalDateTime.now().plusMinutes(15)));
 
@@ -126,7 +128,7 @@ class InventoryServiceClientTest {
 
     @Test
     void autoHoldOnFlightWithoutInventoryMeansSkipHolds() {
-        when(feignClient.autoHoldSeat(eq(10L), any())).thenThrow(notFound(
+        when(command.autoHoldSeat(eq(10L), any())).thenThrow(notFound(
                 "{\"message\":\"Flight inventory not found for flight id: 10\"}"));
 
         assertThat(client.autoHoldSeat(10L, 42L, 1L, TravelClass.ECONOMY)).isEmpty();
@@ -134,7 +136,7 @@ class InventoryServiceClientTest {
 
     @Test
     void exhaustedCabinBecomesSeatUnavailable() {
-        when(feignClient.autoHoldSeat(eq(10L), any())).thenThrow(conflict());
+        when(command.autoHoldSeat(eq(10L), any())).thenThrow(conflict());
 
         assertThatThrownBy(() -> client.autoHoldSeat(10L, 42L, 1L, TravelClass.ECONOMY))
                 .isInstanceOf(SeatUnavailableException.class);
@@ -142,7 +144,7 @@ class InventoryServiceClientTest {
 
     @Test
     void reserveTranslatesTheSameWay() {
-        when(feignClient.reserveSeat(any())).thenThrow(conflict());
+        when(command.reserveSeat(any())).thenThrow(conflict());
 
         assertThatThrownBy(() -> client.reserveSeat(10L, "12A", 42L, 1L))
                 .isInstanceOf(SeatUnavailableException.class);
@@ -150,8 +152,8 @@ class InventoryServiceClientTest {
 
     @Test
     void quietMethodsNeverThrow() {
-        when(feignClient.releaseHold(any())).thenThrow(conflict());
-        when(feignClient.cancelReservation(any())).thenThrow(down());
+        when(command.releaseHold(any())).thenThrow(conflict());
+        when(command.cancelReservation(any())).thenThrow(down());
 
         assertThatCode(() -> {
             client.releaseHoldQuietly(10L, "12A", 42L, "test");

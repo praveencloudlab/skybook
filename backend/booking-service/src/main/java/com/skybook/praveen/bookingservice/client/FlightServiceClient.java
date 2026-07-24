@@ -24,6 +24,18 @@ import org.springframework.stereotype.Component;
 public class FlightServiceClient {
 
     private final ResilientFlightClient resilientFlightClient;
+    private final FlightCommandFeignClient flightCommandFeignClient;
+
+    /**
+     * Service-token flight lookup for best-effort event enrichment that can run
+     * off the request thread (Kafka-driven confirmation, §3.3/§4.2), where no
+     * incoming user token exists to propagate. Callers treat any failure as "no
+     * flight"; deliberately outside the resilience wrapper, which guards the
+     * must-succeed {@link #getFlight} validation path on the request thread.
+     */
+    public FlightDetails getFlightAsService(Long flightId) {
+        return flightCommandFeignClient.getFlight(flightId);
+    }
 
     public FlightDetails getFlight(Long flightId) {
 

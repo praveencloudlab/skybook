@@ -1,6 +1,6 @@
 package com.skybook.praveen.inventoryservice.controller;
 
-import com.skybook.praveen.inventoryservice.config.SecurityConfig;
+import com.skybook.praveen.inventoryservice.config.WebSliceSecurityConfig;
 import com.skybook.praveen.inventoryservice.dto.request.CreateAircraftRequest;
 import com.skybook.praveen.inventoryservice.dto.response.AircraftResponse;
 import com.skybook.praveen.inventoryservice.enums.AircraftStatus;
@@ -26,7 +26,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AircraftController.class)
-@Import(SecurityConfig.class)
+@Import(WebSliceSecurityConfig.class)
 class AircraftControllerTest {
 
     @Autowired

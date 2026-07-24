@@ -24,6 +24,15 @@
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
 
+        <!-- For UserTokenFeignConfiguration: inventory->flight propagates the
+             caller's token (SECURITY_HARDENING_MODULE.md §3.3). Validation is
+             not activated here yet (no public-key) - that is step 6. -->
+        <dependency>
+            <groupId>com.skybook.praveen</groupId>
+            <artifactId>skybook-security</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>

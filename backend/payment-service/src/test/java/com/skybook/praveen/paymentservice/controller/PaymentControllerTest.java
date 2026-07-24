@@ -1,6 +1,7 @@
 package com.skybook.praveen.paymentservice.controller;
 
-import com.skybook.praveen.paymentservice.config.SecurityConfig;
+import com.skybook.praveen.paymentservice.config.WebSliceSecurityConfig;
+import org.springframework.security.test.context.support.WithMockUser;
 import com.skybook.praveen.paymentservice.dto.request.CreatePaymentRequest;
 import com.skybook.praveen.paymentservice.dto.request.RefundRequest;
 import com.skybook.praveen.paymentservice.dto.response.PaymentResponse;
@@ -36,8 +37,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(PaymentController.class)
-@Import(SecurityConfig.class)
+@WebMvcTest(controllers = PaymentController.class,
+        excludeAutoConfiguration = com.skybook.praveen.security.JwtSecurityAutoConfiguration.class)
+@Import(WebSliceSecurityConfig.class)
+@WithMockUser(roles = "ADMIN")
 class PaymentControllerTest {
 
     @Autowired
@@ -55,7 +58,7 @@ class PaymentControllerTest {
                 new BigDecimal("100.00"), "USD",
                 status == PaymentStatus.CAPTURED ? new BigDecimal("100.00") : BigDecimal.ZERO,
                 BigDecimal.ZERO, status, PaymentMethod.CARD,
-                "SIM-abc", null, null, null, List.of(), List.of(), 0L, now, now);
+                "SIM-abc", null, null, null, "owner@test.com", List.of(), List.of(), 0L, now, now);
     }
 
     private static final String CREATE_BODY = """

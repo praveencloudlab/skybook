@@ -16,6 +16,10 @@
         <spring.boot.version>3.5.16</spring.boot.version>
         <spring.cloud.version>2025.0.0</spring.cloud.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Override Spring Boot 3.5.16's managed pgjdbc 42.7.11, which carries
+             CVE-2026-54291 (SCRAM-SHA-256-PLUS downgrade MITM, fixed in 42.7.12)
+             flagged by the Trivy CI gate (SECURITY_HARDENING_MODULE.md §9). -->
+        <postgresql.version>42.7.12</postgresql.version>
         <!-- Relative paths, inherited by every child module and resolved
              against each module's own target/ - the unit report is at
              Sonar's auto-detected default location already, but the
@@ -39,6 +43,7 @@
         <module>auth-service</module>
         <module>notification-service</module>
         <module>skybook-common</module>
+        <module>skybook-security</module>
         <module>flight-service</module>
         <module>booking-service</module>
         <module>inventory-service</module>
@@ -50,6 +55,61 @@
 
     <dependencyManagement>
         <dependencies>
+            <!-- Declared BEFORE the spring-boot-dependencies import so this
+                 version wins over the BOM's managed 42.7.11: importing a BOM
+                 (vs inheriting the parent) means a postgresql.version property
+                 override is ignored, so the pin has to be an explicit management
+                 entry. CVE-2026-54291 fix (SECURITY_HARDENING_MODULE.md §9). -->
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${postgresql.version}</version>
+            </dependency>
+
+            <!-- Transitive via spring-cloud-starter (openfeign / gateway), flagged
+                 by the Trivy CI gate (SECURITY_HARDENING_MODULE.md §9). Pinned here,
+                 before the BOM import, so the fixed versions win fleet-wide:
+                   bcprov-jdk18on 1.80 -> CVE-2025-14813 (GOSTCTR) + CVE-2026-0636
+                                     (LDAP injection). The advisory patches the
+                                     1.74-1.80 branch in 1.80.2, but Trivy records
+                                     only the top fixed version (1.84) and flags
+                                     anything below it, so we go to 1.84 (also the
+                                     GOSTCTR fix - unused LDAPStoreHelper path here).
+                   commons-fileupload 1.5 -> CVE-2025-48976 (DoS),     fixed 1.6.0 -->
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcprov-jdk18on</artifactId>
+                <version>1.84</version>
+            </dependency>
+            <dependency>
+                <groupId>commons-fileupload</groupId>
+                <artifactId>commons-fileupload</artifactId>
+                <version>1.6.0</version>
+            </dependency>
+
+            <!-- Runtime deps managed by the Spring Boot BOM but flagged by the
+                 Trivy CI gate on a fresher DB than the local image scan
+                 (SECURITY_HARDENING_MODULE.md §9). Pinned here, before the BOM
+                 import, so the fixed versions win:
+                   jackson 2.21.4  -> CVE-2026-54515/54517/54518/59889
+                                      (jackson-databind property/view bypasses),
+                                      fixed 2.21.5 - the whole jackson-bom is
+                                      imported so every jackson module stays aligned.
+                   commons-lang3 3.17.0 -> CVE-2025-48924 (uncontrolled recursion /
+                                      StackOverflow), fixed 3.18.0. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>2.21.5</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>3.18.0</version>
+            </dependency>
+
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>

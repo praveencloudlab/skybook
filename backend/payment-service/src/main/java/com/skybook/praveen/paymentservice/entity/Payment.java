@@ -123,6 +123,12 @@ public class Payment extends Auditable {
     @Column(name = "seat_surcharge_total", updatable = false, precision = 19, scale = 2)
     private BigDecimal seatSurchargeTotal;
 
+    // Ownership (SECURITY_HARDENING_MODULE.md §4.2): the booking owner's JWT
+    // subject, snapshotted from the BookingCreated event. Nullable/immutable;
+    // legacy rows are null and reachable only by ADMIN/SERVICE.
+    @Column(name = "owner_subject", updatable = false)
+    private String ownerSubject;
+
     // Append-only ledger of gateway interactions. NO cascade - transaction
     // rows are saved explicitly by the service layer; this mapping exists
     // for reads (design doc section 3.2).

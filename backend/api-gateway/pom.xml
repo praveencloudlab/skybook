@@ -29,6 +29,15 @@
             <version>1.0.0-SNAPSHOT</version>
         </dependency>
 
+        <!-- Shared JWT validator (SECURITY_HARDENING_MODULE.md §3.2): the gateway
+             verifies with the same JwtTokenValidator as every downstream service,
+             so they can never drift on algorithm/issuer/audience/role rules. -->
+        <dependency>
+            <groupId>com.skybook.praveen</groupId>
+            <artifactId>skybook-security</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+
         <!-- Spring Cloud Gateway - WebMVC (servlet) flavor, not the reactive one,
              to match the rest of the fleet (all Tomcat/MVC, nothing reactive). -->
         <dependency>

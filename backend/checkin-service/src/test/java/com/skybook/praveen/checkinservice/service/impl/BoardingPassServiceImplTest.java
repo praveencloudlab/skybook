@@ -50,7 +50,7 @@ class BoardingPassServiceImplTest {
 
         boardingPassService = new BoardingPassServiceImpl(
                 boardingPassRepository, checkInHistoryRepository, checkInService,
-                new BoardingPassNumberGenerator(), new BoardingPassTokenSigner("test-key"),
+                new BoardingPassNumberGenerator(), new BoardingPassTokenSigner("test-key-boarding-pass-service-32bytes-plus"),
                 new BoardingGroupAssigner(), 45);
 
         lenient().when(boardingPassRepository.save(any(BoardingPass.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -180,7 +180,7 @@ class BoardingPassServiceImplTest {
 
     @Test
     void verifyRejectsATokenThatIsCryptographicallyValidButUnknownToTheDb() {
-        BoardingPassTokenSigner signer = new BoardingPassTokenSigner("test-key");
+        BoardingPassTokenSigner signer = new BoardingPassTokenSigner("test-key-boarding-pass-service-32bytes-plus");
         String token = signer.sign("BP-2026-GHOST1", "SBTEST", 7L, "12B", 1L);
         when(boardingPassRepository.findByToken(token)).thenReturn(Optional.empty());
 
@@ -192,7 +192,7 @@ class BoardingPassServiceImplTest {
     @Test
     void verifyRejectsARevokedPass() {
         CheckIn checkIn = checkIn();
-        BoardingPassTokenSigner signer = new BoardingPassTokenSigner("test-key");
+        BoardingPassTokenSigner signer = new BoardingPassTokenSigner("test-key-boarding-pass-service-32bytes-plus");
         String token = signer.sign("BP-2026-REVOKD", "SBTEST", 7L, "12B", 1L);
 
         BoardingPass revoked = BoardingPass.builder()
@@ -209,7 +209,7 @@ class BoardingPassServiceImplTest {
     void verifyRejectsAnAlreadyBoardedPass() {
         CheckIn boarded = checkIn();
         boarded.setStatus(CheckInStatus.BOARDED);
-        BoardingPassTokenSigner signer = new BoardingPassTokenSigner("test-key");
+        BoardingPassTokenSigner signer = new BoardingPassTokenSigner("test-key-boarding-pass-service-32bytes-plus");
         String token = signer.sign("BP-2026-BOARDD", "SBTEST", 7L, "12B", 1L);
 
         BoardingPass pass = BoardingPass.builder()
@@ -225,7 +225,7 @@ class BoardingPassServiceImplTest {
     @Test
     void verifySucceedsForAnActivePassOnACheckedInPassenger() {
         CheckIn checkIn = checkIn(); // CHECKED_IN
-        BoardingPassTokenSigner signer = new BoardingPassTokenSigner("test-key");
+        BoardingPassTokenSigner signer = new BoardingPassTokenSigner("test-key-boarding-pass-service-32bytes-plus");
         String token = signer.sign("BP-2026-VALID1", "SBTEST", 7L, "12B", 1L);
 
         BoardingPass pass = BoardingPass.builder()

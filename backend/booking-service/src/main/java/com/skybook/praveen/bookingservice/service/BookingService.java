@@ -26,8 +26,11 @@ public interface BookingService {
      *                            validating the flight with flight-service) -
      *                            this service needs it for passport-validity
      *                            checks but must not fetch it itself.
+     * @param ownerSubject        the authenticated JWT subject captured as the
+     *                            booking owner (SECURITY_HARDENING_MODULE.md §4.2).
      */
-    BookingResponse createDraftBooking(CreateBookingRequest request, LocalDateTime flightDepartureTime);
+    BookingResponse createDraftBooking(CreateBookingRequest request, LocalDateTime flightDepartureTime,
+                                       String ownerSubject);
 
     /**
      * Stage 3 (§5.1): ONE transaction that synchronizes all money fields from

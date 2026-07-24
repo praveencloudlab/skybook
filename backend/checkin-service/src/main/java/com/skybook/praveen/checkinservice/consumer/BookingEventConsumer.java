@@ -88,6 +88,8 @@ public class BookingEventConsumer {
                     // free-seat-change ceiling; legacy events carry null => 0.
                     passenger.getSeatSurcharge(),
                     passenger.getCurrency(),
+                    // §4.2: ownership snapshot from the CONFIRMED event.
+                    event.getOwnerSubject(),
                     // booking-service already validates passport data before
                     // a booking can reach CONFIRMED (BookingValidator.
                     // validatePassportValidForTravel) - true by construction.

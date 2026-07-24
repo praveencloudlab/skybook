@@ -39,6 +39,9 @@ public interface PaymentService {
 
     PaymentResponse getById(Long id);
 
+    /** The booking-owner subject on a payment (§4.2), for the controller's OWNER check. */
+    String ownerSubjectOf(Long id);
+
     PaymentResponse getByReference(String paymentReference);
 
     PaymentResponse getByBookingId(Long bookingId);

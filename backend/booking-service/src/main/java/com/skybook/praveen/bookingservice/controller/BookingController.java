@@ -32,6 +32,7 @@ public class BookingController {
 
     private final BookingFacade bookingFacade;
     private final BookingService bookingService;
+    private final com.skybook.praveen.bookingservice.security.BookingAccessGuard accessGuard;
 
     @Operation(
             summary = "Create Booking",
@@ -58,12 +59,14 @@ public class BookingController {
     @Operation(summary = "Get Booking By Id")
     @GetMapping("/{id}")
     public BookingResponse getBookingById(@PathVariable Long id) {
+        accessGuard.requireOwnerOfBooking(id);
         return bookingService.getBookingById(id);
     }
 
     @Operation(summary = "Get Booking By Reference", description = "Looks up a booking by its PNR, e.g. SB8KF7.")
     @GetMapping("/reference/{pnr}")
     public BookingResponse getBookingByReference(@PathVariable String pnr) {
+        accessGuard.requireOwnerOfBookingByReference(pnr);
         return bookingService.getBookingByReference(pnr);
     }
 
@@ -115,6 +118,7 @@ public class BookingController {
     public BookingResponse cancelBooking(
             @PathVariable Long id,
             @RequestBody(required = false) CancelBookingRequest request) {
+        accessGuard.requireOwnerOfBooking(id);
         String reason = request != null ? request.reason() : null;
         return bookingFacade.cancelBooking(id, reason);
     }
@@ -132,12 +136,14 @@ public class BookingController {
     )
     @PatchMapping("/{id}/passengers/{passengerId}/check-in")
     public BookingResponse checkInPassenger(@PathVariable Long id, @PathVariable Long passengerId) {
+        accessGuard.requireOwnerOfBooking(id);
         return bookingService.checkInPassenger(id, passengerId);
     }
 
     @Operation(summary = "Board Passenger")
     @PatchMapping("/{id}/passengers/{passengerId}/board")
     public BookingResponse boardPassenger(@PathVariable Long id, @PathVariable Long passengerId) {
+        accessGuard.requireOwnerOfBooking(id);
         return bookingService.boardPassenger(id, passengerId);
     }
 }

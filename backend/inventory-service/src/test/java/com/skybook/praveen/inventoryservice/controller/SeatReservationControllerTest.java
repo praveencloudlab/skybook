@@ -1,6 +1,6 @@
 package com.skybook.praveen.inventoryservice.controller;
 
-import com.skybook.praveen.inventoryservice.config.SecurityConfig;
+import com.skybook.praveen.inventoryservice.config.WebSliceSecurityConfig;
 import com.skybook.praveen.inventoryservice.dto.request.ReleaseSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.request.ReserveSeatRequest;
 import com.skybook.praveen.inventoryservice.dto.response.SeatReservationResponse;
@@ -28,7 +28,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(SeatReservationController.class)
-@Import(SecurityConfig.class)
+@Import(WebSliceSecurityConfig.class)
 class SeatReservationControllerTest {
 
     @Autowired

@@ -48,7 +48,7 @@ class CheckInServiceImplTest {
 
     private CreateCheckInRequest request() {
         return new CreateCheckInRequest(42L, "SBTEST", 100L, 7L, "BA178", "LHR", "JFK",
-                DEPARTURE, "Test Passenger", "test@example.com", "12B", "ECONOMY", "FLEXI", new java.math.BigDecimal("12.00"), "USD", true);
+                DEPARTURE, "Test Passenger", "test@example.com", "12B", "ECONOMY", "FLEXI", new java.math.BigDecimal("12.00"), "USD", "owner@test.com", true);
     }
 
     private CheckIn checkInWith(CheckInStatus status) {
