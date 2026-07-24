@@ -1,7 +1,9 @@
 package com.skybook.praveen.e2e;
 
 import io.restassured.RestAssured;
+import io.restassured.filter.Filter;
 import io.restassured.response.Response;
+import org.awaitility.core.ConditionTimeoutException;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,7 @@ import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -48,57 +51,73 @@ class TraceE2ETest {
     void journeyIsTracedAcrossServices() {
         requireTempo();
 
-        // Generate fresh telemetry rather than trusting whatever is already in
-        // Tempo - otherwise this could pass on a trace from an earlier session.
-        E2EUser passenger = Identities.newUser("traced");
-        long bookingId = Journey.confirmedBooking(passenger);
+        // We MINT the trace id and send it as a W3C traceparent, rather than
+        // completing a journey and then hunting for its trace in Tempo's search
+        // API. Two reasons, both learned the hard way on a clean CI runner:
+        //
+        //  1. Tempo's search only covers FLUSHED blocks. On a fresh instance
+        //     nothing has been flushed yet - its own log said
+        //     "total_blocks=0 ... inspected_spans=0" - so a just-created trace is
+        //     simply not findable, no matter how long you wait. Raising the
+        //     timeout 60s -> 120s changed a failure at 62.7s into a failure at
+        //     122.8s, which is what proved this was never a timing flake.
+        //     Lookup BY ID (/api/traces/{id}) reads the ingesters too, so it sees
+        //     data that has not been flushed.
+        //  2. Knowing the id up front makes the assertion exact: we check the
+        //     trace for THIS journey, not "some recent booking-service trace"
+        //     that might belong to another test or an earlier session.
+        String traceId = newTraceId();
 
-        Set<String>[] best = new Set[]{Set.of()};
+        Filter traceparent = (spec, response, ctx) -> {
+            spec.header("traceparent", "00-" + traceId + "-" + newSpanId() + "-01");
+            return ctx.next(spec, response);
+        };
 
-        // 120s, not 60s. Tempo's ingest+index lag is the slowest thing this suite
-        // waits on, and 60s sat right on the edge: locally it timed out at 64s
-        // just after a service restart and then passed in 14s, and on a CI runner
-        // it timed out at 62.7s while every other test passed. A trace assertion
-        // that fails on a cold or busy Tempo trains people to ignore it, which is
-        // worse than a slow test - the journey and the trace were correct both times.
-        await("a trace spanning api-gateway -> booking-service -> (Kafka) -> payment-service "
-                + "for booking " + bookingId)
-                .atMost(Duration.ofSeconds(120))
-                .pollInterval(Duration.ofSeconds(2))
-                .until(() -> {
-                    for (String traceId : recentTraceIds()) {
-                        Set<String> services = servicesIn(traceId);
-                        if (services.size() > best[0].size()) {
-                            best[0] = services;
-                        }
-                        if (services.contains("booking-service")
-                                && services.contains("payment-service")) {
-                            return true;
-                        }
-                    }
-                    return false;
-                });
+        long bookingId;
+        RestAssured.filters(traceparent);
+        try {
+            E2EUser passenger = Identities.newUser("traced");
+            bookingId = Journey.confirmedBooking(passenger);
+        } finally {
+            // Leave the shared RestAssured config as we found it - every other
+            // test in the suite uses these same statics.
+            RestAssured.replaceFiltersWith(List.of());
+        }
 
-        assertThat(best[0])
+        // Awaitility throws on timeout, which would hide the diagnostic below -
+        // so swallow it here and let the assertion report what was ACTUALLY in
+        // the trace. "Expected both, saw [api-gateway, booking-service]" tells
+        // you the Kafka hop broke; a bare ConditionTimeout tells you nothing.
+        try {
+            await("trace " + traceId + " to span booking-service and payment-service "
+                    + "(booking " + bookingId + ")")
+                    .atMost(Duration.ofSeconds(90))
+                    .pollInterval(Duration.ofSeconds(2))
+                    .until(() -> servicesIn(traceId).containsAll(
+                            Set.of("booking-service", "payment-service")));
+        } catch (ConditionTimeoutException expectedIfBroken) {
+            // fall through to the assertion for a useful message
+        }
+
+        assertThat(servicesIn(traceId))
                 .as("""
-                        No single trace contained both booking-service and payment-service.
+                        Trace %s did not contain both booking-service and payment-service.
                         They communicate over Kafka, so this means trace context is not
                         surviving the message boundary - each service would still be traced,
-                        but you could no longer follow one booking end to end.
-                        Widest trace seen: %s""", best[0])
+                        but you could no longer follow one booking end to end.""", traceId)
                 .contains("booking-service", "payment-service");
     }
 
-    /** Trace ids Tempo has seen for booking-service, newest first. */
-    private List<String> recentTraceIds() {
-        return RestAssured.given()
-                .baseUri(E2EConfig.TEMPO_URL)
-                .queryParam("tags", "service.name=booking-service")
-                .queryParam("limit", 30)
-                .when()
-                .get("/api/search")
-                .jsonPath()
-                .getList("traces.traceID", String.class);
+    /** A random, non-zero W3C trace id (32 lowercase hex chars). */
+    private static String newTraceId() {
+        return String.format("%016x%016x",
+                ThreadLocalRandom.current().nextLong() | 1L,
+                ThreadLocalRandom.current().nextLong() | 1L);
+    }
+
+    /** A random, non-zero W3C span id (16 lowercase hex chars). */
+    private static String newSpanId() {
+        return String.format("%016x", ThreadLocalRandom.current().nextLong() | 1L);
     }
 
     /**
