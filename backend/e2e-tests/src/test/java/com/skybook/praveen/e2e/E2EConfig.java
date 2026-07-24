@@ -25,6 +25,13 @@ public final class E2EConfig {
     public static final String TEMPO_URL = resolve("e2e.tempoUrl", "E2E_TEMPO_URL", "http://localhost:3200");
 
     /**
+     * The SMTP sink's HTTP API (§10.2). Only present under
+     * {@code docker-compose.e2e.yml}; the notification test says so explicitly if
+     * it is missing rather than failing obscurely.
+     */
+    public static final String MAIL_URL = resolve("e2e.mailUrl", "E2E_MAIL_URL", "http://localhost:8025");
+
+    /**
      * An account that auth-service has promoted to ADMIN via
      * {@code SKYBOOK_BOOTSTRAP_ADMIN_EMAIL}. There is no API to promote a user
      * (§1.4), so this has to be arranged out of band - the preflight explains how
