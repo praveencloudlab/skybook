@@ -53,6 +53,19 @@ jobs:
           } > .env
           rm -f private.pem public.pem
 
+      # The observability services bind-mount ./docker-data/* and run as non-root
+      # (Prometheus as nobody, Loki as 10001). On a developer machine those
+      # directories already exist and are writable; on a clean runner Docker
+      # creates them ROOT-owned, so Prometheus dies with
+      # "open /prometheus/queries.active: permission denied" and Loki with
+      # "mkdir /loki/rules: permission denied" - then everything else fails on
+      # depends_on. Only ever reproducible on a fresh machine, which is exactly
+      # what this workflow is.
+      - name: Pre-create writable data directories
+        run: |
+          mkdir -p docker-data/{prometheus,loki,tempo,grafana,promtail,postgres,kafka}
+          chmod -R 777 docker-data
+
       - name: Start the fleet (with e2e overrides)
         run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
 
