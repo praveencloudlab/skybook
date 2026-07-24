@@ -8,14 +8,21 @@
  */
 
 /**
- * Where the API gateway lives.
+ * Where the API lives, relative to this page.
  *
- * Overridable via `VITE_API_BASE_URL` so the same build can be pointed at a
- * deployed gateway (or, later, a Kubernetes ingress) without a code change - the
- * e2e module made the same choice for the same reason.
+ * <b>Empty by default, and that is the point.</b> Requests go to `/api/...` on
+ * our OWN origin, which a proxy forwards to the gateway - the Vite dev server in
+ * development, nginx in the container. Same-origin is what makes the httpOnly
+ * session cookie usable at all (§10.1): it lets the cookie be `SameSite=Lax`,
+ * which is a genuine CSRF control, instead of `SameSite=None`, which is sent
+ * cross-site and would need CSRF tokens of its own.
+ *
+ * `VITE_API_BASE_URL` can still point the app at an absolute gateway URL, but
+ * doing so goes back to being cross-origin: the cookie would not be sent, and
+ * only bearer-token callers would work. It exists for diagnostics, not as the
+ * normal path.
  */
-export const API_BASE_URL: string =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080';
+export const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? '';
 
 /**
  * How long to keep polling an async journey step before giving up (§3).

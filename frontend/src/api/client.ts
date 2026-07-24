@@ -22,23 +22,15 @@ interface RequestOptions {
   body?: unknown;
   /** Extra headers, e.g. Idempotency-Key on payment creation. */
   headers?: Record<string, string>;
-  /** Send without the bearer token (register and login). */
-  anonymous?: boolean;
   signal?: AbortSignal;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, headers = {}, anonymous = false, signal } = options;
+  const { method = 'GET', body, headers = {}, signal } = options;
 
   const finalHeaders: Record<string, string> = { ...headers };
   if (body !== undefined) {
     finalHeaders['Content-Type'] = 'application/json';
-  }
-  if (!anonymous) {
-    const token = session.token();
-    if (token) {
-      finalHeaders.Authorization = `Bearer ${token}`;
-    }
   }
 
   let response: Response;
@@ -48,6 +40,13 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       headers: finalHeaders,
       body: body === undefined ? undefined : JSON.stringify(body),
       signal,
+      // The credential is an httpOnly cookie the browser attaches itself - there
+      // is no Authorization header to build here, because there is no token this
+      // code is allowed to see (§10.1). 'same-origin' rather than 'include'
+      // because requests go to our own origin via the proxy; it is the stricter
+      // of the two, and would stop the cookie leaking if a request ever pointed
+      // somewhere else by mistake.
+      credentials: 'same-origin',
     });
   } catch (cause) {
     // fetch only rejects when the request never got an HTTP response at all -
@@ -64,8 +63,14 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   // A 401 means the session is over, full stop: there is no refresh token to
   // silently renew with (deferred in the security module), so the only honest
-  // response is to clear it and send them to sign in - preserving where they
-  // were, so an expiry mid-journey doesn't lose their place.
+  // response is to forget the cached identity and send them to sign in -
+  // preserving where they were, so an expiry mid-journey doesn't lose their
+  // place.
+  //
+  // Note this only clears our CACHED identity; the cookie itself is httpOnly and
+  // can only be cleared by the server. That is fine here - an expired cookie is
+  // already inert - but it is why signing out has to be a request, not a local
+  // delete.
   if (response.status === 401) {
     session.clear();
     onUnauthenticated?.();

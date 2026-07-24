@@ -1,20 +1,38 @@
 /**
- * Session storage (FRONTEND_MODULE.md §4, §10.1).
+ * Session state (FRONTEND_MODULE.md §4, §10.1).
  *
- * <b>sessionStorage, not localStorage</b> — a decision, not a default. The token
- * is a 60-minute bearer credential with NO server-side revocation (refresh and
- * revocation are explicitly deferred), so the only real control over its
- * lifetime is where it is kept. Scoping it to the tab means a shared machine
- * leaves no live session behind, and an XSS cannot resurrect one from disk.
- * Accepted cost: opening a new tab means signing in again.
+ * <b>There is no token here.</b> The credential is an httpOnly cookie the
+ * browser attaches automatically and JavaScript cannot read, which is the whole
+ * security property: an XSS cannot exfiltrate what it cannot see.
+ *
+ * What remains client-side is only a cached answer to "who am I", obtained from
+ * `GET /api/auth/me` - i.e. claims the SERVER validated, rather than a JWT the
+ * browser decoded and hoped was genuine. It is display state, never authority:
+ * every request is authorised server-side regardless of what this says.
  */
 
-const TOKEN_KEY = 'skybook.token';
+/** Where to return after signing in. Not a credential - just a path. */
 const RETURN_TO_KEY = 'skybook.returnTo';
 
-/** Notified whenever the token changes, so React state can follow it. */
+export interface CurrentUser {
+  /** Token subject: the normalised email, which is also the ownership key. */
+  subject: string;
+  roles: string[];
+}
+
 type Listener = () => void;
 const listeners = new Set<Listener>();
+
+/**
+ * Cached identity.
+ *
+ * In memory on purpose: it is derived state that must not outlive the page, and
+ * persisting it would only create a second source of truth to go stale against
+ * the cookie. `undefined` means "not yet asked", `null` means "asked, and nobody
+ * is signed in" - a distinction the UI needs to avoid flashing a signed-out
+ * state during the first load.
+ */
+let currentUser: CurrentUser | null | undefined;
 
 function notify(): void {
   for (const listener of listeners) {
@@ -23,22 +41,26 @@ function notify(): void {
 }
 
 export const session = {
-  token(): string | null {
-    return sessionStorage.getItem(TOKEN_KEY);
+  /** undefined = not yet resolved; null = signed out. */
+  current(): CurrentUser | null | undefined {
+    return currentUser;
   },
 
-  setToken(token: string): void {
-    sessionStorage.setItem(TOKEN_KEY, token);
+  set(user: CurrentUser | null): void {
+    currentUser = user;
     notify();
   },
 
+  /**
+   * Forget the cached identity.
+   *
+   * This does NOT sign the user out - the cookie is httpOnly, so only the server
+   * can clear it (`POST /api/auth/logout`). Used when a 401 tells us the session
+   * is already gone.
+   */
   clear(): void {
-    sessionStorage.removeItem(TOKEN_KEY);
+    currentUser = null;
     notify();
-  },
-
-  isSignedIn(): boolean {
-    return sessionStorage.getItem(TOKEN_KEY) !== null;
   },
 
   /**
@@ -46,7 +68,7 @@ export const session = {
    *
    * Kept so an expiry mid-journey does not dump them on a blank page - losing a
    * half-filled passenger form to a 401 is the kind of thing people do not
-   * forgive.
+   * forgive. Safe to persist: it is a path, not a credential.
    */
   setReturnTo(path: string): void {
     sessionStorage.setItem(RETURN_TO_KEY, path);
@@ -63,54 +85,3 @@ export const session = {
     return () => listeners.delete(listener);
   },
 };
-
-/** Claims we read from the token. Never trusted for security - see below. */
-export interface TokenClaims {
-  sub: string;
-  roles: string[];
-  exp?: number;
-}
-
-/**
- * Decode the token payload WITHOUT verifying it.
- *
- * Verification is deliberately absent: the gateway and every service already
- * verify RS256 properly, and a browser holding a verification key proves
- * nothing. These claims are used only to show the right things (a name, an admin
- * link) - <b>never</b> to decide what the user may do. The server is the only
- * authority on that, and it enforces the §4.4 matrix regardless of what the UI
- * believes.
- */
-export function decodeClaims(token: string): TokenClaims | null {
-  const parts = token.split('.');
-  if (parts.length < 2) {
-    return null;
-  }
-  try {
-    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const json = JSON.parse(atob(payload)) as Partial<TokenClaims>;
-    if (typeof json.sub !== 'string') {
-      return null;
-    }
-    return {
-      sub: json.sub,
-      roles: Array.isArray(json.roles) ? json.roles : [],
-      exp: typeof json.exp === 'number' ? json.exp : undefined,
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * True when the token is already past its expiry.
- *
- * Lets the UI send someone to sign-in before firing a request that is certain to
- * come back 401 — a nicer failure than a spinner that resolves into an error.
- */
-export function isExpired(claims: TokenClaims | null): boolean {
-  if (!claims?.exp) {
-    return false;
-  }
-  return claims.exp * 1000 <= Date.now();
-}

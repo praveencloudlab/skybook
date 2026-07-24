@@ -4,12 +4,8 @@ import { ApiError } from '../lib/errors';
 import { session } from '../lib/session';
 
 /**
- * The API boundary is where the whole app's error and auth behaviour is decided,
- * so it is worth testing directly rather than through a screen.
- *
- * The first case is the one that matters most: login returns a RAW JWT, not
- * JSON, and a client that assumes JSON breaks on the single most important call
- * in the app.
+ * The API boundary decides the whole app's auth and error behaviour, so it is
+ * tested directly rather than through a screen.
  */
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -21,7 +17,7 @@ function jsonResponse(status: number, body: unknown): Response {
 
 describe('api client', () => {
   beforeEach(() => {
-    sessionStorage.clear();
+    session.clear();
     setUnauthenticatedHandler(() => {});
   });
 
@@ -29,8 +25,33 @@ describe('api client', () => {
     vi.unstubAllGlobals();
   });
 
+  it('sends cookies and never builds an Authorization header', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse(200, {}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.get('/api/bookings');
+
+    const init = fetchMock.mock.calls[0][1];
+    // The credential is an httpOnly cookie the browser attaches itself (§10.1).
+    // If an Authorization header ever appears here again, it means someone has
+    // reintroduced a JS-readable token.
+    expect(init?.credentials).toBe('same-origin');
+    expect((init?.headers as Record<string, string>).Authorization).toBeUndefined();
+  });
+
+  it('requests same-origin paths so the proxy (and the cookie) apply', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse(200, {}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await api.get('/api/flights');
+
+    // Relative, not http://localhost:8080 - cross-origin would mean the
+    // SameSite=Lax cookie is simply not sent.
+    expect(String(fetchMock.mock.calls[0][0])).toBe('/api/flights');
+  });
+
   it('reads a raw (non-JSON) body without trying to parse it', async () => {
-    // Exactly what POST /api/auth/login sends: a bare token, text/plain.
+    // POST /api/auth/login still returns a bare token as text/plain.
     const rawToken = 'header.payload.signature';
     vi.stubGlobal(
       'fetch',
@@ -51,32 +72,15 @@ describe('api client', () => {
     });
   });
 
-  it('attaches the bearer token, and omits it when anonymous', async () => {
-    session.setToken('a.b.c');
-    // Typed as `fetch` so the recorded calls keep their real signature -
-    // otherwise mock.calls[n][1] is typed as never and the assertions below
-    // need casts that would hide a genuine shape change.
-    const fetchMock = vi.fn<typeof fetch>(async () => jsonResponse(200, {}));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await api.get('/api/bookings');
-    await api.post('/api/auth/login', {}, { anonymous: true });
-
-    const authedHeaders = fetchMock.mock.calls[0][1]?.headers as Record<string, string>;
-    const anonHeaders = fetchMock.mock.calls[1][1]?.headers as Record<string, string>;
-    expect(authedHeaders.Authorization).toBe('Bearer a.b.c');
-    expect(anonHeaders.Authorization).toBeUndefined();
-  });
-
-  it('clears the session and notifies once on a 401', async () => {
-    session.setToken('a.b.c');
+  it('clears cached identity and notifies once on a 401', async () => {
+    session.set({ subject: 'a@b.com', roles: ['ROLE_USER'] });
     const onUnauthenticated = vi.fn();
     setUnauthenticatedHandler(onUnauthenticated);
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(401, { message: 'Authentication required' })));
 
     await expect(api.get('/api/bookings')).rejects.toBeInstanceOf(ApiError);
 
-    expect(session.token()).toBeNull();
+    expect(session.current()).toBeNull();
     expect(onUnauthenticated).toHaveBeenCalledTimes(1);
   });
 

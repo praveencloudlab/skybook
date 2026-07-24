@@ -1,5 +1,5 @@
 import { api } from './client';
-import { session } from '../lib/session';
+import { session, type CurrentUser } from '../lib/session';
 
 /**
  * Auth surface (FRONTEND_MODULE.md §4).
@@ -43,30 +43,65 @@ export function passwordPolicyMet(password: string): boolean {
 export const authApi = {
   /** Returns the server's plain-text confirmation ("User registered successfully"). */
   async register(request: RegisterRequest): Promise<string> {
-    return api.post<string>('/api/auth/register', request, { anonymous: true });
+    return api.post<string>('/api/auth/register', request);
   },
 
   /**
-   * Sign in and store the session.
+   * Sign in.
    *
-   * The response body is the RAW JWT, not JSON (§1.2) - handled centrally in the
-   * client's body reader, which is why nothing special is needed here.
+   * The response body still carries the raw JWT (§1.2) - we deliberately ignore
+   * it. The credential that matters is the httpOnly cookie the server set on
+   * this response, which the browser will attach to subsequent requests without
+   * this code ever seeing it. Reading the body token here would re-introduce
+   * exactly the exposure the cookie exists to remove.
+   *
+   * Identity comes from the server afterwards, not from decoding anything.
    */
-  async login(request: LoginRequest): Promise<string> {
-    const token = await api.post<string>('/api/auth/login', request, { anonymous: true });
-    const trimmed = typeof token === 'string' ? token.trim() : '';
-    if (!trimmed.includes('.')) {
-      // Fail loudly rather than storing junk and 401-ing on every later call.
-      throw new Error('Login did not return a token');
-    }
-    session.setToken(trimmed);
-    return trimmed;
+  async login(request: LoginRequest): Promise<CurrentUser> {
+    await api.post<string>('/api/auth/login', request);
+    return authApi.me();
   },
 
-  logout(): void {
-    // Purely client-side: there is no server-side revocation to call (deferred,
-    // security module §14). The token stays technically valid until it expires -
-    // which is precisely why it lives in sessionStorage and not on disk.
-    session.clear();
+  /** Who the server says we are. Also how a returning visitor is recognised. */
+  async me(): Promise<CurrentUser> {
+    const user = await api.get<CurrentUser>('/api/auth/me');
+    session.set(user);
+    return user;
+  },
+
+  /**
+   * Sign out.
+   *
+   * Necessarily a server call: the cookie is httpOnly, so the browser cannot
+   * delete it itself. The local clear afterwards is only about UI state.
+   *
+   * This ends the BROWSER session; it does not revoke the token (there is no
+   * revocation list yet - security §14), so a copy captured elsewhere would stay
+   * valid until it expires.
+   */
+  async logout(): Promise<void> {
+    try {
+      await api.post<void>('/api/auth/logout');
+    } finally {
+      // Clear regardless: if the call failed, the user still asked to sign out,
+      // and leaving the UI signed-in would be worse than a stale cookie.
+      session.clear();
+    }
+  },
+
+  /**
+   * Establish session state on first load.
+   *
+   * Returning visitors arrive with a valid cookie and no client state, so the
+   * app has to ask. A 401 here is the normal "not signed in" answer, not an
+   * error worth surfacing.
+   */
+  async restore(): Promise<CurrentUser | null> {
+    try {
+      return await authApi.me();
+    } catch {
+      session.set(null);
+      return null;
+    }
   },
 };
