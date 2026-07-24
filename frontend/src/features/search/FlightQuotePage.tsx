@@ -21,7 +21,15 @@ export function FlightQuotePage({
 }: {
   flight: Flight;
   onBack: () => void;
-  onChoose?: (choice: { cabin: TravelClass; fare: FareType }) => void;
+  // Carries the PRICE, not just the labels: the seat screen shows a running
+  // total, and re-deriving the fare there would mean a second quote call that
+  // could disagree with the one the passenger actually clicked.
+  onChoose?: (choice: {
+    cabin: TravelClass;
+    fare: FareType;
+    baseFare: number;
+    currency: string;
+  }) => void;
 }) {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -77,7 +85,15 @@ export function FlightQuotePage({
         ) : quote ? (
           <FareTable
             quote={quote}
-            onSelect={onChoose ? (cabin, fare) => onChoose({ cabin, fare }) : undefined}
+            onSelect={
+              onChoose
+                ? (cabin, fare) => {
+                    const chosen = quote.cabins.find((c) => c.travelClass === cabin);
+                    const baseFare = Number(chosen?.baseFares[fare] ?? 0);
+                    onChoose({ cabin, fare, baseFare, currency: quote.currency });
+                  }
+                : undefined
+            }
           />
         ) : null}
 

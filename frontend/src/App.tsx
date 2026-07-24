@@ -16,6 +16,8 @@ import { RegisterPage } from './features/auth/RegisterPage';
 import { SignInPage } from './features/auth/SignInPage';
 import { SearchPage } from './features/search/SearchPage';
 import { FlightQuotePage } from './features/search/FlightQuotePage';
+import { SeatSelectionPage } from './features/seats/SeatSelectionPage';
+import type { FareType, TravelClass } from './api/quotes';
 import type { Flight } from './api/flights';
 import { session } from './lib/session';
 
@@ -105,25 +107,48 @@ function RequireSession({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function HomePage() {
-  // Kept in local state rather than a route: the chosen flight is a step within
-  // one search, and a /flights/:id route would need to re-fetch the flight (and
-  // lose the results behind it) on every back-navigation.
-  const [selected, setSelected] = useState<Flight | null>(null);
+/** What the passenger has chosen so far, as they move through the journey. */
+interface FareChoice {
+  cabin: TravelClass;
+  fare: FareType;
+  baseFare: number;
+  currency: string;
+}
 
-  if (selected) {
+function HomePage() {
+  // Kept in local state rather than routes: these are steps within one search,
+  // and a /flights/:id route would re-fetch (and lose the results behind it) on
+  // every back-navigation.
+  const [flight, setFlight] = useState<Flight | null>(null);
+  const [choice, setChoice] = useState<FareChoice | null>(null);
+
+  if (flight && choice) {
     return (
-      <FlightQuotePage
-        flight={selected}
-        onBack={() => setSelected(null)}
-        onChoose={() => {
-          // Passenger details and seat selection land in steps 8-9.
+      <SeatSelectionPage
+        flight={flight}
+        cabin={choice.cabin}
+        fare={choice.fare}
+        baseFare={choice.baseFare}
+        currency={choice.currency}
+        onBack={() => setChoice(null)}
+        onContinue={() => {
+          // Passenger details and payment land in steps 9-10.
         }}
       />
     );
   }
 
-  return <SearchPage onSelectFlight={setSelected} />;
+  if (flight) {
+    return (
+      <FlightQuotePage
+        flight={flight}
+        onBack={() => setFlight(null)}
+        onChoose={setChoice}
+      />
+    );
+  }
+
+  return <SearchPage onSelectFlight={setFlight} />;
 }
 
 export default function App() {
