@@ -50,6 +50,9 @@ public interface BookingService {
 
     List<BookingResponse> getAllBookings();
 
+    /** Bookings owned by one authenticated subject, newest first (§4.2). */
+    List<BookingResponse> getBookingsForOwner(String ownerSubject);
+
     List<BookingResponse> searchBookings(BookingSearchRequest criteria);
 
     /** Back-office override - simulates payment success directly. The normal
