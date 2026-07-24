@@ -1,8 +1,18 @@
 {
   "info": {
     "name": "SkyBook Backend",
-    "description": "End-to-end requests for the SkyBook microservices. Flow: pick a flight (Flights folder) -> create + confirm a booking (Bookings) -> optionally exercise seat inventory (Inventory & Reservations). Create Booking auto-saves {{bookingId}} and {{pnr}}; inventory requests auto-save {{aircraftId}}. Payments folder: run Bookings first (needs {{bookingId}}); the consumer auto-creates the payment, or use 1b for manual creation. Simulated gateway: amounts ending .13 decline authorization, .31 fail capture.",
+    "description": "Manual/demo requests for the SkyBook microservices.\n\nREAD FIRST — two things changed under this collection:\n1. EVERYTHING GOES THROUGH THE GATEWAY (http://localhost:8080). The per-service ports (8082/8083/8084/8086) are no longer published to the host at all — the security branch made every internal service, Postgres and Kafka expose:-only. The *_url variables all point at the gateway now.\n2. EVERY REQUEST NEEDS A TOKEN. Run Auth > Login first; it saves {{token}}, which the collection sends as a bearer token on every request. Without it you get 401.\n\nSome requests are ADMIN-only and will 403 for an ordinary account: creating flights/aircraft/inventory, listing all bookings, the refund ledger, and the gate operations (open window, board, assign gate, manifests). ADMIN cannot be granted through any API — auth-service promotes the address in SKYBOOK_BOOTSTRAP_ADMIN_EMAIL once, at startup.\n\nFlow: Login -> pick a flight (Flights) -> create a booking (Bookings) -> pay (Payments) -> check in and board (Check-in & Boarding). Create Booking auto-saves {{bookingId}} and {{pnr}}; inventory requests auto-save {{aircraftId}}; check-in requests auto-save {{checkInId}}. The payment is auto-created by a Kafka consumer, so it appears a moment after the booking. Simulated gateway: amounts ending .13 decline authorization, .31 fail capture.\n\nThis collection is a DEMO artifact, not the certification suite — the executable source of truth is backend/e2e-tests (see E2E_CERTIFICATION_MODULE.md).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
   },
   "variable": [
     {
@@ -10,16 +20,28 @@
       "value": "http://localhost:8080"
     },
     {
+      "key": "token",
+      "value": ""
+    },
+    {
       "key": "flight_url",
-      "value": "http://localhost:8082"
+      "value": "http://localhost:8080"
     },
     {
       "key": "booking_url",
-      "value": "http://localhost:8083"
+      "value": "http://localhost:8080"
     },
     {
       "key": "inventory_url",
-      "value": "http://localhost:8084"
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "checkin_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "checkInId",
+      "value": ""
     },
     {
       "key": "flightId",
@@ -39,7 +61,7 @@
     },
     {
       "key": "payment_url",
-      "value": "http://localhost:8086"
+      "value": "http://localhost:8080"
     },
     {
       "key": "paymentId",
@@ -357,14 +379,33 @@
               }
             ],
             "url": "{{auth_url}}/api/auth/register",
+            "description": "Registration takes fullName (not firstName/lastName) and enforces a password policy: 12+ chars with upper, lower, digit and a symbol.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"praveen.somireddy@gmail.com\",\n  \"password\": \"ChangeMe123!\",\n  \"firstName\": \"Praveen\",\n  \"lastName\": \"Somireddy\"\n}"
+              "raw": "{\n  \"fullName\": \"Praveen Somireddy\",\n  \"email\": \"praveen.somireddy@gmail.com\",\n  \"password\": \"ChangeMe123!\"\n}"
             }
           }
         },
         {
           "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// The login response is the raw JWT (not JSON), so save it verbatim.",
+                  "// Every other request in this collection inherits it as a bearer token.",
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('token', pm.response.text().trim());",
+                  "    console.log('token saved');",
+                  "} else {",
+                  "    console.log('login failed: ' + pm.response.code + ' ' + pm.response.text());",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -374,6 +415,7 @@
               }
             ],
             "url": "{{auth_url}}/api/auth/login",
+            "description": "Run this FIRST. Saves {{token}}; without it every other request returns 401.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"email\": \"praveen.somireddy@gmail.com\",\n  \"password\": \"ChangeMe123!\"\n}"
@@ -533,6 +575,74 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Check-in & Boarding",
+      "description": "Runs after a booking is CONFIRMED (i.e. after Payments capture). checkin-service creates the records itself by consuming the confirmed-booking event, so they appear a moment later - there is nothing to POST. Check-in and the boarding pass are passenger self-service; opening the window, assigning a gate and boarding are ADMIN (gate) operations and will 403 for an ordinary account.",
+      "item": [
+        {
+          "name": "1. Check-ins for my booking (auto-created by consumer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const list = pm.response.json();",
+                  "if (Array.isArray(list) && list.length > 0) {",
+                  "    pm.collectionVariables.set('checkInId', list[0].id);",
+                  "} else {",
+                  "    console.log('none yet - the booking must be CONFIRMED first, and the event takes a moment');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": "{{checkin_url}}/api/checkins/booking/{{bookingId}}",
+            "description": "Saves {{checkInId}}. Empty means the booking is not CONFIRMED yet."
+          }
+        },
+        {
+          "name": "2. Check in (passenger self-service)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{checkin_url}}/api/checkins/{{checkInId}}/checkin",
+            "description": "Owner-only. 409 'does not open until ...' means the check-in window has not opened - it opens 24h before departure."
+          }
+        },
+        {
+          "name": "3. My boarding pass",
+          "request": {
+            "method": "GET",
+            "url": "{{checkin_url}}/api/boarding-passes/checkin/{{checkInId}}",
+            "description": "Owner-only. The 'token' field is the signature that makes the pass forgery-resistant."
+          }
+        },
+        {
+          "name": "4. Board the passenger (ADMIN / gate)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{checkin_url}}/api/checkins/{{checkInId}}/board",
+            "description": "ADMIN only - a passenger cannot board themselves. Boarding opens 45 minutes before departure."
+          }
+        },
+        {
+          "name": "Baggage for a check-in",
+          "request": {
+            "method": "GET",
+            "url": "{{checkin_url}}/api/baggage/checkin/{{checkInId}}"
+          }
+        },
+        {
+          "name": "Flight manifest (ADMIN)",
+          "request": {
+            "method": "GET",
+            "url": "{{checkin_url}}/api/manifests/{{flightId}}"
+          }
         }
       ]
     }
