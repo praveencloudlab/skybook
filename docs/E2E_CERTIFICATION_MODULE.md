@@ -198,11 +198,19 @@ byte-identical to production; only the clock differs. Rejected: an ADMIN
 manipulation (reaches behind the API, contradicting §1.3's gateway-only rule).
 **The override file must be e2e-only and never merged into the default compose.**
 
-**10.2 — Notifications: MailHog.** Added to compose as the SMTP sink; the suite
-asserts a **real captured email** via MailHog's HTTP API. This upgrades the
-assertion from "an event was published" to "an email actually arrived", which is
-what the customer journey actually claims. Notification-service's mail host/port
-point at MailHog under the e2e override.
+**10.2 — Notifications: an SMTP sink with an HTTP assertion API. Implemented with
+Mailpit.** Added to compose as the sink; the suite asserts a **real captured
+email** via its HTTP API. This upgrades the assertion from "an event was
+published" to "an email actually arrived", which is what the customer journey
+actually claims. Notification-service's mail host/port point at the sink under
+the e2e override.
+
+> **Implementation substitution (approved).** This decision originally named
+> MailHog. The requirement is architectural — SMTP capture plus an HTTP API to
+> assert delivery — not a binding to one product. Mailpit fulfils exactly that
+> role and is actively maintained, whereas MailHog has been unmaintained since
+> 2020. Recorded here as a substitution, **not** a design violation; SkyBook is
+> not coupled to either tool beyond the e2e override.
 
 **10.3 — CI: nightly + manual dispatch.** A separate, non-blocking `e2e.yml`
 (`schedule` + `workflow_dispatch`). PR feedback stays fast; the suite still gives
@@ -242,6 +250,26 @@ Each step ends with something demonstrably working, in the project's usual style
 13. **`e2e.yml`** nightly + dispatch workflow.
 14. **Doc → Implemented + Implementation Notes**, recording what the first real
     full run exposed.
+
+---
+
+# 10a. Accepted Coverage Gaps → Future Certification Cases
+
+The e2e override widens two real production controls so the journey is testable
+at all (§10.1). The consequence is accepted, explicit, and **not** a defect: the
+suite certifies the customer journey under controlled timing and rate limits, and
+does not pretend to certify the boundaries it deliberately moved.
+
+Both controls remain **enabled in the product**. Each earns its own dedicated
+certification case, run against the **default configuration**:
+
+| Future case | What it must assert | Why it cannot live in this suite |
+|---|---|---|
+| **Check-in / boarding boundary** | check-in before the window opens → 409; after it closes → 409; boarding only inside its own window | The two windows never overlap, so one run cannot both check in and board a flight (§14.2) |
+| **Gateway rate limiter** | sustained requests beyond the configured rate → 429, and recovery after the window | The suite legitimately exceeds the limit while polling async state, so it must run with the limiter raised (§14.3) |
+
+Neither blocks this branch: the override is explicit, version-controlled, and its
+trade-offs are stated in `docker-compose.e2e.yml` itself.
 
 ---
 
