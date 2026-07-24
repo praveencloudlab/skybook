@@ -1,43 +1,61 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { decodeClaims, isExpired, session } from './session';
-
-/** Build an unsigned JWT-shaped token. Signature is irrelevant - we never verify. */
-function tokenWith(payload: Record<string, unknown>): string {
-  const encode = (obj: unknown) =>
-    btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  return `${encode({ alg: 'RS256' })}.${encode(payload)}.signature`;
-}
+import { session } from './session';
 
 describe('session', () => {
-  beforeEach(() => sessionStorage.clear());
+  beforeEach(() => {
+    sessionStorage.clear();
+    session.clear();
+  });
 
-  it('stores the token in sessionStorage and never writes it to disk', () => {
-    // §10.1: a 60-minute token with no server-side revocation must not persist
-    // to disk, so a shared machine leaves no live session behind.
-    //
-    // Asserted by spying rather than by reading localStorage, because Node 26
-    // ships its OWN experimental localStorage that shadows jsdom's and is
-    // undefined unless --localstorage-file is passed. Spying also states the
-    // invariant more directly: we never CALL localStorage.setItem at all.
-    const setItem = vi.fn();
-    vi.stubGlobal('localStorage', { setItem, getItem: vi.fn(() => null), removeItem: vi.fn() });
+  it('never stores a credential anywhere', () => {
+    // The whole point of §10.1: the credential is an httpOnly cookie the browser
+    // holds and JS cannot read. Asserted by spying, so this fails loudly if
+    // anyone reintroduces token storage - and because Node 26 ships its own
+    // experimental localStorage that shadows jsdom's and is undefined without
+    // --localstorage-file, making a direct read unreliable here.
+    const localSet = vi.fn();
+    const sessionSet = vi.spyOn(Storage.prototype, 'setItem');
+    vi.stubGlobal('localStorage', { setItem: localSet, getItem: () => null, removeItem: vi.fn() });
 
-    session.setToken('a.b.c');
+    session.set({ subject: 'a@b.com', roles: ['ROLE_USER'] });
 
-    expect(sessionStorage.getItem('skybook.token')).toBe('a.b.c');
-    expect(setItem).not.toHaveBeenCalled();
+    expect(localSet).not.toHaveBeenCalled();
+    // The only thing we ever persist is a return path - never a credential.
+    for (const call of sessionSet.mock.calls) {
+      expect(call[0]).toBe('skybook.returnTo');
+    }
 
+    sessionSet.mockRestore();
     vi.unstubAllGlobals();
   });
 
-  it('notifies subscribers when the token changes', () => {
+  it('distinguishes "not yet asked" from "signed out"', async () => {
+    // undefined vs null is load-bearing: it stops the UI flashing a signed-out
+    // header while /me is still in flight for a returning visitor.
+    //
+    // Loaded fresh, because "not yet asked" is the module's INITIAL state and
+    // any earlier set()/clear() in this file would have already resolved it -
+    // testing it on the shared instance would only prove the last call won.
+    vi.resetModules();
+    const { session: fresh } = await import('./session');
+
+    expect(fresh.current()).toBeUndefined();
+
+    fresh.set(null);
+    expect(fresh.current()).toBeNull();
+
+    fresh.set({ subject: 'a@b.com', roles: ['ROLE_USER'] });
+    expect(fresh.current()).toEqual({ subject: 'a@b.com', roles: ['ROLE_USER'] });
+  });
+
+  it('notifies subscribers when identity changes', () => {
     const listener = vi.fn();
     const unsubscribe = session.subscribe(listener);
 
-    session.setToken('a.b.c');
+    session.set({ subject: 'a@b.com', roles: ['ROLE_USER'] });
     session.clear();
     unsubscribe();
-    session.setToken('d.e.f');
+    session.set({ subject: 'c@d.com', roles: ['ROLE_USER'] });
 
     expect(listener).toHaveBeenCalledTimes(2); // not 3 - unsubscribed before the last
   });
@@ -48,26 +66,5 @@ describe('session', () => {
     expect(session.takeReturnTo()).toBe('/bookings/7');
     // Consumed - otherwise a later sign-in would bounce somewhere unexpected.
     expect(session.takeReturnTo()).toBeNull();
-  });
-
-  it('decodes claims from a base64url payload', () => {
-    const claims = decodeClaims(tokenWith({ sub: 'a@b.com', roles: ['ROLE_USER'], exp: 123 }));
-
-    expect(claims).toEqual({ sub: 'a@b.com', roles: ['ROLE_USER'], exp: 123 });
-  });
-
-  it('returns null for a malformed token instead of throwing', () => {
-    // A parse error here must not take a screen down.
-    expect(decodeClaims('not-a-jwt')).toBeNull();
-    expect(decodeClaims('a.!!!not-base64!!!.c')).toBeNull();
-  });
-
-  it('detects expiry, treating a missing exp as not expired', () => {
-    const past = Math.floor(Date.now() / 1000) - 60;
-    const future = Math.floor(Date.now() / 1000) + 3600;
-
-    expect(isExpired({ sub: 'a', roles: [], exp: past })).toBe(true);
-    expect(isExpired({ sub: 'a', roles: [], exp: future })).toBe(false);
-    expect(isExpired({ sub: 'a', roles: [] })).toBe(false);
   });
 });

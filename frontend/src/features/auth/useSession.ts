@@ -1,49 +1,54 @@
 import { useSyncExternalStore } from 'react';
-import { decodeClaims, isExpired, session, type TokenClaims } from '../../lib/session';
+import { session, type CurrentUser } from '../../lib/session';
 
 /**
  * Session state for components (FRONTEND_MODULE.md §4).
  *
- * `useSyncExternalStore` rather than a context + effect: the token lives in
- * sessionStorage and is mutated from outside React (the API client clears it on
- * a 401). This keeps every component honest about that single source of truth
- * instead of caching a stale copy in state.
+ * `useSyncExternalStore` rather than context + effect: identity is mutated from
+ * outside React (the API client clears it on a 401), so components read one
+ * source of truth instead of caching a copy that can go stale.
  */
 export interface SessionState {
+  /** True once we know nobody is signed in, or who is. */
+  resolved: boolean;
   signedIn: boolean;
-  claims: TokenClaims | null;
-  /** The token subject - the normalised email, which is also the owner key. */
+  user: CurrentUser | null;
+  /** Token subject - the normalised email, which is the ownership key. */
   subject: string | null;
   isAdmin: boolean;
 }
 
-function snapshot(): string {
-  return session.token() ?? '';
+function subscribe(listener: () => void): () => void {
+  return session.subscribe(listener);
+}
+
+function snapshot(): CurrentUser | null | undefined {
+  return session.current();
 }
 
 export function useSession(): SessionState {
-  const token = useSyncExternalStore(session.subscribe, snapshot, () => '');
+  const user = useSyncExternalStore(subscribe, snapshot, () => undefined);
 
-  if (token === '') {
-    return { signedIn: false, claims: null, subject: null, isAdmin: false };
+  // undefined means "we haven't asked yet". Distinguished from null so the UI
+  // can hold off rather than flashing a signed-out header for one frame while
+  // the /me call is in flight - a returning visitor with a valid cookie would
+  // otherwise see themselves get logged out and back in on every page load.
+  if (user === undefined) {
+    return { resolved: false, signedIn: false, user: null, subject: null, isAdmin: false };
   }
 
-  const claims = decodeClaims(token);
-
-  // An expired token is treated as signed-out so the UI stops offering actions
-  // that are certain to 401. The server would reject it anyway - this just
-  // fails earlier and more clearly.
-  if (!claims || isExpired(claims)) {
-    return { signedIn: false, claims: null, subject: null, isAdmin: false };
+  if (user === null) {
+    return { resolved: true, signedIn: false, user: null, subject: null, isAdmin: false };
   }
 
   return {
+    resolved: true,
     signedIn: true,
-    claims,
-    subject: claims.sub,
+    user,
+    subject: user.subject,
     // Cosmetic only: hides UI a passenger cannot use. Authorization is enforced
     // server-side, and the UI must never be what stands between a user and an
-    // action - see §4.
-    isAdmin: claims.roles.includes('ROLE_ADMIN'),
+    // action (§4).
+    isAdmin: user.roles.includes('ROLE_ADMIN'),
   };
 }
