@@ -13,10 +13,15 @@ import type { BoardingPass } from '../../api/checkin';
  */
 export function BoardingPassCard({ pass }: { pass: BoardingPass }) {
   return (
-    <div className="overflow-hidden rounded border border-brand-200 bg-brand-50/40">
-      <div className="flex items-center justify-between border-b border-brand-200 bg-brand-600 px-4 py-2 text-white">
-        <span className="text-xs font-semibold tracking-widest uppercase">Boarding pass</span>
-        <span className="font-mono text-xs">{pass.boardingPassNumber}</span>
+    <div className="notched overflow-hidden rounded-lg bg-white shadow-[0_1px_3px_rgb(15_23_42/0.12)] ring-1 ring-brand-200">
+      <div className="flex items-center justify-between bg-gradient-to-r from-brand-800 to-brand-600 px-4 py-2.5 text-white">
+        <span className="flex items-center gap-2 text-xs font-semibold tracking-widest uppercase">
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-white/90" aria-hidden="true">
+            <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
+          </svg>
+          Boarding pass
+        </span>
+        <span className="font-mono text-xs text-white/80">{pass.boardingPassNumber}</span>
       </div>
 
       <div className="grid grid-cols-3 gap-4 px-4 py-4">
@@ -42,7 +47,7 @@ export function BoardingPassCard({ pass }: { pass: BoardingPass }) {
       </div>
 
       {pass.barcodeToken ? (
-        <div className="border-t border-brand-200 px-4 py-3">
+        <div className="border-t border-dashed border-slate-300 bg-slate-50/60 px-4 py-3">
           {/*
             A visual stand-in for a scannable code: the signed token rendered as
             bars. Deterministic from the token, so it looks like a real barcode

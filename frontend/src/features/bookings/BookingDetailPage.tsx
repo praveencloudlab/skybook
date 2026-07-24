@@ -149,7 +149,7 @@ function CheckInRow({
   const closes = checkInClosesAt(record.departureTime);
 
   return (
-    <div className="rounded border border-slate-200 bg-white">
+    <div className="card">
       <div className="flex items-center justify-between gap-4 px-4 py-3">
         <div>
           <p className="font-medium text-slate-900">{record.passengerName}</p>

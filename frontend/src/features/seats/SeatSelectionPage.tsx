@@ -83,7 +83,7 @@ export function SeatSelectionPage({
         <ErrorAlert error={error} />
 
         {busy ? (
-          <p className="rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">
+          <p className="card px-3 py-2 text-sm text-slate-500">
             Loading the cabin…
           </p>
         ) : map ? (
@@ -97,7 +97,7 @@ export function SeatSelectionPage({
             />
 
             {/* The running total, so a surcharge is never a surprise later. */}
-            <dl className="rounded border border-slate-200 bg-white text-sm">
+            <dl className="card text-sm">
               <div className="flex justify-between px-4 py-2">
                 <dt className="text-slate-600">Base fare</dt>
                 <dd className="tabular text-slate-900">{money(baseFare, currency)}</dd>

@@ -47,7 +47,7 @@ export function ConfirmationPage({
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
-      <div className="rounded border border-slate-200 bg-white p-6">
+      <div className="card p-6">
         <p className="text-sm font-medium text-emerald-700">Payment received</p>
 
         <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">

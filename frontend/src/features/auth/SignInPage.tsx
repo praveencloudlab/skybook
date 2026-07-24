@@ -4,6 +4,7 @@ import { authApi } from '../../api/auth';
 import { Button } from '../../components/Button';
 import { ErrorAlert } from '../../components/Alert';
 import { Field } from '../../components/Field';
+import { AuthLayout } from './AuthLayout';
 import { ApiError } from '../../lib/errors';
 import { session } from '../../lib/session';
 
@@ -43,16 +44,18 @@ export function SignInPage() {
   }
 
   return (
-    <main className="mx-auto max-w-md px-6 py-12">
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Sign in</h1>
-      <p className="mt-1 text-sm text-slate-600">
-        New here?{' '}
-        <Link to="/register" className="font-medium text-brand-700 hover:underline">
-          Create an account
-        </Link>
-      </p>
-
-      <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-5">
+    <AuthLayout
+      title="Sign in"
+      subtitle={
+        <>
+          New here?{' '}
+          <Link to="/register" className="font-medium text-brand-700 hover:underline">
+            Create an account
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
         {/*
           The server returns an identical 401 for an unknown email and a wrong
           password, on purpose - telling them apart would let anyone enumerate
@@ -82,6 +85,6 @@ export function SignInPage() {
           Sign in
         </Button>
       </form>
-    </main>
+    </AuthLayout>
   );
 }

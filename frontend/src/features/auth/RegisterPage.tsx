@@ -4,6 +4,7 @@ import { authApi, PASSWORD_RULES, passwordPolicyMet } from '../../api/auth';
 import { Button } from '../../components/Button';
 import { ErrorAlert } from '../../components/Alert';
 import { Field } from '../../components/Field';
+import { AuthLayout } from './AuthLayout';
 import { ApiError, fieldErrors } from '../../lib/errors';
 
 /**
@@ -52,16 +53,18 @@ export function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto max-w-md px-6 py-12">
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Create your account</h1>
-      <p className="mt-1 text-sm text-slate-600">
-        Already have one?{' '}
-        <Link to="/sign-in" className="font-medium text-brand-700 hover:underline">
-          Sign in
-        </Link>
-      </p>
-
-      <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-5">
+    <AuthLayout
+      title="Create your account"
+      subtitle={
+        <>
+          Already have one?{' '}
+          <Link to="/sign-in" className="font-medium text-brand-700 hover:underline">
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <form onSubmit={handleSubmit} noValidate className="space-y-5">
         <ErrorAlert error={error} />
 
         <Field
@@ -112,6 +115,6 @@ export function RegisterPage() {
           Create account
         </Button>
       </form>
-    </main>
+    </AuthLayout>
   );
 }

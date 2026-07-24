@@ -93,7 +93,7 @@ export function PassengerForm({
           id="title"
           value={draft.title}
           onChange={(e) => set({ title: e.target.value })}
-          className="w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/40"
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
         >
           {['Mr', 'Ms', 'Mrs', 'Dr'].map((title) => (
             <option key={title}>{title}</option>
@@ -138,7 +138,7 @@ export function PassengerForm({
           id="nationality"
           value={draft.nationality}
           onChange={(e) => set({ nationality: e.target.value })}
-          className="w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/40"
+          className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
         >
           {NATIONALITIES.map((code) => (
             <option key={code} value={code}>
