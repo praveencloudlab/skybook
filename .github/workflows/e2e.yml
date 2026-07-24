@@ -1,0 +1,109 @@
+name: E2E Certification
+
+# Nightly + on demand, NOT on every PR (E2E_CERTIFICATION_MODULE.md §10.3).
+# The suite needs the whole fleet standing up; paying that on every pull request
+# would slow the feedback loop that developers actually rely on, for a signal
+# whose value is pre-release confidence rather than per-commit gating.
+on:
+  schedule:
+    - cron: '0 2 * * *'      # 02:00 UTC daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    name: Certify the customer journey
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # A dedicated ADMIN for CI. Promotion happens once at auth-service boot
+      # from SKYBOOK_BOOTSTRAP_ADMIN_EMAIL, so the account is registered first
+      # and the service recreated after (see the steps below).
+      E2E_ADMIN_EMAIL: ci-admin@skybook.com
+      E2E_ADMIN_PASSWORD: CiAdminPassw0rd!
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Generate an RSA keypair for this run
+        run: |
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out private.pem
+          openssl rsa -in private.pem -pubout -out public.pem
+          {
+            echo "JWT_PRIVATE_KEY=$(grep -v 'PRIVATE KEY' private.pem | tr -d '\n')"
+            echo "JWT_PUBLIC_KEY=$(grep -v 'PUBLIC KEY' public.pem | tr -d '\n')"
+            echo "POSTGRES_PASSWORD=ci-postgres-$RANDOM"
+            echo "MAIL_USERNAME=ci"
+            echo "MAIL_PASSWORD=ci"
+            echo "CHECKIN_BOARDING_PASS_KEY=ci-boarding-pass-key-32-bytes-minimum-ok"
+            echo "GRAFANA_ADMIN_PASSWORD=ci-grafana-$RANDOM"
+            echo "BOOKING_SERVICE_CLIENT_SECRET=ci-booking-$RANDOM"
+            echo "CHECKIN_SERVICE_CLIENT_SECRET=ci-checkin-$RANDOM"
+            echo "PAYMENT_SERVICE_CLIENT_SECRET=ci-payment-$RANDOM"
+            echo "INVENTORY_SERVICE_CLIENT_SECRET=ci-inventory-$RANDOM"
+          } > .env
+          rm -f private.pem public.pem
+
+      - name: Start the fleet (with e2e overrides)
+        run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d --build
+
+      - name: Wait for health
+        run: |
+          for _ in $(seq 1 60); do
+            starting=$(docker compose ps --format '{{.Status}}' | grep -c 'starting' || true)
+            [ "$starting" = "0" ] && break
+            sleep 5
+          done
+          docker compose ps --format '{{.Name}}\t{{.Status}}' | sort
+
+      - name: Seed reference data
+        run: ./scripts/seed/seed.sh
+
+      # ADMIN cannot be granted through any API, so it is arranged here: register
+      # the account, point the bootstrap variable at it, recreate auth-service.
+      - name: Bootstrap the CI admin
+        run: |
+          curl -sS -X POST http://localhost:8080/api/auth/register \
+            -H 'Content-Type: application/json' \
+            -d "{\"fullName\":\"CI Admin\",\"email\":\"${E2E_ADMIN_EMAIL}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}" \
+            || echo "(already registered)"
+          echo "SKYBOOK_BOOTSTRAP_ADMIN_EMAIL=${E2E_ADMIN_EMAIL}" >> .env
+          docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d auth-service
+          for _ in $(seq 1 30); do
+            docker compose ps auth-service --format '{{.Status}}' | grep -q healthy && break
+            sleep 4
+          done
+
+      - name: Run the certification suite
+        working-directory: backend
+        run: |
+          mvn -B -pl e2e-tests -Pe2e verify \
+            "-De2e.admin.email=${E2E_ADMIN_EMAIL}" \
+            "-De2e.admin.password=${E2E_ADMIN_PASSWORD}"
+
+      - name: Upload certification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-certification-reports
+          path: backend/e2e-tests/target/failsafe-reports/
+          retention-days: 14
+
+      # Container logs are the only way to diagnose a failure after the fact,
+      # since the fleet is gone once the runner is reclaimed.
+      - name: Dump service logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.e2e.yml down -v

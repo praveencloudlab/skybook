@@ -51,6 +51,11 @@
         <module>checkin-service</module>
         <module>api-gateway</module>
 
+        <!-- End-to-end certification suite (E2E_CERTIFICATION_MODULE.md). Always a
+             module so it compiles with every build (catching rot), but its tests
+             are skipped unless `-Pe2e` - they need a running compose fleet. -->
+        <module>e2e-tests</module>
+
     </modules>
 
     <dependencyManagement>
