@@ -175,6 +175,19 @@ public final class Journey {
         return last[0];
     }
 
+    /** Polls a call until it returns the given status (e.g. 201 for a create). */
+    public static Response awaitStatus(Callable<Response> call, int expected, String what) {
+        Response[] last = new Response[1];
+        await(what)
+                .atMost(ASYNC_TIMEOUT)
+                .pollInterval(POLL)
+                .until(() -> {
+                    last[0] = call.call();
+                    return last[0].statusCode() == expected;
+                });
+        return last[0];
+    }
+
     /** Polls a call until it returns 200. */
     public static Response awaitResponse(Callable<Response> call, String what) {
         Response[] last = new Response[1];
