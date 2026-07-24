@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | A passenger-facing web client for the full customer journey — register/login → search → quote → seat selection → book → pay → check-in → boarding pass — talking to the API gateway and nothing else |
 | **Branch** | `feature/frontend` |
-| **Status** | 🔒 **FROZEN — approved.** All four §10 questions resolved. Implementation follows the §11 build order. |
+| **Status** | ✅ **Implemented and verified** — all 15 build-order steps complete on `feature/frontend`. The full passenger journey works against the live platform: register/login → search → fares → seat map → passenger details → payment → confirmation → my bookings → check-in → boarding pass. **Note §10.1 was reversed during implementation**: the frozen `sessionStorage` decision was replaced with an httpOnly session cookie after review; see §10.1 and §12. |
 | **Stack** | React + Vite + TypeScript, Tailwind CSS (approved) |
 | **Depends on** | Everything merged: dockerization, ci-cd, observability, resilience, seat-selection, security-hardening, e2e-certification |
 
@@ -314,3 +314,79 @@ Each step ends with something demonstrable, in the project's usual style.
     including losing a seat race.
 14. **Containerise + CI** — nginx image on port 3000, frontend-only workflow.
 15. **Doc → Implemented + Implementation Notes.**
+
+---
+
+# 12. Implementation Notes
+
+All 15 build-order steps landed on `feature/frontend`, each verified against the
+running fleet rather than against mocks. Below is an honest account of what the
+frozen design got wrong or under-specified, in the spirit of this project's
+other module post-mortems.
+
+**Verification.** `npm run lint`, `typecheck`, `test` (45) and `build` all pass;
+the containerised app was exercised end to end on `:3000` (SPA routes, cookie
+auth through nginx, live flight search); the full booking journey was driven
+against the real platform — booking `SBVHSR` CREATED → payment row appearing over
+Kafka → authorize/capture CAPTURED → booking CONFIRMED → seat `17B` auto-assigned
+free → check-in → boarding pass `BP-2026-7PDLVK`.
+
+**The big one: the design's own §10.1 decision was wrong, and was reversed.**
+The frozen doc chose `sessionStorage`. That is JS-readable, so any XSS — including
+one in a transitive dependency — could exfiltrate a 60-minute, *unrevocable*
+token and replay it elsewhere. The decision was revisited mid-build and replaced
+with an **httpOnly cookie**, which required backend work the design had not
+anticipated (§10.1 records the full ADR). Two consequences only became obvious
+once building it: with an httpOnly cookie the browser **cannot sign itself out**
+(logout has to be a server endpoint) and **cannot read its own claims** (hence
+`GET /api/auth/me`). Neither was in the design.
+
+**"My bookings" was not buildable as specified.** Screen 8 assumed a list
+endpoint; `GET /api/bookings` and `/search` are ADMIN-only, so a passenger got
+403 and could only fetch a booking whose PNR they already knew. It needed a new
+owner-scoped `GET /api/bookings/mine` in booking-service.
+
+**Things only the live platform revealed:**
+
+1. **`money()` hardcoded GBP.** The quote endpoint returns **USD** for the seeded
+   fares, so `$85.00` rendered as `£85.00` — a booking screen stating a false
+   price. Currency is now a parameter, taken from the server's response.
+2. **Check-in availability must come from the server.** I derived "too early"
+   from a hardcoded 24-hour window; the fleet, running the e2e overrides that
+   widen it, accepted a check-in the UI had disabled. The window is server
+   configuration, so the UI now gates on `CheckInStatus` (`NOT_OPEN`/`OPEN`/…)
+   and uses the times only to *explain*. The same test showed my `CheckInStatus`
+   type invented a `CLOSED` value the enum does not have.
+3. **The 400 body is one joined string** (`passengers: …, flightId: …,
+   contact.contactEmail: …`), unfit to show verbatim, and its **nested paths**
+   never matched the form's field names — so those messages silently vanished
+   until each was indexed under both the full path and its leaf.
+4. **Seat maps belong to the aircraft, not the flight.** `status` there means
+   "blocked/out of service"; per-flight occupancy comes from the reservations
+   endpoint. Reading the former as availability would have drawn every taken seat
+   as free.
+
+**Deliberately not hidden:** seat **holds** are not exposed by any endpoint, so a
+seat someone is mid-booking looks free and the booking call answers 409. The UI
+loses that race gracefully rather than pretending it cannot happen — the platform
+resolves it correctly, and the double-sell e2e case certifies that.
+
+**Container gotchas** (both invisible until it actually ran): a `tmpfs` mounts
+**root-owned**, so on a read-only rootfs non-root nginx had nowhere writable
+(`mkdir /var/cache/nginx/client_temp failed`), fixed with `mode=1777`; and the
+read-only rootfs stops nginx's entrypoint adding its IPv6 listener, so the
+healthcheck's `localhost` resolved to `::1` and was refused while the host got
+clean 200s — it now uses `127.0.0.1`.
+
+**Known gaps, stated plainly:**
+
+- **The cookie path is not covered by the e2e suite**, which authenticates with
+  `Authorization: Bearer`. It is covered by unit tests and live curl checks, but
+  the certification suite should gain a cookie case.
+- **No CSP** is set on the nginx image. A real policy needs writing against the
+  deployed asset set rather than guessing, and is the actual defence against the
+  XSS that motivated the cookie change in the first place.
+- **No browser-level e2e** (§7): `backend/e2e-tests` certifies the platform, and
+  adding Playwright now would duplicate it.
+- **Multi-passenger bookings** are modelled in the API but the checkout form
+  collects one passenger; the request shape already carries a list.
