@@ -3,13 +3,20 @@ package com.skybook.praveen.authservice.service;
 import com.skybook.praveen.authservice.dto.LoginRequest;
 import com.skybook.praveen.authservice.dto.RegisterRequest;
 import com.skybook.praveen.authservice.entity.User;
+import com.skybook.praveen.authservice.entity.UserRole;
+import com.skybook.praveen.authservice.exception.EmailAlreadyRegisteredException;
+import com.skybook.praveen.authservice.exception.InvalidCredentialsException;
 import com.skybook.praveen.authservice.producer.EmailEventProducer;
 import com.skybook.praveen.authservice.repository.UserRepository;
 import com.skybook.praveen.common.event.EmailEvent;
 import com.skybook.praveen.common.event.EmailType;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -20,19 +27,44 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
 
+    /**
+     * A precomputed hash the login path compares against when the user does not
+     * exist, so "unknown user" runs the same BCrypt work as "wrong password" and
+     * the two stay timing-indistinguishable (no user enumeration, §6).
+     */
+    private String dummyPasswordHash;
+
+    @PostConstruct
+    void initConstantTimeHash() {
+        this.dummyPasswordHash = passwordEncoder.encode("constant-time-placeholder");
+    }
+
     public String register(RegisterRequest request) {
 
-        if (userRepository.existsByEmail(request.email())) {
-            throw new RuntimeException("Email already registered");
+        // Normalize before every lookup/insert (SECURITY_HARDENING_MODULE.md §6)
+        // so Alice@X.com and alice@x.com are one account; the DB CHECK enforces
+        // it at the storage layer too.
+        String email = normalize(request.email());
+
+        if (userRepository.existsByEmail(email)) {
+            throw new EmailAlreadyRegisteredException();
         }
 
         User user = new User();
         user.setFullName(request.fullName());
         user.setPassword(passwordEncoder.encode(request.password()));
-       // user.setPassword(request.password());
-        user.setEmail(request.email());
+        user.setEmail(email);
+        user.setRole(UserRole.USER);
 
-        User savedUser = userRepository.save(user);
+        User savedUser;
+        try {
+            savedUser = userRepository.save(user);
+        } catch (DataIntegrityViolationException e) {
+            // Concurrent double-register: the existsByEmail pre-check passed but
+            // the unique index rejected the insert. Translate the race to the
+            // same generic 409 (§6).
+            throw new EmailAlreadyRegisteredException();
+        }
 
         EmailEvent emailEvent = EmailEvent.builder()
                 .to(savedUser.getEmail())
@@ -48,20 +80,23 @@ public class AuthService {
 
     public String login(LoginRequest request) {
 
-        User user = userRepository.findByEmail(request.email())
-                .orElseThrow(() -> new RuntimeException("Invalid email or password"));
+        String email = normalize(request.email());
 
-        boolean passwordMatches = passwordEncoder.matches(
-                request.password(),
-                user.getPassword()
-        );
+        User user = userRepository.findByEmail(email).orElse(null);
 
-        if (!passwordMatches) {
-            throw new RuntimeException("Invalid email or password");
+        // Run BCrypt in both branches (real hash, or the dummy for a missing
+        // user) so timing can't distinguish "no such user" from "wrong password".
+        String hashToCheck = (user != null) ? user.getPassword() : dummyPasswordHash;
+        boolean passwordMatches = passwordEncoder.matches(request.password(), hashToCheck);
+
+        if (user == null || !passwordMatches) {
+            throw new InvalidCredentialsException();
         }
 
-        String token = jwtService.generateToken(user.getEmail());
+        return jwtService.generateToken(user.getEmail(), user.getRole());
+    }
 
-        return token;
+    private String normalize(String email) {
+        return email == null ? null : email.trim().toLowerCase(Locale.ROOT);
     }
 }

@@ -120,6 +120,12 @@ public class CheckIn extends Auditable {
     @Column(name = "entitlement_currency", length = 3, updatable = false)
     private String entitlementCurrency;
 
+    // Ownership (SECURITY_HARDENING_MODULE.md §4.2): the booking owner's JWT
+    // subject, snapshotted from the CONFIRMED event. Nullable/immutable; legacy
+    // rows are null and reachable only by ADMIN/SERVICE.
+    @Column(name = "owner_subject", updatable = false)
+    private String ownerSubject;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 15)
     private CheckInStatus status;

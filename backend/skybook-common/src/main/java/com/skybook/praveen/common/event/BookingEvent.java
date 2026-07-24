@@ -85,4 +85,12 @@ public class BookingEvent {
 
     /** Payment status, e.g. "PAID" - null if no payment record yet */
     private String paymentStatus;
+
+    /**
+     * The booking owner's JWT subject (SECURITY_HARDENING_MODULE.md §4.2),
+     * captured at booking creation. Rides every event type (CREATED/CONFIRMED/
+     * CANCELLED) so payment-service and check-in-service can snapshot it and
+     * enforce object-level ownership. Null on legacy/pre-branch events.
+     */
+    private String ownerSubject;
 }

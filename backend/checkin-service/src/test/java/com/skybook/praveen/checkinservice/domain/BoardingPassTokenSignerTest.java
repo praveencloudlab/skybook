@@ -8,7 +8,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class BoardingPassTokenSignerTest {
 
-    private final BoardingPassTokenSigner signer = new BoardingPassTokenSigner("test-signing-key");
+    // >= 32 bytes and not the dev default - BoardingPassTokenSigner now rejects
+    // weak keys at construction (SECURITY_HARDENING_MODULE.md §5/§10).
+    private final BoardingPassTokenSigner signer =
+            new BoardingPassTokenSigner("test-signing-key-boarding-pass-32bytes-plus");
 
     @Test
     void signThenVerifyRoundTripReturnsTheOriginalFields() {
@@ -66,7 +69,8 @@ class BoardingPassTokenSignerTest {
     @Test
     void rejectsATokenSignedWithADifferentKey() {
 
-        BoardingPassTokenSigner otherSigner = new BoardingPassTokenSigner("a-completely-different-key");
+        BoardingPassTokenSigner otherSigner =
+                new BoardingPassTokenSigner("a-completely-different-key-32bytes-plus!");
         String token = otherSigner.sign("BP-2026-K7M4Z9", "SB8U33", 1L, "12B", 42L);
 
         assertThat(signer.verify(token)).isEmpty();

@@ -137,6 +137,8 @@ public class PaymentServiceImpl implements PaymentService {
                 // per-passenger surcharges.
                 .seatSurchargeTotal(seatSurchargeTotal)
                 .baseFareTotal(seatSurchargeTotal == null ? null : amount.subtract(seatSurchargeTotal))
+                // Ownership snapshot (§4.2): null on legacy events -> ADMIN-only.
+                .ownerSubject(event.getOwnerSubject())
                 .build();
 
         stateMachine.recordHistory(payment, PaymentHistoryType.PAYMENT_CREATED,
@@ -158,6 +160,12 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional(readOnly = true)
     public PaymentResponse getById(Long id) {
         return PaymentMapper.toResponse(find(id));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public String ownerSubjectOf(Long id) {
+        return find(id).getOwnerSubject();
     }
 
     @Override

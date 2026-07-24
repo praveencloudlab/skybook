@@ -4,12 +4,15 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - ./docker-data/postgres:/var/lib/postgresql/data
       - ./docker/postgres:/docker-entrypoint-initdb.d:ro
-    ports:
-      - "5432:5432"
+    # Internal-only (SECURITY_HARDENING_MODULE.md §3.1). NOT host-published:
+    # postgres/postgres would otherwise expose the whole DB from the host.
+    # Re-publish via a gitignored docker-compose.override.yml for local debug.
+    expose:
+      - "5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -42,8 +45,9 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
     volumes:
       - ./docker-data/kafka:/var/lib/kafka/data
-    ports:
-      - "9092:9092"
+    # Internal-only (§3.1) - reached as kafka:9092 on the compose network.
+    expose:
+      - "9092"
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
       interval: 10s
@@ -55,13 +59,30 @@ services:
     build:
       context: ./backend
       dockerfile: auth-service/Dockerfile
-    ports:
-      - "8081:8081"
+    # Internal-only (§3.1): all auth traffic enters via the gateway (8080).
+    expose:
+      - "8081"
+      - "9081"   # management port (§7, internal-only)
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_auth
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      JWT_SECRET: ${JWT_SECRET}
+      # RS256 (SECURITY_HARDENING_MODULE.md §5): auth-service is the only holder
+      # of the private signing key. The insecure ${VAR:?required} fail-fast form
+      # lands with the secret-defaults cleanup (step 11).
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?JWT_PRIVATE_KEY is required}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required}
+      JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
+      SKYBOOK_BOOTSTRAP_ADMIN_EMAIL: ${SKYBOOK_BOOTSTRAP_ADMIN_EMAIL:-}
+      # Service-client registry secrets (SECURITY_HARDENING_MODULE.md §3.3/§10):
+      # auth hashes these into the client registry so booking/checkin/inventory
+      # can obtain ROLE_SERVICE tokens. Required - no committed default. payment
+      # is intentionally absent: it makes no outbound service calls.
+      BOOKING_SERVICE_CLIENT_SECRET: ${BOOKING_SERVICE_CLIENT_SECRET:?BOOKING_SERVICE_CLIENT_SECRET is required}
+      CHECKIN_SERVICE_CLIENT_SECRET: ${CHECKIN_SERVICE_CLIENT_SECRET:?CHECKIN_SERVICE_CLIENT_SECRET is required}
+      INVENTORY_SERVICE_CLIENT_SECRET: ${INVENTORY_SERVICE_CLIENT_SECRET:?INVENTORY_SERVICE_CLIENT_SECRET is required}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: auth-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
@@ -71,6 +92,10 @@ services:
       OTEL_LOGS_EXPORTER: none
     volumes:
       - otel-agent:/otel:ro
+    # Locked-down runtime (§8): read-only rootfs, writable tmpfs for /tmp only.
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,7 +104,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9081/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -89,11 +114,17 @@ services:
     build:
       context: ./backend
       dockerfile: flight-service/Dockerfile
-    ports:
-      - "8082:8082"
+    # Internal-only (§3.1): reached as flight-service:8082 on the compose network.
+    expose:
+      - "8082"
+      - "9082"   # management port (§7, internal-only)
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_flight
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required}
+      JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: flight-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
@@ -103,13 +134,17 @@ services:
       OTEL_LOGS_EXPORTER: none
     volumes:
       - otel-agent:/otel:ro
+    # Locked-down runtime (§8): read-only rootfs, writable tmpfs for /tmp only.
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       postgres:
         condition: service_healthy
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8082/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9082/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -119,14 +154,24 @@ services:
     build:
       context: ./backend
       dockerfile: booking-service/Dockerfile
-    ports:
-      - "8083:8083"
+    # Internal-only (§3.1): reached as booking-service:8083 on the compose network.
+    expose:
+      - "8083"
+      - "9083"   # management port (§7, internal-only)
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_booking
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       FLIGHT_SERVICE_BASE_URL: http://flight-service:8082
       INVENTORY_SERVICE_BASE_URL: http://inventory-service:8084
+      # Verify-only public key for JWT authentication (§3.2/§5).
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required}
+      JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
+      # Client credential for ROLE_SERVICE tokens on inventory writes (§3.3).
+      AUTH_SERVICE_BASE_URL: http://auth-service:8081
+      BOOKING_SERVICE_CLIENT_SECRET: ${BOOKING_SERVICE_CLIENT_SECRET:?BOOKING_SERVICE_CLIENT_SECRET is required}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: booking-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
@@ -136,6 +181,10 @@ services:
       OTEL_LOGS_EXPORTER: none
     volumes:
       - otel-agent:/otel:ro
+    # Locked-down runtime (§8): read-only rootfs, writable tmpfs for /tmp only.
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -144,7 +193,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9083/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -154,13 +203,20 @@ services:
     build:
       context: ./backend
       dockerfile: inventory-service/Dockerfile
-    ports:
-      - "8084:8084"
+    # Internal-only (§3.1): reached as inventory-service:8084 on the compose network.
+    expose:
+      - "8084"
+      - "9084"   # management port (§7, internal-only)
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_inventory
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       FLIGHT_SERVICE_BASE_URL: http://flight-service:8082
+      # JWT validation (§4.4/§5): verify-only public key + issuer/audience.
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required}
+      JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: inventory-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
@@ -170,6 +226,10 @@ services:
       OTEL_LOGS_EXPORTER: none
     volumes:
       - otel-agent:/otel:ro
+    # Locked-down runtime (§8): read-only rootfs, writable tmpfs for /tmp only.
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -178,7 +238,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8084/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9084/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -188,8 +248,10 @@ services:
     build:
       context: ./backend
       dockerfile: notification-service/Dockerfile
-    ports:
-      - "8085:8085"
+    # Internal-only (§3.1): pure Kafka consumer, no inbound business traffic.
+    expose:
+      - "8085"
+      - "9085"   # management port (§7, internal-only)
     environment:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MAIL_USERNAME: ${MAIL_USERNAME}
@@ -203,13 +265,17 @@ services:
       OTEL_LOGS_EXPORTER: none
     volumes:
       - otel-agent:/otel:ro
+    # Locked-down runtime (§8): read-only rootfs, writable tmpfs for /tmp only.
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       kafka:
         condition: service_healthy
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8085/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9085/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -219,12 +285,18 @@ services:
     build:
       context: ./backend
       dockerfile: payment-service/Dockerfile
-    ports:
-      - "8086:8086"
+    # Internal-only (§3.1): reached as payment-service:8086 on the compose network.
+    expose:
+      - "8086"
+      - "9086"   # management port (§7, internal-only)
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_payment
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required}
+      JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: payment-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
@@ -234,6 +306,10 @@ services:
       OTEL_LOGS_EXPORTER: none
     volumes:
       - otel-agent:/otel:ro
+    # Locked-down runtime (§8): read-only rootfs, writable tmpfs for /tmp only.
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -242,7 +318,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8086/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9086/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -252,15 +328,23 @@ services:
     build:
       context: ./backend
       dockerfile: checkin-service/Dockerfile
-    ports:
-      - "8087:8087"
+    # Internal-only (§3.1): reached as checkin-service:8087 on the compose network.
+    expose:
+      - "8087"
+      - "9087"   # management port (§7, internal-only)
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/skybook_checkin
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       SPRING_DATASOURCE_HIKARI_INITIALIZATION_FAIL_TIMEOUT: "-1"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       FLIGHT_SERVICE_BASE_URL: http://flight-service:8082
       INVENTORY_SERVICE_BASE_URL: http://inventory-service:8084
-      CHECKIN_BOARDING_PASS_KEY: ${CHECKIN_BOARDING_PASS_KEY:-dev-only-insecure-signing-key-change-me}
+      CHECKIN_BOARDING_PASS_KEY: ${CHECKIN_BOARDING_PASS_KEY:?CHECKIN_BOARDING_PASS_KEY is required}
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required}
+      JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
+      AUTH_SERVICE_BASE_URL: http://auth-service:8081
+      CHECKIN_SERVICE_CLIENT_SECRET: ${CHECKIN_SERVICE_CLIENT_SECRET:?CHECKIN_SERVICE_CLIENT_SECRET is required}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: checkin-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
@@ -270,6 +354,10 @@ services:
       OTEL_LOGS_EXPORTER: none
     volumes:
       - otel-agent:/otel:ro
+    # Locked-down runtime (§8): read-only rootfs, writable tmpfs for /tmp only.
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       postgres:
         condition: service_healthy
@@ -278,7 +366,7 @@ services:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8087/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9087/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -291,7 +379,10 @@ services:
     ports:
       - "8080:8080"
     environment:
-      JWT_SECRET: ${JWT_SECRET}
+      # Verify-only: the gateway holds the PUBLIC key, never a signing key (§5).
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required}
+      JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
       SERVICES_AUTH_SERVICE_BASE_URL: http://auth-service:8081
       SERVICES_FLIGHT_SERVICE_BASE_URL: http://flight-service:8082
       SERVICES_BOOKING_SERVICE_BASE_URL: http://booking-service:8083
@@ -307,11 +398,15 @@ services:
       OTEL_LOGS_EXPORTER: none
     volumes:
       - otel-agent:/otel:ro
+    # Locked-down runtime (§8): read-only rootfs, writable tmpfs for /tmp only.
+    read_only: true
+    tmpfs:
+      - /tmp
     depends_on:
       otel-agent:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9080/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -400,7 +495,7 @@ services:
     image: grafana/grafana:11.6.0
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro

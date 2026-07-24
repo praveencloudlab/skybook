@@ -17,15 +17,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class BoardingPassController {
 
     private final BoardingPassService boardingPassService;
+    private final com.skybook.praveen.checkinservice.security.CheckInAccessGuard accessGuard;
 
+    /** By pass id - a gate/back-office lookup (ADMIN, enforced by the URL rule). */
     @GetMapping("/{id}")
     public ResponseEntity<BoardingPassResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(boardingPassService.getById(id));
     }
 
-    /** How a client retrieves the pass PATCH /api/checkins/{id}/checkin generated - there is no standalone "generate" endpoint. */
+    /** The passenger's own pass for a check-in (OWNER, enforced here). */
     @GetMapping("/checkin/{checkInId}")
     public ResponseEntity<BoardingPassResponse> getActiveForCheckIn(@PathVariable Long checkInId) {
+        accessGuard.requireOwnerOfCheckIn(checkInId);
         return ResponseEntity.ok(boardingPassService.getActiveForCheckIn(checkInId));
     }
 

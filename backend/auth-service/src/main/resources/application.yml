@@ -12,18 +12,68 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/skybook_auth
     username: postgres
-    password: postgres
+    password: ${SPRING_DATASOURCE_PASSWORD}
+
+  # Flyway owns the schema (SECURITY_HARDENING_MODULE.md §4.3): V1 baseline +
+  # V2 role/email delta. An existing Hibernate-created DB adopts V1 and runs
+  # only V2; a fresh DB runs both. Hibernate validates, never mutates.
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 1
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: true
 
+# RS256 (§5). Only auth-service holds the private key; the public key is the
+# same one every other service verifies with. iss/aud are environment-specific.
 jwt:
-  secret: ${JWT_SECRET}
-  expiration: 3600000
+  private-key: ${JWT_PRIVATE_KEY}
+  public-key: ${JWT_PUBLIC_KEY}
+  issuer: ${JWT_ISSUER:skybook-auth}
+  audience: ${JWT_AUDIENCE:skybook-api}
+  expiration: 3600000          # 60 min (USER token TTL, §5)
+  service-expiration: 600000   # 10 min (ROLE_SERVICE token TTL, §5)
+
+skybook:
+  # Promote this already-registered user to ADMIN once at startup (§4.3).
+  bootstrap-admin-email: ${SKYBOOK_BOOTSTRAP_ADMIN_EMAIL:}
+  # Service-client registry (§3.3/§4.5): provisioned at startup, secrets
+  # BCrypt-hashed. Each caller may only request tokens for its allowed audiences.
+  # Only services that make outbound service-to-service HTTP calls are registered,
+  # each scoped to the exact audience(s) it calls - least privilege. payment-service
+  # is intentionally NOT here: it makes no outbound service calls (booking learns of
+  # payment via Kafka, not HTTP), so granting it any audience - previously the
+  # booking-service audience - was an unused privilege that let a payment credential
+  # mint a booking-service token and read any user's booking. Secrets are required
+  # with no committed default (§10); auth fails fast if one is unset.
+  service-registry:
+    clients:
+      - client-id: booking-service
+        secret: ${BOOKING_SERVICE_CLIENT_SECRET}
+        allowed-audiences: flight-service,inventory-service
+      - client-id: checkin-service
+        secret: ${CHECKIN_SERVICE_CLIENT_SECRET}
+        allowed-audiences: flight-service,inventory-service
+      - client-id: inventory-service
+        secret: ${INVENTORY_SERVICE_CLIENT_SECRET}
+        allowed-audiences: flight-service
 
 management:
+  # Actuator on a separate, internal-only port (SECURITY_HARDENING_MODULE.md §7):
+  # the entire actuator surface moves off the main business port. expose:-only in
+  # compose/k8s, never host-mapped; Docker health + Prometheus scrape it here.
+  server:
+    port: 9081
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+        # /livez + /readyz on the MAIN port for k8s kubelet probes; all other
+        # actuator endpoints stay on the management port only.
+        add-additional-paths: true
   endpoints:
     web:
       exposure:

@@ -31,10 +31,16 @@ class BaggageTagGeneratorTest {
 
     @Test
     void collisionsAreRareAcrossManyGenerations() {
+        // 6 chars from a 32-symbol alphabet = 32^6 ≈ 1.07e9 possible suffixes.
+        // Over 10k draws the birthday-paradox collision probability is ~4.6%,
+        // so demanding ZERO collisions makes this test flaky (~1 run in 20).
+        // Assert what the name promises - collisions are RARE - with a bound
+        // (>= 9990 unique, i.e. < 0.1%) that is astronomically safe yet still
+        // catches a genuinely broken generator.
         Set<String> seen = new HashSet<>();
         for (int i = 0; i < 10_000; i++) {
             seen.add(generator.generate());
         }
-        assertThat(seen).hasSize(10_000);
+        assertThat(seen.size()).isGreaterThanOrEqualTo(9_990);
     }
 }

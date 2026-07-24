@@ -1,0 +1,45 @@
+# Local-debug port re-publishing (SECURITY_HARDENING_MODULE.md §3.1).
+#
+# The committed docker-compose.yml is secure-by-default: only the api-gateway
+# (8080) and the observability UIs are host-published; every internal service,
+# Postgres and Kafka are expose:-only on the compose network.
+#
+# For local debugging you often want to hit a service, the DB, or the broker
+# directly from the host. Docker Compose auto-merges docker-compose.override.yml
+# on top of docker-compose.yml, so copy this file to that name (it is
+# gitignored, so it never ships) and uncomment what you need:
+#
+#     cp docker-compose.override.yml.example docker-compose.override.yml
+#     docker compose up -d
+#
+# WARNING: re-publishing 5432 exposes the whole database (postgres/postgres) to
+# anything on your host. Never commit docker-compose.override.yml.
+
+services:
+#  postgres:
+#    ports:
+#      - "5432:5432"
+#  kafka:
+#    ports:
+#      - "9092:9092"
+#  auth-service:
+#    ports:
+#      - "8081:8081"
+#  flight-service:
+#    ports:
+#      - "8082:8082"
+#  booking-service:
+#    ports:
+#      - "8083:8083"
+#  inventory-service:
+#    ports:
+#      - "8084:8084"
+#  notification-service:
+#    ports:
+#      - "8085:8085"
+#  payment-service:
+#    ports:
+#      - "8086:8086"
+#  checkin-service:
+#    ports:
+#      - "8087:8087"

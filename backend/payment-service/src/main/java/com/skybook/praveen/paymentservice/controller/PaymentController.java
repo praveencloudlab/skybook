@@ -8,6 +8,7 @@ import com.skybook.praveen.paymentservice.dto.response.RefundResponse;
 import com.skybook.praveen.paymentservice.facade.PaymentFacade;
 import com.skybook.praveen.paymentservice.service.ActionContext;
 import com.skybook.praveen.paymentservice.service.PaymentService;
+import com.skybook.praveen.security.SecurityAccess;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -50,31 +51,40 @@ public class PaymentController {
 
     @GetMapping("/{id}")
     public ResponseEntity<PaymentResponse> getById(@PathVariable Long id) {
-        return ResponseEntity.ok(paymentService.getById(id));
+        PaymentResponse payment = paymentService.getById(id);
+        SecurityAccess.requireOwnerOrAdmin(payment.ownerSubject());
+        return ResponseEntity.ok(payment);
     }
 
     @GetMapping("/reference/{reference}")
     public ResponseEntity<PaymentResponse> getByReference(@PathVariable String reference) {
-        return ResponseEntity.ok(paymentService.getByReference(reference));
+        PaymentResponse payment = paymentService.getByReference(reference);
+        SecurityAccess.requireOwnerOrAdmin(payment.ownerSubject());
+        return ResponseEntity.ok(payment);
     }
 
     @GetMapping("/booking/{bookingId}")
     public ResponseEntity<PaymentResponse> getByBookingId(@PathVariable Long bookingId) {
-        return ResponseEntity.ok(paymentService.getByBookingId(bookingId));
+        PaymentResponse payment = paymentService.getByBookingId(bookingId);
+        SecurityAccess.requireOwnerOrAdmin(payment.ownerSubject());
+        return ResponseEntity.ok(payment);
     }
 
     @GetMapping("/{id}/history")
     public ResponseEntity<List<PaymentHistoryResponse>> getHistory(@PathVariable Long id) {
+        SecurityAccess.requireOwnerOrAdmin(paymentService.ownerSubjectOf(id));
         return ResponseEntity.ok(paymentService.getHistory(id));
     }
 
     @PatchMapping("/{id}/authorize")
     public ResponseEntity<PaymentResponse> authorize(@PathVariable Long id) {
+        SecurityAccess.requireOwnerOrAdmin(paymentService.ownerSubjectOf(id));
         return ResponseEntity.ok(paymentFacade.authorize(id, ActionContext.user("payment-" + id)));
     }
 
     @PatchMapping("/{id}/capture")
     public ResponseEntity<PaymentResponse> capture(@PathVariable Long id) {
+        SecurityAccess.requireOwnerOrAdmin(paymentService.ownerSubjectOf(id));
         return ResponseEntity.ok(paymentFacade.capture(id, ActionContext.user("payment-" + id)));
     }
 

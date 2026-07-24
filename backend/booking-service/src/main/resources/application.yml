@@ -20,7 +20,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/skybook_booking
     username: postgres
-    password: postgres
+    password: ${SPRING_DATASOURCE_PASSWORD}
 
   jpa:
     hibernate:
@@ -44,6 +44,15 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
 management:
+  # Actuator on a separate internal-only port (SECURITY_HARDENING_MODULE.md §7).
+  server:
+    port: 9083
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+        add-additional-paths: true   # /livez + /readyz on the MAIN port (k8s probes)
   endpoints:
     web:
       exposure:
@@ -131,6 +140,19 @@ resilience4j:
         base-config: default
 
 skybook:
+  # Shared JWT validation (SECURITY_HARDENING_MODULE.md §3.2/§5). Verify-only:
+  # the public key, never a signing key. Authentication-only rollout for now
+  # (§13 step 4) - only booking creation is enforced (SecurityConfig).
+  security:
+    public-key: ${JWT_PUBLIC_KEY}
+    issuer: ${JWT_ISSUER:skybook-auth}
+    user-audience: ${JWT_AUDIENCE:skybook-api}
+    service-audience: booking-service
+    # Client credential for obtaining ROLE_SERVICE tokens for inventory writes (§3.3).
+    service-client:
+      auth-base-url: ${AUTH_SERVICE_BASE_URL:http://localhost:8081}
+      client-id: booking-service
+      client-secret: ${BOOKING_SERVICE_CLIENT_SECRET}
   kafka:
     topics:
       # Consumed by PaymentEventConsumer - PAYMENT_SUCCEEDED confirms bookings.

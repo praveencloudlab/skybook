@@ -1,6 +1,7 @@
 package com.skybook.praveen.checkinservice.controller;
 
-import com.skybook.praveen.checkinservice.config.SecurityConfig;
+import com.skybook.praveen.checkinservice.config.WebSliceSecurityConfig;
+import org.springframework.security.test.context.support.WithMockUser;
 import com.skybook.praveen.checkinservice.dto.response.FlightManifestResponse;
 import com.skybook.praveen.checkinservice.enums.ManifestStatus;
 import com.skybook.praveen.checkinservice.service.ManifestService;
@@ -23,8 +24,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(FlightManifestController.class)
-@Import(SecurityConfig.class)
+@WebMvcTest(controllers = FlightManifestController.class,
+        excludeAutoConfiguration = com.skybook.praveen.security.JwtSecurityAutoConfiguration.class)
+@Import(WebSliceSecurityConfig.class)
+@WithMockUser(roles = "ADMIN")
 class FlightManifestControllerTest {
 
     @Autowired

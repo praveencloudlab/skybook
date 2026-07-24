@@ -74,7 +74,8 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
-    public BookingResponse createDraftBooking(CreateBookingRequest request, LocalDateTime flightDepartureTime) {
+    public BookingResponse createDraftBooking(CreateBookingRequest request, LocalDateTime flightDepartureTime,
+                                              String ownerSubject) {
 
         Booking booking = Booking.builder()
                 .bookingReference(generateUniquePnr())
@@ -83,6 +84,8 @@ public class BookingServiceImpl implements BookingService {
                 .bookingStatus(BookingStatus.DRAFT)
                 .bookingDate(LocalDateTime.now())
                 .remarks(request.remarks())
+                // Ownership captured from the authenticated principal (§4.2).
+                .ownerSubject(ownerSubject)
                 .build();
 
         List<BookingPassenger> bookingPassengers = new ArrayList<>();

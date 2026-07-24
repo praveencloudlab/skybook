@@ -19,6 +19,9 @@ import com.skybook.praveen.bookingservice.producer.BookingEventProducer;
 import com.skybook.praveen.bookingservice.service.BookingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -80,7 +83,8 @@ public class BookingFacade {
             throw new IllegalArgumentException("Cannot book a cancelled flight");
         }
 
-        BookingResponse draft = bookingService.createDraftBooking(request, flight.departureTime());
+        BookingResponse draft = bookingService.createDraftBooking(
+                request, flight.departureTime(), currentSubject());
 
         List<SeatAssignmentResult> assignments = holdSeatsOrCompensate(draft, request);
 
@@ -181,13 +185,28 @@ public class BookingFacade {
     }
 
     /**
+     * The authenticated JWT subject captured as the booking owner (§4.2). The
+     * create endpoint is {@code authenticated()} (§13 step 4), so a real
+     * principal is present for every new booking; null only defensively (e.g.
+     * enforcement disabled in a test), which yields a legacy-style unowned row.
+     */
+    private String currentSubject() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return (auth != null && auth.isAuthenticated() && !(auth instanceof AnonymousAuthenticationToken))
+                ? auth.getName() : null;
+    }
+
+    /**
      * Flight context for email enrichment - best-effort by design: an email
      * without route details beats a confirmation that fails because
      * flight-service was briefly down.
      */
     private FlightDetails flightOrNull(Long flightId) {
         try {
-            return flightServiceClient.getFlight(flightId);
+            // Service-token call: this runs during event publication, which for the
+            // PAYMENT_SUCCEEDED->confirm path is a Kafka consumer thread with no
+            // incoming user token to propagate (§3.3/§4.2).
+            return flightServiceClient.getFlightAsService(flightId);
         } catch (RuntimeException e) {
             log.warn("Could not fetch flight {} for event enrichment: {}", flightId, e.getMessage());
             return null;
