@@ -27,6 +27,12 @@ Thumbs.db
 # Environment files
 .env
 .env.*
+# ...but NOT the committed templates. `.env.*` above matches `.env.example`,
+# which is documentation, not a secret - it is the file that tells a new
+# contributor which variables exist. Without this negation the template silently
+# never gets committed and the next person has nothing to copy.
+!.env.example
+!**/.env.example
 application-local.yml
 application-local.properties
 
