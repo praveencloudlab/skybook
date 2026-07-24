@@ -30,6 +30,39 @@
 
 services:
 
+  # SMTP sink for the notification assertion (§10.2). Without it the suite could
+  # only prove "an EmailEvent was published"; with it we prove an email actually
+  # ARRIVED, which is what the customer journey claims.
+  #
+  # Mailpit rather than MailHog: same role and API shape, but MailHog has been
+  # unmaintained since 2020. Called out because the frozen design named MailHog -
+  # this is a substitution of the maintained successor, not a change of approach.
+  mailpit:
+    image: axllent/mailpit:v1.21.8
+    expose:
+      - "1025"   # SMTP  (notification-service sends here)
+      - "8025"   # HTTP API (the suite reads captured mail here)
+    ports:
+      - "8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  notification-service:
+    environment:
+      # Point the real mail sender at the sink - no auth, no TLS.
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: "1025"
+      SPRING_MAIL_USERNAME: ""
+      SPRING_MAIL_PASSWORD: ""
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: "false"
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "false"
+    depends_on:
+      mailpit:
+        condition: service_healthy
+
   checkin-service:
     environment:
       # Any seeded future flight is inside the check-in window.
