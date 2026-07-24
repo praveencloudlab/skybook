@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | Automate the full customer journey as an executable, repeatable certification suite — register → login → search → quote → book → hold seat → pay → confirm → check-in → boarding pass → board → finalise — plus the failure paths (cancellation, declined payment, duplicate requests, expired holds, service-down) and a real cross-service trace assertion |
 | **Branch** | `feature/e2e-certification` |
-| **Status** | ✅ **Implemented and verified.** All 14 build-order steps complete. 31 assertions across 8 test classes, green on consecutive full runs against the live fleet: happy path, check-in→boarding, real captured email, failure matrix, service-down + recovery, double-sell race, and a cross-service trace. Two deliberate gaps are recorded in §14 rather than hidden. |
+| **Status** | ✅ **Implemented and verified.** All 14 build-order steps complete. 32 assertions across 9 test classes, green on consecutive full runs against the live fleet: happy path, check-in→boarding, real captured email, failure matrix, service-down + recovery, double-sell race, and a cross-service trace. Two deliberate gaps are recorded in §14 rather than hidden. |
 | **Depends on** | Everything merged: dockerization, ci-cd, observability, resilience, seat-selection, security-hardening (all on `main`) |
 
 Goal: today "does the whole thing actually work?" is answered by a human running
@@ -274,7 +274,7 @@ Each step ends with something demonstrably working, in the project's usual style
 # 14. Implementation Notes
 
 All 14 steps landed on `feature/e2e-certification`, each verified against the
-running fleet before commit. Final state: **31 assertions, 8 classes, green on
+running fleet before commit. Final state: **32 assertions, 9 classes, green on
 two consecutive full runs**.
 
 The suite's value showed up immediately — not as product bugs, but as a series of
