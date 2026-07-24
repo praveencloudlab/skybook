@@ -17,6 +17,11 @@ import { SignInPage } from './features/auth/SignInPage';
 import { SearchPage } from './features/search/SearchPage';
 import { FlightQuotePage } from './features/search/FlightQuotePage';
 import { SeatSelectionPage } from './features/seats/SeatSelectionPage';
+import { CheckoutPage } from './features/booking/CheckoutPage';
+import { ConfirmationPage } from './features/booking/ConfirmationPage';
+import type { AircraftSeat } from './api/seats';
+import type { Booking } from './api/bookings';
+import type { Payment } from './api/payments';
 import type { FareType, TravelClass } from './api/quotes';
 import type { Flight } from './api/flights';
 import { session } from './lib/session';
@@ -115,14 +120,52 @@ interface FareChoice {
   currency: string;
 }
 
+/** Where the passenger is in the booking journey. */
+type Step = 'search' | 'fares' | 'seat' | 'checkout' | 'confirmed';
+
 function HomePage() {
   // Kept in local state rather than routes: these are steps within one search,
   // and a /flights/:id route would re-fetch (and lose the results behind it) on
   // every back-navigation.
+  const [step, setStep] = useState<Step>('search');
   const [flight, setFlight] = useState<Flight | null>(null);
   const [choice, setChoice] = useState<FareChoice | null>(null);
+  const [seat, setSeat] = useState<AircraftSeat | null>(null);
+  const [result, setResult] = useState<{ booking: Booking; payment: Payment } | null>(null);
 
-  if (flight && choice) {
+  function restart() {
+    setStep('search');
+    setFlight(null);
+    setChoice(null);
+    setSeat(null);
+    setResult(null);
+  }
+
+  if (step === 'confirmed' && result) {
+    return (
+      <ConfirmationPage booking={result.booking} payment={result.payment} onDone={restart} />
+    );
+  }
+
+  if (step === 'checkout' && flight && choice) {
+    return (
+      <CheckoutPage
+        flight={flight}
+        cabin={choice.cabin}
+        fare={choice.fare}
+        baseFare={choice.baseFare}
+        currency={choice.currency}
+        seat={seat}
+        onBack={() => setStep('seat')}
+        onBooked={(booking, payment) => {
+          setResult({ booking, payment });
+          setStep('confirmed');
+        }}
+      />
+    );
+  }
+
+  if (step === 'seat' && flight && choice) {
     return (
       <SeatSelectionPage
         flight={flight}
@@ -130,25 +173,36 @@ function HomePage() {
         fare={choice.fare}
         baseFare={choice.baseFare}
         currency={choice.currency}
-        onBack={() => setChoice(null)}
-        onContinue={() => {
-          // Passenger details and payment land in steps 9-10.
+        onBack={() => setStep('fares')}
+        onContinue={(chosen) => {
+          setSeat(chosen);
+          setStep('checkout');
         }}
       />
     );
   }
 
-  if (flight) {
+  if (step === 'fares' && flight) {
     return (
       <FlightQuotePage
         flight={flight}
-        onBack={() => setFlight(null)}
-        onChoose={setChoice}
+        onBack={() => setStep('search')}
+        onChoose={(chosen) => {
+          setChoice(chosen);
+          setStep('seat');
+        }}
       />
     );
   }
 
-  return <SearchPage onSelectFlight={setFlight} />;
+  return (
+    <SearchPage
+      onSelectFlight={(chosen) => {
+        setFlight(chosen);
+        setStep('fares');
+      }}
+    />
+  );
 }
 
 export default function App() {
