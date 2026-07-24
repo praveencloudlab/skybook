@@ -55,11 +55,12 @@ class TraceE2ETest {
 
         Set<String>[] best = new Set[]{Set.of()};
 
-        // 120s, not 60s. Observed: immediately after a service is recreated this
-        // timed out at 64s and then passed in 14s on a re-run - the journey and
-        // the trace were fine, Tempo simply had not finished ingesting/indexing
-        // yet. A trace assertion that fails after any restart would train people
-        // to ignore it, which is worse than a slow test.
+        // 120s, not 60s. Tempo's ingest+index lag is the slowest thing this suite
+        // waits on, and 60s sat right on the edge: locally it timed out at 64s
+        // just after a service restart and then passed in 14s, and on a CI runner
+        // it timed out at 62.7s while every other test passed. A trace assertion
+        // that fails on a cold or busy Tempo trains people to ignore it, which is
+        // worse than a slow test - the journey and the trace were correct both times.
         await("a trace spanning api-gateway -> booking-service -> (Kafka) -> payment-service "
                 + "for booking " + bookingId)
                 .atMost(Duration.ofSeconds(120))
