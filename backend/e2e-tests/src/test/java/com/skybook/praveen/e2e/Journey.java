@@ -60,13 +60,40 @@ public final class Journey {
         return id;
     }
 
+    /**
+     * A flight in a specific window, so a test can pick a date range no other
+     * test touches and therefore start from a flight with every seat free.
+     */
+    public static long futureFlightId(String token, int daysFrom, int daysTo) {
+        Response response = RestAssured.given()
+                .header("Authorization", "Bearer " + token)
+                .when()
+                .get("/api/flights/departure-date-range?startDate=" + LocalDate.now().plusDays(daysFrom)
+                        + "&endDate=" + LocalDate.now().plusDays(daysTo));
+
+        require(response.statusCode() == 200,
+                "flight lookup failed: " + response.statusCode() + " " + response.asString());
+        Integer id = response.jsonPath().get("[0].id");
+        require(id != null, "no flights between +" + daysFrom + "d and +" + daysTo + "d");
+        return id;
+    }
+
     /** Books one ECONOMY/SAVER passenger with an auto-assigned (free) seat. */
     public static Response createBooking(E2EUser user, long flightId) {
+        return createBooking(user, flightId, null);
+    }
+
+    /**
+     * @param seatNumber an explicit seat (MANUAL selection), or null to let
+     *                   inventory auto-assign a free one
+     */
+    public static Response createBooking(E2EUser user, long flightId, String seatNumber) {
+        String seatField = seatNumber == null ? "" : ",\"seatNumber\":\"%s\"".formatted(seatNumber);
         String passenger = """
                 {"title":"Mr","firstName":"E2E","lastName":"Passenger","dob":"1990-01-01",
                  "nationality":"IND","passportNumber":"P%s","passportExpiry":"2032-01-01",
-                 "travelClass":"ECONOMY","fareType":"SAVER"}"""
-                .formatted(E2EConfig.RUN_ID.substring(E2EConfig.RUN_ID.length() - 6));
+                 "travelClass":"ECONOMY","fareType":"SAVER"%s}"""
+                .formatted(E2EConfig.RUN_ID.substring(E2EConfig.RUN_ID.length() - 6), seatField);
 
         return RestAssured.given()
                 .header("Authorization", user.bearer())
