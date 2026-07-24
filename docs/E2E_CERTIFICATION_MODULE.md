@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | Automate the full customer journey as an executable, repeatable certification suite — register → login → search → quote → book → hold seat → pay → confirm → check-in → boarding pass → board → finalise — plus the failure paths (cancellation, declined payment, duplicate requests, expired holds, service-down) and a real cross-service trace assertion |
 | **Branch** | `feature/e2e-certification` |
-| **Status** | 📝 **DRAFT — for review.** Not frozen. Open questions in §10 need answers before a build order is committed to. |
+| **Status** | 🔒 **FROZEN — approved.** All four §10 questions resolved (see §10 Decisions Settled). Implementation follows the §13 build order. |
 | **Depends on** | Everything merged: dockerization, ci-cd, observability, resilience, seat-selection, security-hardening (all on `main`) |
 
 Goal: today "does the whole thing actually work?" is answered by a human running
@@ -188,27 +188,60 @@ Optionally assert Prometheus counters moved (bookings created, payments captured
 
 ---
 
-# 10. Open Questions (need your call before freezing)
+# 10. Decisions Settled
 
-**10.1 — Expired-hold testing.** The real TTL is 15 minutes. Options:
-  - **(a)** Add an e2e-only compose override shortening `inventory.hold.ttl` to ~30s.
-    Fast and deterministic, but the suite then tests a non-production config.
-  - **(b)** Expose an ADMIN-only "expire now" endpoint. Honest trigger, but adds
-    production surface purely for testing.
-  - **(c)** Manipulate the row via `docker compose exec psql`. No product change,
-    but reaches behind the API — contradicting §1.3's gateway-only discipline.
-  - *My recommendation: (a)* — a documented test-profile override, since the sweep
-    logic (what we're certifying) is identical either way.
+**10.1 — Expired holds: e2e-only TTL override.** A `docker-compose.e2e.yml`
+override shortens `inventory.hold.ttl` to ~30s (sweep already runs every 60s, so
+it is tightened too). The suite therefore certifies the **sweep logic**, which is
+byte-identical to production; only the clock differs. Rejected: an ADMIN
+"expire now" endpoint (adds production surface purely for testing) and direct DB
+manipulation (reaches behind the API, contradicting §1.3's gateway-only rule).
+**The override file must be e2e-only and never merged into the default compose.**
 
-**10.2 — Notification assertion.** There is no real SMTP. Options: assert the
-consumer's log/metrics; or add **MailHog** to compose and assert a real captured
-email. *Recommendation: MailHog* — it turns "an event was published" into "an email
-actually arrived", which is what the journey claims.
+**10.2 — Notifications: MailHog.** Added to compose as the SMTP sink; the suite
+asserts a **real captured email** via MailHog's HTTP API. This upgrades the
+assertion from "an event was published" to "an email actually arrived", which is
+what the customer journey actually claims. Notification-service's mail host/port
+point at MailHog under the e2e override.
 
-**10.3 — CI placement.** Nightly + manual (my recommendation), or gate every PR?
+**10.3 — CI: nightly + manual dispatch.** A separate, non-blocking `e2e.yml`
+(`schedule` + `workflow_dispatch`). PR feedback stays fast; the suite still gives
+pre-release confidence. Explicitly **not** a per-PR gate — standing the full fleet
+up on every PR is not worth the minutes.
 
-**10.4 — Scope of concurrency testing.** Is the double-sell race in scope for v1,
-or deferred? It's the highest-value and highest-effort item here.
+**10.4 — Concurrency (double-sell) is IN scope for v1.** It is the highest-value
+case in the matrix: the seat-locking added during the PR #7 review has never been
+exercised under real concurrency, so it is currently certified only by inspection.
+
+---
+
+# 13. Build Order
+
+Each step ends with something demonstrably working, in the project's usual style.
+
+1. **Harness skeleton + preflight.** `e2e-tests` module, `-Pe2e` profile
+   (failsafe-bound, excluded from default `mvn verify`), RestAssured + Awaitility.
+   Preflight asserts: gateway healthy, 8 services healthy, a **future** flight
+   exists, ADMIN bootstrap configured — each with a specific remediation message.
+2. **Identity fixtures.** ADMIN login + fresh-USER-per-run factory (complexity-
+   compliant password, unique email), plus the second USER for isolation checks.
+3. **Happy path spine** (§5) — through to CONFIRMED booking, asserting the async
+   hops by polling.
+4. **Check-in → boarding pass → board**, completing the journey.
+5. **MailHog** into compose (+ e2e override) and the real-email assertion.
+6. **Failure matrix part 1** — declined payment (`.13`), duplicate
+   `Idempotency-Key`, cancellation + refund rules, cross-user 403, unauthenticated 401.
+7. **E2E compose override + expired-hold case** (§10.1).
+8. **Service-down case** — stop inventory, assert clean 502 + breaker opens,
+   restart, assert recovery.
+9. **Double-sell concurrency case** (§10.4) — two concurrent holds on one seat;
+   exactly one wins, the other gets a clean conflict.
+10. **Tempo trace assertion** (§7) — closes the observability Kafka-hop gap.
+11. **`scripts/e2e.sh`** one-command entry point (compose up → seed → run → report).
+12. **Refresh the Postman collection** (§9.3) so the manual artifact stops lying.
+13. **`e2e.yml`** nightly + dispatch workflow.
+14. **Doc → Implemented + Implementation Notes**, recording what the first real
+    full run exposed.
 
 ---
 
