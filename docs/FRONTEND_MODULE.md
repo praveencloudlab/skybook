@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | A passenger-facing web client for the full customer journey — register/login → search → quote → seat selection → book → pay → check-in → boarding pass — talking to the API gateway and nothing else |
 | **Branch** | `feature/frontend` |
-| **Status** | 📝 **DRAFT — for review.** Not frozen. §10 lists what needs your call. |
+| **Status** | 🔒 **FROZEN — approved.** All four §10 questions resolved. Implementation follows the §11 build order. |
 | **Stack** | React + Vite + TypeScript, Tailwind CSS (approved) |
 | **Depends on** | Everything merged: dockerization, ci-cd, observability, resilience, seat-selection, security-hardening, e2e-certification |
 
@@ -203,22 +203,61 @@ UI must handle losing a seat race gracefully.
 
 ---
 
-# 10. Open Questions (need your call before freezing)
+# 10. Decisions Settled
 
-**10.1 — Token storage.** `sessionStorage` (my recommendation, §4) or
-`localStorage` for a session that survives a browser restart? This is a real
-security/convenience trade-off, not a detail.
+**10.1 — Token storage: `sessionStorage`.** The token is a 60-minute bearer
+credential with **no revocation**, so limiting its blast radius outweighs
+surviving a restart: a shared machine leaves no live session behind, and an XSS
+cannot resurrect one from disk. Accepted cost — a new tab means logging in again.
 
-**10.2 — Design direction.** Should this look like a *real* airline (dense,
-information-heavy, closer to what BA/Emirates actually ship) or a clean modern
-product UI? It changes the whole visual language, and for a portfolio the first
-reads as more credible while the second reads as more designed.
+**10.2 — Visual direction: real-airline, dense and information-rich.** Compact
+fare tables, a genuine seat map, real data density — closer to what BA or Emirates
+actually ship than to a spacious marketing-style product UI. This is the harder
+option to make look good, and it is chosen deliberately: to a reader who knows the
+domain it reads as credible airline work rather than a generic CRUD app dressed up.
 
-**10.3 — The `customerId` wart (§1.9).** Options: (a) client sends a constant and
-we accept the smell; (b) small backend change to derive it from the token like
-`ownerSubject`; (c) leave it and document. (b) is the honest fix but touches a
-merged, certified module.
+**10.3 — Fix `customerId` in the backend.** It becomes derived (like
+`ownerSubject`) rather than a required client input, instead of the client baking
+in a meaningless constant. **This touches booking-service, which is merged and
+certified**, so it is sequenced as its own first step with a full e2e
+re-certification — and that re-certification is now cheap, which is precisely the
+payoff of having built the suite.
 
-**10.4 — Seed data in the demo.** The seed has 10,950 flights across 30 routes.
-Should search default to a curated set of routes so a first-time visitor sees
-something sensible, or show the raw breadth?
+**10.4 — Search defaults to curated popular routes.** A handful of recognisable
+routes (LHR→JFK, LHR→DXB, …) so a first-time visitor immediately sees something
+sensible; full search stays available. Showing 10,950 undifferentiated flights, or
+an empty screen until the user guesses a seeded route, both make a working
+platform look broken.
+
+---
+
+# 11. Build Order
+
+Each step ends with something demonstrable, in the project's usual style.
+
+1. **Backend: derive `customerId`** (§10.3) — make it optional/derived in
+   booking-service, then **re-run the e2e suite** to prove the certified journey
+   still holds. Done first so the frontend is never written against a contract we
+   already intend to change.
+2. **Scaffold** — Vite + React + TS + Tailwind, `src/api | features | components |
+   lib`, dev server on 5173 (already CORS-allowed), lint + typecheck.
+3. **API client + auth** — the single `fetch` boundary, the raw-JWT login quirk
+   (§1.2), `sessionStorage`, 401 → login preserving `returnTo`.
+4. **`usePolledResource`** (§3) — backoff, deadline, explicit
+   `idle|working|ready|timed-out|failed`. Built early: three screens depend on it
+   and it is where the subtle bugs will live.
+5. **Register / login** — password policy surfaced before submit.
+6. **Search + curated routes** (§10.4) and flight cards.
+7. **Quote + fare table** — the first dense, real-airline surface.
+8. **Seat map** — cabin, window/aisle, exit rows, per-seat surcharge; "assign me
+   one" free and obvious.
+9. **Passenger details + review + pay** — authorize → capture; 422 reads as
+   "card declined".
+10. **Confirmation** — PNR, plus the async CONFIRMED wait.
+11. **My bookings** — list and detail.
+12. **Check-in + boarding pass** — window state explained when closed; the journey
+    ends at the pass (§1.6).
+13. **Error surface pass** (§6) — 400/401/403/409/422/502 each rendered honestly,
+    including losing a seat race.
+14. **Containerise + CI** — nginx image on port 3000, frontend-only workflow.
+15. **Doc → Implemented + Implementation Notes.**
