@@ -89,7 +89,7 @@ export function FareTable({
                       type="button"
                       disabled={soldOut || !onSelect}
                       onClick={() => onSelect?.(cabin.travelClass, fareType)}
-                      className="tabular rounded border border-slate-200 px-2.5 py-1.5 font-medium text-slate-900 transition hover:border-brand-400 hover:bg-brand-50 disabled:cursor-not-allowed disabled:border-slate-100 disabled:text-slate-400 disabled:hover:bg-transparent"
+                      className="tabular rounded-xl border border-slate-200 px-2.5 py-1.5 font-medium text-slate-900 transition hover:border-brand-400 hover:bg-brand-50 disabled:cursor-not-allowed disabled:border-slate-100 disabled:text-slate-400 disabled:hover:bg-transparent"
                     >
                       {money(fare, quote.currency)}
                     </button>

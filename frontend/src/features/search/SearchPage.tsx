@@ -66,46 +66,60 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
 
   return (
     <>
-      {/* A short brand band so the search form has something to sit against -
-          without it the page opens as a bare form on grey, which is what made
-          the app feel unfinished. */}
-      <div className="relative overflow-hidden bg-brand-900">
-        <div className="absolute inset-0 bg-gradient-to-br from-brand-800 via-brand-900 to-slate-950" />
-        <div className="absolute -top-20 -right-10 h-72 w-72 rounded-full bg-brand-500/20 blur-3xl" />
+      {/* A vivid brand band so the search form has something to sit against.
+          The colour wash + soft orbs read as a modern travel hero rather than
+          the flat form-on-grey the app opened with before. */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-brand-700 via-brand-800 to-brand-950">
+        <div className="absolute -top-24 -left-16 h-80 w-80 rounded-full bg-brand-400/25 blur-3xl" />
+        <div className="absolute -top-10 right-0 h-72 w-72 rounded-full bg-fuchsia-500/20 blur-3xl" />
         <svg
           className="absolute inset-0 h-full w-full"
-          viewBox="0 0 1200 200"
+          viewBox="0 0 1200 260"
           fill="none"
           aria-hidden="true"
         >
           <path
-            d="M-50 190 C 300 150, 700 60, 1250 10"
+            d="M-50 240 C 300 190, 700 80, 1250 20"
             stroke="white"
-            strokeOpacity="0.12"
+            strokeOpacity="0.14"
             strokeWidth="1.5"
             strokeDasharray="6 8"
           />
+          <path
+            d="M-50 260 C 360 230, 760 150, 1250 90"
+            stroke="white"
+            strokeOpacity="0.08"
+            strokeWidth="1.5"
+            strokeDasharray="6 8"
+          />
+          <circle cx="900" cy="66" r="4" fill="white" fillOpacity="0.7" />
         </svg>
-        <div className="relative mx-auto max-w-5xl px-6 pt-10 pb-16">
-          <h1 className="text-3xl font-semibold tracking-tight text-white">Where to?</h1>
-          <p className="mt-1.5 text-sm text-white/60">
-            Thirty routes, a year of departures, real seat maps.
+        <div className="relative mx-auto max-w-6xl px-6 pt-14 pb-20">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/80 ring-1 ring-white/15 backdrop-blur">
+            ✦ 30 routes · a year of departures
+          </span>
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
+            Where to next?
+          </h1>
+          <p className="mt-2 max-w-md text-sm text-white/70">
+            Search real schedules, pick your seat from the actual cabin, and carry a boarding pass
+            you can scan.
           </p>
         </div>
       </div>
 
-    <main className="mx-auto max-w-5xl px-6 pb-12">
+    <main className="mx-auto max-w-6xl px-6 pb-12">
       <form
         onSubmit={handleSubmit}
         // Lifted onto the band so the form reads as the primary action.
-        className="card relative -mt-9 grid gap-3 p-4 shadow-[0_8px_24px_rgb(15_23_42/0.12)] sm:grid-cols-[1fr_1fr_auto_auto]"
+        className="card relative -mt-10 grid gap-3 p-5 shadow-[var(--shadow-lift)] sm:grid-cols-[1fr_1fr_auto_auto]"
       >
         <label className="text-sm">
           <span className="mb-1 block font-medium text-slate-700">From</span>
           <select
             value={origin}
             onChange={(e) => setOrigin(e.target.value)}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm outline-none transition focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
           >
             {AIRPORTS.map((airport) => (
               <option key={airport.code} value={airport.code}>
@@ -120,7 +134,7 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
           <select
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm outline-none transition focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
           >
             {AIRPORTS.map((airport) => (
               <option key={airport.code} value={airport.code}>
@@ -137,7 +151,7 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
             value={date}
             min={todayIso()}
             onChange={(e) => setDate(e.target.value)}
-            className="tabular w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
+            className="tabular w-full rounded-xl border border-slate-200 bg-slate-50/60 px-3.5 py-2.5 text-sm outline-none transition focus:bg-white focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
           />
         </label>
 
@@ -163,12 +177,19 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
                 key={route.label}
                 type="button"
                 onClick={() => pickRoute(route)}
-                className="card px-3 py-2 text-left text-sm transition hover:border-brand-300 hover:bg-brand-50/40"
+                className="card card-hover flex items-center gap-3 px-4 py-3 text-left text-sm"
               >
-                <span className="tabular font-medium text-slate-900">
-                  {route.origin} → {route.destination}
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand-50 text-brand-600">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                    <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
+                  </svg>
                 </span>
-                <span className="block text-xs text-slate-500">{route.label}</span>
+                <span className="min-w-0">
+                  <span className="tabular block font-semibold text-slate-900">
+                    {route.origin} → {route.destination}
+                  </span>
+                  <span className="block truncate text-xs text-slate-500">{route.label}</span>
+                </span>
               </button>
             ))}
           </div>

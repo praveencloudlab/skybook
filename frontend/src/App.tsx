@@ -79,29 +79,29 @@ function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-brand-900/10 bg-brand-900 text-white shadow-sm">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
+    <header className="glass sticky top-0 z-20 text-white">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
         <Link to="/" className="group flex items-center gap-2.5">
           {/* A mark, not just a wordmark - it is what makes the header read as
               an airline rather than an admin console. */}
-          <span className="grid h-7 w-7 place-items-center rounded bg-white/10 ring-1 ring-white/20 transition group-hover:bg-white/20">
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 shadow-lg shadow-brand-500/30 transition group-hover:scale-105">
             <svg viewBox="0 0 24 24" className="h-4 w-4 fill-white" aria-hidden="true">
               <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
             </svg>
           </span>
-          <span className="text-sm font-semibold tracking-[0.2em] uppercase">SkyBook</span>
+          <span className="text-base font-semibold tracking-tight">SkyBook</span>
         </Link>
         {signedIn ? (
           <div className="flex items-center gap-1 text-sm sm:gap-3">
             <Link
               to="/"
-              className="rounded px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+              className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
             >
               Book
             </Link>
             <Link
               to="/bookings"
-              className="rounded px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+              className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
             >
               My bookings
             </Link>
@@ -111,7 +111,7 @@ function Header() {
             <button
               type="button"
               onClick={signOut}
-              className="rounded px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+              className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
             >
               Sign out
             </button>
@@ -119,7 +119,7 @@ function Header() {
         ) : (
           <Link
             to="/sign-in"
-            className="rounded px-2.5 py-1.5 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+            className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
           >
             Sign in
           </Link>

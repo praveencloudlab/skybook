@@ -71,7 +71,7 @@ export function SeatMap({
         </div>
       </div>
 
-      <div className="flex items-center justify-between rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
         <span className="text-slate-700">
           {selected ? (
             <>
@@ -134,7 +134,7 @@ function Seat({
       aria-label={label}
       aria-pressed={selected}
       className={
-        'relative h-9 w-9 rounded text-[11px] font-medium transition ' +
+        'relative h-9 w-9 rounded-lg text-[11px] font-medium transition ' +
         (unavailable
           ? 'cursor-not-allowed bg-slate-100 text-slate-300'
           : selected

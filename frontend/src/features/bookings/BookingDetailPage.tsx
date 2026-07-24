@@ -160,7 +160,7 @@ function CheckInRow({
         </div>
 
         {done ? (
-          <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
+          <span className="rounded-lg bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
             {record.status === 'BOARDED' ? 'boarded' : 'checked in'}
           </span>
         ) : (

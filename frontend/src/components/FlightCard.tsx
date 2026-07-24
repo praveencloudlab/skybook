@@ -24,7 +24,7 @@ export function FlightCard({ flight, onSelect }: { flight: Flight; onSelect?: ()
           looks for, so it gets its own band rather than being lost in a row. */}
       <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-2">
         <div className="flex items-center gap-2">
-          <span className="grid h-6 w-6 place-items-center rounded bg-brand-600 text-[10px] font-bold text-white">
+          <span className="grid h-6 w-6 place-items-center rounded-lg bg-brand-600 text-[10px] font-bold text-white">
             {flight.airlineCode}
           </span>
           <span className="tabular text-xs font-medium text-slate-600">{flight.flightNumber}</span>
@@ -90,7 +90,7 @@ export function FlightCard({ flight, onSelect }: { flight: Flight; onSelect?: ()
             type="button"
             onClick={onSelect}
             disabled={cancelled}
-            className="rounded-md bg-brand-600 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+            className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-medium text-white shadow-[var(--shadow-btn)] transition-all hover:bg-brand-500 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none disabled:hover:translate-y-0"
           >
             Select flight
           </button>

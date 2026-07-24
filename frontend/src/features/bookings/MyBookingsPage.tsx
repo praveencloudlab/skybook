@@ -96,7 +96,7 @@ function StatusBadge({ status }: { status: BookingStatus }) {
 
   return (
     <span
-      className={`inline-block rounded px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${styles[status]}`}
+      className={`inline-block rounded-lg px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${styles[status]}`}
     >
       {status.toLowerCase()}
     </span>

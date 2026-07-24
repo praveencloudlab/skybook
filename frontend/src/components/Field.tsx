@@ -28,11 +28,11 @@ export function Field({ label, error, hint, id, className = '', ...input }: Fiel
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : hint ? hintId : undefined}
         className={
-          'w-full rounded border px-3 py-2 text-sm outline-none transition ' +
-          'focus:ring-2 focus:ring-brand-500/40 ' +
+          'w-full rounded-xl border bg-slate-50/60 px-3.5 py-2.5 text-sm outline-none transition ' +
+          'focus:bg-white focus:ring-4 focus:ring-brand-500/15 ' +
           (error
-            ? 'border-red-400 bg-red-50/40 focus:border-red-500'
-            : 'border-slate-300 focus:border-brand-500') +
+            ? 'border-red-300 bg-red-50/50 focus:border-red-400 focus:ring-red-500/15'
+            : 'border-slate-200 focus:border-brand-500') +
           (className ? ` ${className}` : '')
         }
         {...input}
