@@ -9,9 +9,7 @@ import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
 
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
-import java.util.Base64;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -77,27 +75,18 @@ class PreflightE2ETest {
                          (or E2E_ADMIN_EMAIL / E2E_ADMIN_PASSWORD)""");
         }
 
-        Response response = RestAssured.given()
-                .contentType("application/json")
-                .body("""
-                        {"email":"%s","password":"%s"}"""
-                        .formatted(E2EConfig.ADMIN_EMAIL, E2EConfig.ADMIN_PASSWORD))
-                .when()
-                .post("/api/auth/login");
+        try {
+            adminToken = Identities.adminToken();
+        } catch (IllegalStateException e) {
+            fail("""
+                    %s
+                    Remediation: register the address first (bootstrap only promotes an account
+                    that already EXISTS), set SKYBOOK_BOOTSTRAP_ADMIN_EMAIL to it, then
+                    `docker compose up -d auth-service`.""".formatted(e.getMessage()));
+        }
 
-        assertThat(response.statusCode())
-                .as("ADMIN login failed. Remediation: check the credentials, and that the "
-                        + "account exists (register it first - bootstrap only promotes an "
-                        + "account that already exists)")
-                .isEqualTo(200);
-
-        adminToken = response.asString().trim();
-        assertThat(rolesOf(adminToken))
-                .as("""
-                        The account logged in but is NOT an ADMIN.
-                        Remediation: SKYBOOK_BOOTSTRAP_ADMIN_EMAIL must exactly match this
-                        address, and auth-service must have been restarted since it was set -
-                        promotion happens once, at startup.""")
+        assertThat(Jwt.roles(adminToken))
+                .as("the bootstrapped account must actually carry ROLE_ADMIN")
                 .contains("ROLE_ADMIN");
     }
 
@@ -160,20 +149,4 @@ class PreflightE2ETest {
                 .isEqualTo(200);
     }
 
-    /** Reads the roles claim without verifying - the gateway already verified it. */
-    private static List<String> rolesOf(String jwt) {
-        String[] parts = jwt.split("\\.");
-        if (parts.length < 2) {
-            fail("Login did not return a JWT. Got: " + abbreviate(jwt));
-        }
-        String payload = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
-        return io.restassured.path.json.JsonPath.from(payload).getList("roles");
-    }
-
-    private static String abbreviate(String s) {
-        if (s == null) {
-            return "null";
-        }
-        return s.length() <= 120 ? s : s.substring(0, 120) + "...";
-    }
 }
