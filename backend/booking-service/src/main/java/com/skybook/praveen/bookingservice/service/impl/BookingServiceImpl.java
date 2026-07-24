@@ -231,6 +231,20 @@ public class BookingServiceImpl implements BookingService {
     }
 
     @Override
+    public List<BookingResponse> getBookingsForOwner(String ownerSubject) {
+        // No ownership CHECK is needed here, because ownership is the query: a
+        // caller can only ever ask for their own subject (the controller takes it
+        // from the validated token, never from user input), so there is no id to
+        // tamper with and nothing to compare after the fact.
+        if (ownerSubject == null || ownerSubject.isBlank()) {
+            return List.of();
+        }
+        return bookingRepository.findByOwnerSubjectOrderByBookingDateDesc(ownerSubject).stream()
+                .map(BookingMapper::toResponse)
+                .toList();
+    }
+
+    @Override
     public List<BookingResponse> searchBookings(BookingSearchRequest criteria) {
         return bookingRepository.findAll().stream()
                 .filter(b -> criteria.bookingReference() == null

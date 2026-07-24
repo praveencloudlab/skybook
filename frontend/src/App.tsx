@@ -19,6 +19,8 @@ import { FlightQuotePage } from './features/search/FlightQuotePage';
 import { SeatSelectionPage } from './features/seats/SeatSelectionPage';
 import { CheckoutPage } from './features/booking/CheckoutPage';
 import { ConfirmationPage } from './features/booking/ConfirmationPage';
+import { MyBookingsPage } from './features/bookings/MyBookingsPage';
+import { BookingDetailPage } from './features/bookings/BookingDetailPage';
 import type { AircraftSeat } from './api/seats';
 import type { Booking } from './api/bookings';
 import type { Payment } from './api/payments';
@@ -84,7 +86,10 @@ function Header() {
           SkyBook
         </Link>
         {signedIn ? (
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-4 text-sm">
+            <Link to="/bookings" className="font-medium text-slate-700 hover:text-brand-700">
+              My bookings
+            </Link>
             <span className="hidden text-slate-600 sm:inline">{subject}</span>
             <Button variant="secondary" onClick={signOut}>
               Sign out
@@ -205,6 +210,23 @@ function HomePage() {
   );
 }
 
+/**
+ * List and detail for my bookings.
+ *
+ * <p>Detail is local state rather than a /bookings/:id route so returning to the
+ * list does not re-fetch it - the list is already correct, and a route would
+ * throw it away on every back-navigation.
+ */
+function BookingsRoute() {
+  const [open, setOpen] = useState<Booking | null>(null);
+
+  return open ? (
+    <BookingDetailPage booking={open} onBack={() => setOpen(null)} />
+  ) : (
+    <MyBookingsPage onOpen={setOpen} />
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -219,6 +241,14 @@ export default function App() {
               element={
                 <RequireSession>
                   <HomePage />
+                </RequireSession>
+              }
+            />
+            <Route
+              path="/bookings"
+              element={
+                <RequireSession>
+                  <BookingsRoute />
                 </RequireSession>
               }
             />

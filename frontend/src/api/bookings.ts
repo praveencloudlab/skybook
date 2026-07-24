@@ -72,6 +72,10 @@ export interface Booking {
 }
 
 export const bookingsApi = {
+  mine(signal?: AbortSignal): Promise<Booking[]> {
+    return api.get<Booking[]>('/api/bookings/mine', { signal });
+  },
+
   create(request: CreateBookingRequest, signal?: AbortSignal): Promise<Booking> {
     return api.post<Booking>('/api/bookings', request, { signal });
   },
@@ -94,3 +98,4 @@ export const NATIONALITIES = [
   'GBR', 'USA', 'IND', 'IRL', 'FRA', 'DEU', 'ESP', 'ITA', 'NLD', 'PRT',
   'ARE', 'QAT', 'SAU', 'ZAF', 'KEN', 'AUS', 'NZL', 'CAN', 'SGP', 'JPN',
 ] as const;
+

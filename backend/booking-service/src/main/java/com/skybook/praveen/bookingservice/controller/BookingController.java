@@ -10,6 +10,7 @@ import com.skybook.praveen.bookingservice.enums.BookingStatus;
 import com.skybook.praveen.bookingservice.enums.PaymentStatus;
 import com.skybook.praveen.bookingservice.facade.BookingFacade;
 import com.skybook.praveen.bookingservice.service.BookingService;
+import com.skybook.praveen.security.SecurityAccess;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -54,6 +55,22 @@ public class BookingController {
     @PostMapping("/quote")
     public QuoteResponse quoteFares(@Valid @RequestBody QuoteRequest request) {
         return bookingFacade.quoteFares(request.flightId());
+    }
+
+    @Operation(
+            summary = "My Bookings",
+            description = "Every booking belonging to the authenticated caller, newest first. "
+                    + "This is the passenger-facing counterpart to the ADMIN-only list-all."
+    )
+    // Declared BEFORE /{id} so the literal path wins the mapping - otherwise
+    // "mine" would be parsed as a booking id and fail with a 400.
+    @GetMapping("/mine")
+    public List<BookingResponse> getMyBookings() {
+        // The subject comes from the validated token, never from the request, so
+        // a caller cannot ask for anyone else's bookings: there is no id to
+        // tamper with. That is why this needs no additional ownership check,
+        // unlike /{id} below.
+        return bookingService.getBookingsForOwner(SecurityAccess.currentSubject());
     }
 
     @Operation(summary = "Get Booking By Id")

@@ -18,6 +18,19 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     List<Booking> findByCustomerId(Long customerId);
 
+    /**
+     * Every booking belonging to one authenticated subject, newest first.
+     *
+     * <p>Keyed on ownerSubject rather than customerId because ownerSubject is
+     * what the platform actually authorises against (§4.2) - and, since V6,
+     * customerId is optional and may be null.
+     *
+     * <p>Legacy rows created before ownership existed have a null ownerSubject
+     * and are therefore invisible here, which is correct: they are ADMIN-only by
+     * design and must not surface under someone else's account.
+     */
+    List<Booking> findByOwnerSubjectOrderByBookingDateDesc(String ownerSubject);
+
     List<Booking> findByBookingStatus(BookingStatus bookingStatus);
 
     // Stale-draft sweep scan (SEAT_SELECTION_MODULE.md §5.1a): DRAFT bookings
