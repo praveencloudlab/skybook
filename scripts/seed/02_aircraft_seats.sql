@@ -1,6 +1,23 @@
 BEGIN;
 
--- Clean slate (inventory DB held only trivial leftover test data).
+-- Clean slate, in foreign-key order: children before parents.
+--
+-- This used to delete flight_inventory directly, on the assumption that the
+-- inventory DB "held only trivial leftover test data". That is true exactly
+-- once. As soon as anyone actually uses the platform - books, holds a seat, runs
+-- the e2e suite - inventory_history / seat_holds / seat_reservations reference
+-- flight_inventory, and the delete fails with a foreign-key violation:
+--   update or delete on table "flight_inventory" violates foreign key
+--   constraint on table "inventory_history"
+-- So re-seeding worked on a pristine database and broke on a used one, which is
+-- the opposite failure mode to the one 01_flights.sql had (it required a used
+-- database and produced nothing on a pristine one). The script's own header
+-- promises it is re-runnable; this makes that true.
+-- seat_reservations before seat_holds: a reservation references the hold it
+-- was confirmed from, as well as flight_inventory.
+DELETE FROM inventory_history;
+DELETE FROM seat_reservations;
+DELETE FROM seat_holds;
 DELETE FROM flight_inventory;
 DELETE FROM aircraft_seats;
 DELETE FROM aircraft;
