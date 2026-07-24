@@ -37,6 +37,20 @@ describe('format', () => {
     expect(money(undefined)).toBe('—');
   });
 
+  it('uses the currency the server sent, not a hardcoded one', () => {
+    // Caught live: /api/bookings/quote returns USD for the seeded fares. A
+    // hardcoded GBP formatter rendered $85.00 as "£85.00" - a booking screen
+    // stating a false price, which is the one thing it must never do.
+    expect(money(85, 'USD')).toBe('US$85.00');
+    expect(money(85, 'EUR')).toBe('€85.00');
+    expect(money(85, 'GBP')).toBe('£85.00');
+  });
+
+  it('still shows the number when the currency code is unrecognised', () => {
+    // Blanking the price entirely would be worse than showing it unstyled.
+    expect(money(85, 'NOTACURRENCY')).toBe('85.00 NOTACURRENCY');
+  });
+
   it('adds days across a month boundary', () => {
     expect(addDaysIso('2026-08-31', 1)).toBe('2026-09-01');
     expect(addDaysIso('2026-12-31', 1)).toBe('2027-01-01');

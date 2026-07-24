@@ -57,18 +57,51 @@ export function duration(fromIso: string, toIso: string): string {
   return mins === 0 ? `${hours}h` : `${hours}h ${mins}m`;
 }
 
-const MONEY = new Intl.NumberFormat('en-GB', {
-  style: 'currency',
-  currency: 'GBP',
-  minimumFractionDigits: 2,
-});
+/**
+ * Money, in the currency the SERVER said.
+ *
+ * <p>The currency is a parameter, not a constant, because it is not ours to
+ * assume: the quote endpoint returns USD for the seeded fares, and hardcoding
+ * GBP would render $85.00 as "£85.00" - a booking screen stating a false price.
+ * Defaults to GBP only for the rare call site with genuinely no currency to
+ * hand.
+ *
+ * <p>Formatters are cached: constructing an Intl.NumberFormat is comparatively
+ * expensive, and a fare table builds one per cell otherwise.
+ */
+const MONEY_FORMATTERS = new Map<string, Intl.NumberFormat>();
 
-export function money(amount: number | string | null | undefined): string {
+function formatterFor(currency: string): Intl.NumberFormat {
+  let formatter = MONEY_FORMATTERS.get(currency);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+    });
+    MONEY_FORMATTERS.set(currency, formatter);
+  }
+  return formatter;
+}
+
+export function money(
+  amount: number | string | null | undefined,
+  currency = 'GBP',
+): string {
   if (amount === null || amount === undefined || amount === '') {
     return '—';
   }
   const value = typeof amount === 'string' ? Number(amount) : amount;
-  return Number.isFinite(value) ? MONEY.format(value) : '—';
+  if (!Number.isFinite(value)) {
+    return '—';
+  }
+  try {
+    return formatterFor(currency).format(value);
+  } catch {
+    // An unrecognised currency code must not blank out the price entirely -
+    // showing "85.00 XYZ" is far better than showing nothing.
+    return `${value.toFixed(2)} ${currency}`;
+  }
 }
 
 /** Today in the yyyy-MM-dd shape the API expects, in the viewer's own date. */
