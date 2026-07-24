@@ -1,0 +1,91 @@
+# E2E certification overrides (E2E_CERTIFICATION_MODULE.md §10.1).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d
+#
+# ⚠ NEVER merge these into docker-compose.yml. They exist only so a test suite
+# can run in seconds instead of hours, and one of them weakens a real control.
+#
+# Each override below buys determinism in exchange for something, and the
+# trade-off is stated so it stays honest:
+#
+#  * check-in / boarding windows — production opens check-in 24h before departure
+#    and boarding only 45 MINUTES before. Those two windows do not overlap, so at
+#    any single wall-clock moment a flight can be checked-in-to OR boarded, never
+#    both: certifying the full journey against real windows would mean waiting for
+#    a flight to come within 45 minutes. Widened here so any seeded future flight
+#    is both. CONSEQUENCE, stated plainly: while this override is active the suite
+#    does NOT certify that the real windows are enforced. That enforcement is real
+#    (a too-early check-in returns 409 "does not open until ..." — observed) but
+#    proving it needs a run against the default config. Deliberate gap.
+#
+#  * seat-hold TTL — 15 minutes in production. A suite cannot wait 15 minutes to
+#    prove a hold expires, so it is cut to ~1 minute here. The sweep logic being
+#    certified is byte-identical; only the clock differs.
+#
+#  * gateway rate limit — 100 req/min in production. The suite polls async
+#    (Kafka-driven) state changes and legitimately exceeds that, which surfaced
+#    as spurious 429s. Raised so the limiter does not masquerade as a product
+#    failure. NOTE this means the suite does not certify the limiter; that is a
+#    deliberate gap, not an oversight.
+
+services:
+
+  # SMTP sink for the notification assertion (§10.2). Without it the suite could
+  # only prove "an EmailEvent was published"; with it we prove an email actually
+  # ARRIVED, which is what the customer journey claims.
+  #
+  # Mailpit rather than MailHog: same role and API shape, but MailHog has been
+  # unmaintained since 2020. Called out because the frozen design named MailHog -
+  # this is a substitution of the maintained successor, not a change of approach.
+  mailpit:
+    image: axllent/mailpit:v1.21.8
+    expose:
+      - "1025"   # SMTP  (notification-service sends here)
+      - "8025"   # HTTP API (the suite reads captured mail here)
+    ports:
+      - "8025:8025"
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  notification-service:
+    environment:
+      # Point the real mail sender at the sink - no auth, no TLS.
+      SPRING_MAIL_HOST: mailpit
+      SPRING_MAIL_PORT: "1025"
+      SPRING_MAIL_USERNAME: ""
+      SPRING_MAIL_PASSWORD: ""
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: "false"
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: "false"
+    depends_on:
+      mailpit:
+        condition: service_healthy
+
+  checkin-service:
+    environment:
+      # Any seeded future flight is inside the check-in window.
+      CHECKIN_WINDOW_OPENS_HOURS_BEFORE_DEPARTURE: "8760"   # 365 days
+      CHECKIN_WINDOW_CLOSES_MINUTES_BEFORE_DEPARTURE: "5"
+      # ...and inside the boarding window too.
+      CHECKIN_BOARDING_OPENS_MINUTES_BEFORE_DEPARTURE: "525600"  # 365 days
+      CHECKIN_BOARDING_GATE_CLOSES_MINUTES_BEFORE_DEPARTURE: "5"
+
+  inventory-service:
+    environment:
+      # Expired-hold certification without a 15-minute wait.
+      INVENTORY_HOLD_TTL_MINUTES: "1"
+      INVENTORY_HOLD_SWEEP_INTERVAL_MS: "5000"
+
+  booking-service:
+    environment:
+      # Booking's stale-DRAFT sweep is deliberately aligned with inventory's hold
+      # TTL in production; keep them aligned here too or a swept hold would leave
+      # an orphaned DRAFT behind.
+      BOOKING_DRAFT_TTL_MINUTES: "1"
+      BOOKING_DRAFT_SWEEP_INTERVAL_MS: "5000"
+
+  api-gateway:
+    environment:
+      GATEWAY_RATE_LIMIT_REQUESTS_PER_MINUTE: "10000"
