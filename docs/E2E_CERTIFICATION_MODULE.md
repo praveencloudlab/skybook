@@ -8,7 +8,7 @@
 |---|---|
 | **Scope** | Automate the full customer journey as an executable, repeatable certification suite — register → login → search → quote → book → hold seat → pay → confirm → check-in → boarding pass → board → finalise — plus the failure paths (cancellation, declined payment, duplicate requests, expired holds, service-down) and a real cross-service trace assertion |
 | **Branch** | `feature/e2e-certification` |
-| **Status** | 🔒 **FROZEN — approved.** All four §10 questions resolved (see §10 Decisions Settled). Implementation follows the §13 build order. |
+| **Status** | ✅ **Implemented and verified.** All 14 build-order steps complete. 31 assertions across 8 test classes, green on consecutive full runs against the live fleet: happy path, check-in→boarding, real captured email, failure matrix, service-down + recovery, double-sell race, and a cross-service trace. Two deliberate gaps are recorded in §14 rather than hidden. |
 | **Depends on** | Everything merged: dockerization, ci-cd, observability, resilience, seat-selection, security-hardening (all on `main`) |
 
 Goal: today "does the whole thing actually work?" is answered by a human running
@@ -268,3 +268,86 @@ Each step ends with something demonstrably working, in the project's usual style
 - **Two probabilistic unit-test flakes already exist** (`PaymentReferenceGeneratorTest`,
   `BoardingPassNumberGeneratorTest`); they're unrelated but will muddy any "is the
   build green?" signal until fixed.
+
+---
+
+# 14. Implementation Notes
+
+All 14 steps landed on `feature/e2e-certification`, each verified against the
+running fleet before commit. Final state: **31 assertions, 8 classes, green on
+two consecutive full runs**.
+
+The suite's value showed up immediately — not as product bugs, but as a series of
+things that were *assumed* and turned out to be false. That is the point of it.
+
+**What running it exposed:**
+
+1. **The suite ran itself in a normal build.** The whole design rests on it being
+   opt-in, and `skipITs` looked like enough. It is not: the parent's surefire only
+   *excludes* `**/*IntegrationTest.java`, so `PreflightE2ETest` matched surefire's
+   default `**/*Test.java` include and a plain `mvn verify` executed the entire
+   certification suite against a fleet that may not be running. Surefire is now
+   switched off in the module outright. Caught only by running the default build
+   and looking — the exact assumption that most deserved checking.
+
+2. **The check-in and boarding windows can never both be open.** I first misread
+   `CheckInServiceImpl`'s implicit status-open as meaning the time gate was inert.
+   It is enforced: `409 "Check-in for flight 404 does not open until ..."`. Worse,
+   check-in requires the flight **>45 min** away and boarding requires it **<45 min**
+   away, so no single wall-clock moment allows both on one flight. Certifying the
+   journey against production windows would mean waiting for a departure to come
+   within 45 minutes. Hence the e2e override.
+
+3. **The gateway's rate limiter policed the test harness.** Polling twice a second
+   across several waits exceeded 100 req/min and came back as 429s that looked
+   exactly like product failures. Fixed on both sides: polling slowed to 1s (a
+   tight poll buys nothing here) and the limit raised in the override.
+
+4. **A declined card is an HTTP 422, not a 200 carrying a failed status.** The
+   original assertion read `status` out of what was actually an error body. The
+   test now asserts both halves — 422 to the caller *and* `AUTHORIZATION_FAILED`
+   persisted — which is a stronger statement than the one first written.
+
+5. **My double-sell test was not repeatable.** It passed alone and failed in the
+   full run: it *consumes* a seat, and had simply taken "the first flight in a
+   window", so on the next run that seat was already sold and **neither** racer
+   could win. It now searches for a completely unsold flight. A test that only
+   passes once is worse than no test.
+
+6. **A false negative of my own making.** The notification test timed out claiming
+   no mail arrived — but it had; notification-service logged the send and the sink
+   held it. The search query was hand-URL-encoded *and* RestAssured re-encoded it,
+   so a double-encoded `%253A` matched nothing. Had that shipped, "no email
+   arrived" would have looked like a product defect for ever.
+
+7. **The Postman collection would have failed on every request.** It addressed
+   per-service ports the security branch unpublished, and sent no `Authorization`
+   header at all. Repointed at the gateway with collection-level bearer auth, and
+   the missing check-in half of the journey added.
+
+8. **The recovery poll could never have succeeded** — it waited for 200 while
+   booking create returns 201. Fixed with a status-aware wait rather than by
+   loosening the assertion.
+
+**What was confirmed rather than assumed:** `scripts/seed/seed.sh` already uses
+`docker exec`, so unpublishing Postgres did *not* break seeding (checked precisely
+because it looked likely to). The seed's 10,950 flights make the happy path a
+lookup rather than a setup. And a single journey trace really does span **seven
+services** — api-gateway, booking, checkin, flight, inventory, notification,
+payment — which finally closes, with evidence, the Kafka-hop gap
+`OBSERVABILITY_MODULE.md` could only verify by mechanism.
+
+**Substitution:** Mailpit replaces MailHog as the SMTP sink — same role and API
+shape, but MailHog has been unmaintained since 2020. Flagged because the frozen
+design named MailHog.
+
+**Two deliberate gaps**, stated rather than quietly accepted. While the e2e
+override is active the suite does **not** certify (a) that the real check-in and
+boarding windows are enforced, or (b) the gateway rate limiter — both are widened
+precisely so the journey can be tested. Both are real controls that work; proving
+them needs a separate run against the default configuration.
+
+**Known unrelated flakes:** `PaymentReferenceGeneratorTest` and
+`BoardingPassNumberGeneratorTest` are probabilistic collision tests in the unit
+suite. They are independent of this branch but will muddy any "is the build
+green?" signal until fixed.
