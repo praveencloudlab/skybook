@@ -14,6 +14,7 @@ import { Button } from './components/Button';
 import { useSession } from './features/auth/useSession';
 import { RegisterPage } from './features/auth/RegisterPage';
 import { SignInPage } from './features/auth/SignInPage';
+import { SearchPage } from './features/search/SearchPage';
 import { session } from './lib/session';
 
 /**
@@ -103,16 +104,13 @@ function RequireSession({ children }: { children: React.ReactNode }) {
 }
 
 function HomePage() {
-  const { subject } = useSession();
   return (
-    <main className="mx-auto max-w-5xl px-6 py-12">
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-        Signed in as {subject}
-      </h1>
-      <p className="mt-2 text-sm text-slate-600">
-        Flight search arrives in build-order step 6.
-      </p>
-    </main>
+    <SearchPage
+      onSelectFlight={() => {
+        // Quote + seat selection land in build-order steps 7-8; until then the
+        // card's Select button is intentionally inert rather than pretending.
+      }}
+    />
   );
 }
 
