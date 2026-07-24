@@ -415,6 +415,38 @@ services:
     # already turns "downstream not up yet" into a clean 502 instead of the
     # gateway needing them up first (API_GATEWAY_MODULE.md's own design).
 
+
+  # The passenger-facing SPA (FRONTEND_MODULE.md §8). nginx serves the built
+  # static bundle and proxies /api to the gateway, so the browser sees ONE
+  # origin - which is what lets the session cookie be SameSite=Lax rather than
+  # SameSite=None (§10.1). Port 3000 was reserved for this when observability
+  # deliberately put Grafana on 3001.
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    read_only: true
+    # mode=1777 matters: a tmpfs mounts root-owned by default, and nginx runs as
+    # the non-root 'nginx' user - without it the worker cannot create
+    # /var/cache/nginx/client_temp and the container dies on startup.
+    tmpfs:
+      - /tmp:mode=1777
+      - /var/cache/nginx:mode=1777
+      - /var/run:mode=1777
+    healthcheck:
+      # 127.0.0.1, not localhost: the read-only rootfs stops nginx's entrypoint
+      # adding its IPv6 listener, so localhost (::1) is refused inside.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
   # ---------------- Observability (OBSERVABILITY_MODULE.md) ----------------
 
   prometheus:
