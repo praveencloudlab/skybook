@@ -79,7 +79,7 @@ export function FlightQuotePage({
         <ErrorAlert error={error} />
 
         {busy ? (
-          <p className="rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">
+          <p className="card px-3 py-2 text-sm text-slate-500">
             Loading fares…
           </p>
         ) : quote ? (

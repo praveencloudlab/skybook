@@ -36,14 +36,14 @@ export function FareTable({
 
   if (cabins.length === 0) {
     return (
-      <p className="rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+      <p className="card px-3 py-2 text-sm text-slate-600">
         No fares are published for this flight.
       </p>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded border border-slate-200 bg-white">
+    <div className="card overflow-x-auto">
       <table className="w-full min-w-[34rem] text-sm">
         <caption className="sr-only">Fares by cabin and fare type</caption>
         <thead>

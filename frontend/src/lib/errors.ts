@@ -94,8 +94,19 @@ export function userMessage(error: ApiError): string {
   const fromServer = error.body?.message?.trim();
 
   switch (error.kind) {
-    case 'validation':
+    case 'validation': {
+      // The server sends every violation as one joined string. Repeating it
+      // verbatim is unreadable, and the individual messages are already shown
+      // against their own inputs - so point at the form instead.
+      const count = fieldErrorCount(error);
+      if (count > 1) {
+        return `Please check the ${count} highlighted fields.`;
+      }
+      if (count === 1) {
+        return 'Please check the highlighted field.';
+      }
       return fromServer || 'Please check the details you entered.';
+    }
     case 'unauthenticated':
       return 'Your session has expired. Please sign in again.';
     case 'forbidden':
@@ -117,18 +128,52 @@ export function userMessage(error: ApiError): string {
   }
 }
 
-/** Field-level messages from a 400, keyed by field where the server gave them. */
+/**
+ * Field-level messages from a 400.
+ *
+ * <p>The fleet's validation advice joins violations into ONE string:
+ * {@code "passengers: At least one passenger is required, flightId: flightId is
+ * required, contact.contactEmail: Contact email is required"}. So it has to be
+ * taken apart to attach each message to its own input - showing that raw string
+ * to a passenger would be worse than showing nothing.
+ *
+ * <p>Nested paths are indexed under BOTH the full path and its last segment
+ * ({@code contact.contactEmail} and {@code contactEmail}), because a form's
+ * field is usually named after the leaf rather than the server's object graph.
+ */
 export function fieldErrors(error: ApiError): Record<string, string> {
   if (error.kind !== 'validation' || !error.body?.message) {
     return {};
   }
-  // The advice joins violations as "field: message, field: message".
+
   const result: Record<string, string> = {};
-  for (const part of error.body.message.split(',')) {
-    const [field, ...rest] = part.split(':');
-    if (field && rest.length > 0) {
-      result[field.trim()] = rest.join(':').trim();
+  // Split only where a new "field:" actually begins, so a message containing a
+  // comma is not torn in half.
+  for (const part of error.body.message.split(/,\s*(?=[A-Za-z_][\w.[\]]*\s*:)/)) {
+    const separator = part.indexOf(':');
+    if (separator === -1) {
+      continue;
+    }
+    const field = part.slice(0, separator).trim();
+    const message = part.slice(separator + 1).trim();
+    if (!field || !message) {
+      continue;
+    }
+    result[field] = message;
+
+    const leaf = field.split('.').pop();
+    if (leaf && !(leaf in result)) {
+      result[leaf] = message;
     }
   }
   return result;
+}
+
+/**
+ * How many distinct fields a validation error mentions.
+ *
+ * <p>Used to decide between naming the problem and pointing at the form.
+ */
+export function fieldErrorCount(error: ApiError): number {
+  return Object.keys(fieldErrors(error)).length;
 }

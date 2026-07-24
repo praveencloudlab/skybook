@@ -65,19 +65,47 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
   const sameAirport = origin === destination;
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Find a flight</h1>
+    <>
+      {/* A short brand band so the search form has something to sit against -
+          without it the page opens as a bare form on grey, which is what made
+          the app feel unfinished. */}
+      <div className="relative overflow-hidden bg-brand-900">
+        <div className="absolute inset-0 bg-gradient-to-br from-brand-800 via-brand-900 to-slate-950" />
+        <div className="absolute -top-20 -right-10 h-72 w-72 rounded-full bg-brand-500/20 blur-3xl" />
+        <svg
+          className="absolute inset-0 h-full w-full"
+          viewBox="0 0 1200 200"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M-50 190 C 300 150, 700 60, 1250 10"
+            stroke="white"
+            strokeOpacity="0.12"
+            strokeWidth="1.5"
+            strokeDasharray="6 8"
+          />
+        </svg>
+        <div className="relative mx-auto max-w-5xl px-6 pt-10 pb-16">
+          <h1 className="text-3xl font-semibold tracking-tight text-white">Where to?</h1>
+          <p className="mt-1.5 text-sm text-white/60">
+            Thirty routes, a year of departures, real seat maps.
+          </p>
+        </div>
+      </div>
 
+    <main className="mx-auto max-w-5xl px-6 pb-12">
       <form
         onSubmit={handleSubmit}
-        className="mt-6 grid gap-3 rounded border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_1fr_auto_auto]"
+        // Lifted onto the band so the form reads as the primary action.
+        className="card relative -mt-9 grid gap-3 p-4 shadow-[0_8px_24px_rgb(15_23_42/0.12)] sm:grid-cols-[1fr_1fr_auto_auto]"
       >
         <label className="text-sm">
           <span className="mb-1 block font-medium text-slate-700">From</span>
           <select
             value={origin}
             onChange={(e) => setOrigin(e.target.value)}
-            className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
           >
             {AIRPORTS.map((airport) => (
               <option key={airport.code} value={airport.code}>
@@ -92,7 +120,7 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
           <select
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
-            className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
           >
             {AIRPORTS.map((airport) => (
               <option key={airport.code} value={airport.code}>
@@ -109,7 +137,7 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
             value={date}
             min={todayIso()}
             onChange={(e) => setDate(e.target.value)}
-            className="tabular w-full rounded border border-slate-300 px-3 py-2 text-sm"
+            className="tabular w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30"
           />
         </label>
 
@@ -135,7 +163,7 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
                 key={route.label}
                 type="button"
                 onClick={() => pickRoute(route)}
-                className="rounded border border-slate-200 bg-white px-3 py-2 text-left text-sm transition hover:border-brand-300 hover:bg-brand-50/40"
+                className="card px-3 py-2 text-left text-sm transition hover:border-brand-300 hover:bg-brand-50/40"
               >
                 <span className="tabular font-medium text-slate-900">
                   {route.origin} → {route.destination}
@@ -160,7 +188,7 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
 
             {results.length === 0 ? (
               // Say what to do next. "No results" alone reads like a fault.
-              <p className="rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+              <p className="card px-3 py-2 text-sm text-slate-600">
                 Try another date, or pick one of the popular routes.
               </p>
             ) : (
@@ -176,5 +204,6 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
         ) : null}
       </div>
     </main>
+    </>
   );
 }

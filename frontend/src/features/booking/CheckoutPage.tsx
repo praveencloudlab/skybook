@@ -167,7 +167,7 @@ export function CheckoutPage({
               id="method"
               value={method}
               onChange={(e) => setMethod(e.target.value as PaymentMethod)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/40"
+              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/40"
             >
               {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((value) => (
                 <option key={value} value={value}>
@@ -180,7 +180,7 @@ export function CheckoutPage({
 
         {/* The full breakdown before paying - a seat surcharge appearing only on
             the receipt is exactly the sort of surprise that erodes trust. */}
-        <dl className="rounded border border-slate-200 bg-white text-sm">
+        <dl className="card text-sm">
           <div className="flex justify-between px-4 py-2">
             <dt className="text-slate-600">
               {TRAVEL_CLASS_LABELS[cabin]} · {FARE_TYPE_LABELS[fare]}

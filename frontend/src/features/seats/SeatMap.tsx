@@ -29,7 +29,7 @@ export function SeatMap({
 
   if (rows.length === 0) {
     return (
-      <p className="rounded border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+      <p className="card px-3 py-2 text-sm text-slate-600">
         This aircraft has no {TRAVEL_CLASS_LABELS[cabin]} cabin.
       </p>
     );
@@ -39,7 +39,7 @@ export function SeatMap({
     <div className="space-y-4">
       <Legend />
 
-      <div className="overflow-x-auto rounded border border-slate-200 bg-white p-4">
+      <div className="card overflow-x-auto p-4">
         <div className="mx-auto w-fit space-y-1.5">
           {rows.map(({ row, seats }) => (
             <div key={row} className="flex items-center gap-1.5">

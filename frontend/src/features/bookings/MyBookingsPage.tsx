@@ -41,7 +41,7 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
         ) : null}
 
         {bookings?.length === 0 ? (
-          <p className="rounded border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-600">
+          <p className="card px-4 py-6 text-center text-sm text-slate-600">
             You have no bookings yet.
           </p>
         ) : null}
@@ -51,7 +51,7 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
             key={booking.id}
             type="button"
             onClick={() => onOpen(booking)}
-            className="block w-full rounded border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-brand-300 hover:bg-brand-50/30"
+            className="card card-hover block w-full px-4 py-3 text-left transition hover:border-brand-300 hover:bg-brand-50/30"
           >
             <div className="flex items-center justify-between gap-4">
               <div>
