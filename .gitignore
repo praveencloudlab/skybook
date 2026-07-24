@@ -38,6 +38,10 @@ kafka-data/
 # is docker-compose.override.yml.example. Never commit the real override.
 docker-compose.override.yml
 
+# Real Kubernetes secret values (the committed template is
+# k8s/base/secrets.env.example). Never commit the populated file.
+k8s/base/secrets.env
+
 # Node / Frontend
 node_modules/
 .next/
