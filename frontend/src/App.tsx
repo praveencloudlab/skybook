@@ -1,37 +1,142 @@
-import { API_BASE_URL } from './lib/config';
+import { useEffect, useState } from 'react';
+import {
+  BrowserRouter,
+  Link,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom';
+import { authApi } from './api/auth';
+import { setUnauthenticatedHandler } from './api/client';
+import { Button } from './components/Button';
+import { useSession } from './features/auth/useSession';
+import { RegisterPage } from './features/auth/RegisterPage';
+import { SignInPage } from './features/auth/SignInPage';
+import { session } from './lib/session';
 
 /**
- * Scaffold placeholder (FRONTEND_MODULE.md build-order step 2).
+ * App shell (FRONTEND_MODULE.md §2, §4).
  *
- * Deliberately minimal: it exists to prove the toolchain (React + TypeScript +
- * Tailwind + the config module) renders and type-checks. Real screens arrive
- * from step 5, once the API client and the polling hook they all depend on are
- * in place.
+ * <p>Two things are wired here rather than per screen, because they must be true
+ * everywhere: the session is established once on load, and any 401 from any call
+ * routes to sign-in while remembering where the user was.
  */
+function SessionBootstrap({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { resolved } = useSession();
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    // One 401 handler for the whole app. Screens never deal with expiry; they
+    // just make their call and this catches the fallout.
+    setUnauthenticatedHandler(() => {
+      session.setReturnTo(location.pathname + location.search);
+      navigate('/sign-in', { replace: true });
+    });
+  }, [navigate, location]);
+
+  useEffect(() => {
+    // A returning visitor arrives with a valid cookie and no client state, so we
+    // have to ask who they are - the credential is httpOnly and unreadable here.
+    void authApi.restore().finally(() => setReady(true));
+  }, []);
+
+  // Hold the first paint until we know. Rendering "Sign in" and then swapping it
+  // for the user's name a moment later makes a signed-in visitor look
+  // signed-out on every single page load.
+  if (!ready && !resolved) {
+    return (
+      <div className="grid min-h-full place-items-center text-sm text-slate-500">Loading…</div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
+function Header() {
+  const { signedIn, subject } = useSession();
+  const navigate = useNavigate();
+
+  async function signOut() {
+    // Must be a server call: the cookie is httpOnly, so the browser cannot
+    // delete it itself.
+    await authApi.logout();
+    navigate('/sign-in', { replace: true });
+  }
+
+  return (
+    <header className="border-b border-slate-200 bg-white">
+      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
+        <Link to="/" className="text-sm font-semibold tracking-widest text-brand-700 uppercase">
+          SkyBook
+        </Link>
+        {signedIn ? (
+          <div className="flex items-center gap-3 text-sm">
+            <span className="hidden text-slate-600 sm:inline">{subject}</span>
+            <Button variant="secondary" onClick={signOut}>
+              Sign out
+            </Button>
+          </div>
+        ) : (
+          <Link to="/sign-in" className="text-sm font-medium text-brand-700 hover:underline">
+            Sign in
+          </Link>
+        )}
+      </div>
+    </header>
+  );
+}
+
+/** Gate for screens that need a session. */
+function RequireSession({ children }: { children: React.ReactNode }) {
+  const { signedIn } = useSession();
+  const location = useLocation();
+
+  if (!signedIn) {
+    session.setReturnTo(location.pathname + location.search);
+    return <Navigate to="/sign-in" replace />;
+  }
+  return <>{children}</>;
+}
+
+function HomePage() {
+  const { subject } = useSession();
+  return (
+    <main className="mx-auto max-w-5xl px-6 py-12">
+      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+        Signed in as {subject}
+      </h1>
+      <p className="mt-2 text-sm text-slate-600">
+        Flight search arrives in build-order step 6.
+      </p>
+    </main>
+  );
+}
+
 export default function App() {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
-      <p className="text-xs font-semibold tracking-widest text-brand-600 uppercase">
-        SkyBook
-      </p>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
-        Frontend scaffold
-      </h1>
-      <p className="mt-4 text-slate-600">
-        Vite, React, TypeScript and Tailwind are wired up. Screens land from
-        build-order step 5, after the API client and the polling hook.
-      </p>
-
-      <dl className="mt-8 divide-y divide-slate-200 border-y border-slate-200 text-sm">
-        <div className="flex justify-between gap-4 py-3">
-          <dt className="text-slate-500">API gateway</dt>
-          <dd className="tabular font-medium text-slate-900">{API_BASE_URL}</dd>
+    <BrowserRouter>
+      <SessionBootstrap>
+        <div className="min-h-full">
+          <Header />
+          <Routes>
+            <Route path="/sign-in" element={<SignInPage />} />
+            <Route path="/register" element={<RegisterPage />} />
+            <Route
+              path="/"
+              element={
+                <RequireSession>
+                  <HomePage />
+                </RequireSession>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </div>
-        <div className="flex justify-between gap-4 py-3">
-          <dt className="text-slate-500">Dev server</dt>
-          <dd className="tabular font-medium text-slate-900">localhost:5173</dd>
-        </div>
-      </dl>
-    </main>
+      </SessionBootstrap>
+    </BrowserRouter>
   );
 }
