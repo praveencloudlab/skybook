@@ -25,7 +25,14 @@ public final class Journey {
 
     /** Generous on purpose: a tight bound here produces flakes, not signal. */
     public static final Duration ASYNC_TIMEOUT = Duration.ofSeconds(45);
-    private static final Duration POLL = Duration.ofMillis(500);
+
+    /**
+     * 1s, not 500ms. Polling twice a second across several waits burned through
+     * the gateway's 100 req/min rate limit and came back as 429s that looked like
+     * product failures - the limiter policing the test harness rather than a
+     * client. Slower polling costs nothing here and keeps the suite honest.
+     */
+    private static final Duration POLL = Duration.ofSeconds(1);
 
     private Journey() {
     }
@@ -116,6 +123,56 @@ public final class Journey {
                 .pollInterval(POLL)
                 .until(() -> expected.equals(
                         getBooking(user, bookingId).jsonPath().getString("bookingStatus")));
+    }
+
+    /**
+     * The whole "get me a paid, confirmed booking" prelude in one call, so the
+     * later cases can start from a realistic state without restating it.
+     *
+     * @return the booking id
+     */
+    public static long confirmedBooking(E2EUser user) {
+        long flightId = futureFlightId(user.token());
+
+        Response created = createBooking(user, flightId);
+        require(created.statusCode() == 201,
+                "booking create failed: " + created.statusCode() + " " + created.asString());
+        long bookingId = created.jsonPath().getLong("id");
+
+        long paymentId = awaitPayment(user, bookingId).jsonPath().getLong("id");
+
+        Response authorized = authorize(user, paymentId);
+        require(authorized.statusCode() == 200,
+                "authorize failed: " + authorized.statusCode() + " " + authorized.asString());
+
+        Response captured = capture(user, paymentId);
+        require(captured.statusCode() == 200,
+                "capture failed: " + captured.statusCode() + " " + captured.asString());
+
+        awaitBookingStatus(user, bookingId, "CONFIRMED");
+        return bookingId;
+    }
+
+    /**
+     * check-in rows are created by checkin-service consuming BookingEvent
+     * CONFIRMED, so they lag the confirmation. Polls until at least one exists -
+     * a 200 with an empty list is not good enough.
+     */
+    public static Response awaitCheckIns(E2EUser user, long bookingId) {
+        Response[] last = new Response[1];
+        await("check-in records for booking " + bookingId
+                        + " (checkin-service consumes BookingEvent CONFIRMED)")
+                .atMost(ASYNC_TIMEOUT)
+                .pollInterval(POLL)
+                .until(() -> {
+                    last[0] = RestAssured.given()
+                            .header("Authorization", user.bearer())
+                            .when()
+                            .get("/api/checkins/booking/" + bookingId);
+                    return last[0].statusCode() == 200
+                            && !last[0].jsonPath().getList("$").isEmpty();
+                });
+        return last[0];
     }
 
     /** Polls a call until it returns 200. */
