@@ -35,12 +35,19 @@ public class GatewayRoutesConfig {
 
     @Bean
     public RouterFunction<ServerResponse> authServiceRoute(ServicesProperties services) {
-        // Only the two public auth endpoints are routed (SECURITY_HARDENING_MODULE.md
-        // §3.3): the wildcard is dropped so /api/auth/service-token is NOT reachable
-        // through the public edge - it is internal-network only, on the
-        // client-credential chain.
+        // Auth endpoints are listed EXPLICITLY, never by wildcard
+        // (SECURITY_HARDENING_MODULE.md §3.3): /api/auth/service-token must stay
+        // unreachable from the public edge - it lives on the internal-only
+        // client-credential chain. Adding a new auth endpoint therefore means
+        // adding it here on purpose, which is exactly the point.
+        //
+        // logout and me exist for the browser session cookie (FRONTEND_MODULE.md
+        // §10.1): because the cookie is httpOnly, JavaScript can neither clear it
+        // nor read who it belongs to, so both have to be server round-trips.
         return route("auth-service")
-                .route(path("/api/auth/register", "/api/auth/login"), http(services.getAuthService().getBaseUrl()))
+                .route(path("/api/auth/register", "/api/auth/login",
+                                "/api/auth/logout", "/api/auth/me"),
+                        http(services.getAuthService().getBaseUrl()))
                 .filter(new DownstreamErrorHandlingFilter())
                 .build();
     }

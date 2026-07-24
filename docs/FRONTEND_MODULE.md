@@ -205,10 +205,63 @@ UI must handle losing a seat race gracefully.
 
 # 10. Decisions Settled
 
-**10.1 — Token storage: `sessionStorage`.** The token is a 60-minute bearer
-credential with **no revocation**, so limiting its blast radius outweighs
-surviving a restart: a shared machine leaves no live session behind, and an XSS
-cannot resurrect one from disk. Accepted cost — a new tab means logging in again.
+**10.1 — Browser authentication: an httpOnly cookie.** *(Revised. The original
+decision was `sessionStorage`; see the ADR below for why it changed.)*
+
+> **Decision.** Browser authentication uses an **httpOnly cookie containing a
+> signed JWT**. Services remain stateless and validate RS256 tokens locally.
+> Revocation, refresh-token rotation, opaque session identifiers and centralised
+> session management are **intentionally deferred** to the planned security phase
+> (SECURITY_HARDENING_MODULE.md §14). The **API gateway is the sole translation
+> point between the browser authentication credential and downstream bearer
+> authentication**, enabling future migration to an opaque session store without
+> modifying individual services.
+
+Why it changed: `sessionStorage` is readable by JavaScript, so any XSS — including
+one in a transitive dependency — can exfiltrate the token and replay it elsewhere
+for the remainder of its 60-minute life, with no revocation to stop it. Tab-scoping
+limits *persistence*, not *readability*.
+
+Being precise about what httpOnly buys, since it is easy to overstate: it does
+**not** prevent XSS. Injected script can still call the API from the victim's
+browser while the page is open. What it prevents is the credential being **read
+and taken away**. Given the token cannot be revoked, that distinction is the
+whole point.
+
+Two things make this practical here:
+- **Same-origin serving.** The SPA is served from the same origin as the API
+  (Vite proxy in development, nginx in the container), so `SameSite=Lax` is a
+  real CSRF control and CORS disappears. A cross-origin SPA would have forced
+  `SameSite=None`, which *is* sent cross-site and would have needed separate CSRF
+  tokens.
+- **The body token stays.** Login returns the JWT in the response body *and* sets
+  the cookie. API clients (Postman, the e2e suite, scripts) keep working
+  unchanged — they are not the ones exposed to XSS, and breaking them would have
+  bought no security.
+
+Two endpoints exist *because* the cookie is httpOnly — JavaScript can neither
+clear it nor read it:
+- `POST /api/auth/logout` — expires the cookie. Public, so a user whose token has
+  already lapsed can still sign out rather than being stuck with a stale cookie.
+  It does not *revoke* the token (there is no revocation list yet); it guarantees
+  the browser stops presenting it.
+- `GET /api/auth/me` — returns the subject and roles the server already validated.
+  Better than the browser decoding an unverified JWT anyway: it cannot drift from
+  what the server believes.
+
+**Considered and deferred: an opaque session id with a server-side store.** This
+is the common production pattern and its real payoff is *revocation* — a stolen
+session id is just as replayable as a stolen JWT, but a server-side session can be
+deleted. Deferred for two reasons. First, it would create a **mixed authentication
+model**: revocable browser sessions alongside non-revocable API bearer tokens, so
+every later feature (logout-everywhere, admin session kill, audit, expiry) would
+have to answer "browser, API, or both?". Second, it belongs with the work it is
+part of — refresh tokens, rotation, revocation, logout-everywhere, session store,
+device management are all *token-lifecycle* concerns and should land as one
+coherent design rather than several partial migrations. The gateway abstraction
+above is what keeps that door open: swapping "read the credential from a cookie"
+for "resolve a session id against a store" is a change in one method, and nothing
+downstream moves.
 
 **10.2 — Visual direction: real-airline, dense and information-rich.** Compact
 fare tables, a genuine seat map, real data density — closer to what BA or Emirates

@@ -3,6 +3,7 @@ package com.skybook.praveen.authservice.controller;
 import com.skybook.praveen.authservice.exception.EmailAlreadyRegisteredException;
 import com.skybook.praveen.authservice.exception.InvalidCredentialsException;
 import com.skybook.praveen.authservice.security.JwtAuthenticationFilter;
+import com.skybook.praveen.authservice.security.SessionCookie;
 import com.skybook.praveen.authservice.service.AuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +11,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -17,6 +19,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -40,6 +44,16 @@ class AuthControllerTest {
 
     @MockitoBean
     private AuthService authService;
+
+    /**
+     * Mocked because it is a @Component with @Value-injected properties, which a
+     * @WebMvcTest slice does not create. The cookie's real attributes
+     * (httpOnly/Secure/SameSite/Max-Age) are asserted where they actually
+     * matter - against the running service - not through a mock that would only
+     * echo whatever we told it to say.
+     */
+    @MockitoBean
+    private SessionCookie sessionCookie;
 
     private static final String VALID_PASSWORD = "ValidPass123!";
 
@@ -115,10 +129,16 @@ class AuthControllerTest {
     void login_allowsNonComplexPassword() throws Exception {
         // Old-policy accounts: login only requires @NotBlank, not complexity.
         when(authService.login(any())).thenReturn("a.jwt.token");
+        when(sessionCookie.issue(any())).thenReturn("skybook_session=a.jwt.token; Path=/; HttpOnly");
+
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"email\":\"a@b.com\",\"password\":\"old\"}"))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                // The body token stays: API clients (Postman, the e2e suite) read
+                // it, and only the browser uses the cookie.
+                .andExpect(content().string("a.jwt.token"))
+                .andExpect(header().exists(HttpHeaders.SET_COOKIE));
     }
 
     @Test
