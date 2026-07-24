@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>com.skybook.praveen</groupId>
+		<artifactId>skybook-backend</artifactId>
+		<version>1.0.0-SNAPSHOT</version>
+		<relativePath>../pom.xml</relativePath>
+	</parent>
+
+	<artifactId>e2e-tests</artifactId>
+	<name>e2e-tests</name>
+	<description>SkyBook end-to-end certification suite (E2E_CERTIFICATION_MODULE.md)</description>
+
+	<properties>
+		<!--
+			The suite needs a RUNNING compose fleet, so it must never run in the
+			default `mvn verify` (which has to stay self-contained). Tests are named
+			*E2ETest.java - deliberately NOT *IntegrationTest.java - so the parent
+			reactor's failsafe include pattern can never pick them up either.
+			Belt and braces: skipped unless the `e2e` profile below is active.
+		-->
+		<skip.e2e>true</skip.e2e>
+		<!--
+			The parent binds JaCoCo's failsafeArgLine into failsafe's argLine.
+			Coverage of a black-box suite that drives another JVM over HTTP is
+			meaningless, so this module opts out with an empty default rather than
+			risking an unresolved-property failure.
+		-->
+		<failsafeArgLine/>
+	</properties>
+
+	<dependencies>
+
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<dependency>
+			<groupId>io.rest-assured</groupId>
+			<artifactId>rest-assured</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Async effects (Kafka-driven state changes) are polled, never slept on. -->
+		<dependency>
+			<groupId>org.awaitility</groupId>
+			<artifactId>awaitility</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+	</dependencies>
+
+	<build>
+		<plugins>
+			<!--
+				This module has NO unit tests, and surefire's default include is
+				**/*Test.java - which *E2ETest.java matches. Without this, a plain
+				`mvn verify` runs the whole certification suite against a fleet that
+				may not be running (verified the hard way: it did exactly that).
+				skipITs only gates failsafe, so surefire has to be shut off here.
+			-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<skipTests>true</skipTests>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-failsafe-plugin</artifactId>
+				<configuration>
+					<skipITs>${skip.e2e}</skipITs>
+					<includes>
+						<include>**/*E2ETest.java</include>
+					</includes>
+					<argLine>${failsafeArgLine}</argLine>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
+
+	<profiles>
+		<!-- mvn -Pe2e verify  (against an already-running fleet) -->
+		<profile>
+			<id>e2e</id>
+			<properties>
+				<skip.e2e>false</skip.e2e>
+			</properties>
+		</profile>
+	</profiles>
+
+</project>
