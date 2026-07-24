@@ -9,7 +9,21 @@ import java.util.List;
 
 public record CreateBookingRequest(
 
-        @NotNull(message = "customerId is required")
+        /**
+         * OPTIONAL legacy field (FRONTEND_MODULE.md §10.3).
+         *
+         * <p>Ownership does <b>not</b> come from here - it comes from
+         * {@code ownerSubject}, captured from the authenticated principal, and that
+         * is what every OWNER check compares against. This field is written and
+         * echoed back but nothing authorizes or looks up by it
+         * ({@code findByCustomerId} is exposed on no endpoint).
+         *
+         * <p>It was {@code @NotNull}, which forced every client to invent a
+         * meaningless number. It is now optional. Note it could not simply be
+         * <i>derived</i>: the JWT carries {@code sub} (the email), roles and
+         * token_type - there is no numeric user id to derive from, and adding one
+         * would change the frozen security module's token shape.
+         */
         Long customerId,
 
         @NotNull(message = "flightId is required")

@@ -52,7 +52,11 @@ public class Booking extends Auditable {
 
     // Reference only - the id of the User in auth-service. No local
     // Customer table (docs section 3.7).
-    @Column(nullable = false)
+    //
+    // OPTIONAL since V6 (FRONTEND_MODULE.md §10.3): ownership is carried by
+    // ownerSubject, and nothing authorizes or looks up by this. It was NOT NULL,
+    // which forced every client to invent a meaningless number.
+    @Column
     private Long customerId;
 
     // Single flight per booking for v1 - multi-segment itineraries are
