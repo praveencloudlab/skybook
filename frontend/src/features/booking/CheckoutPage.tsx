@@ -23,6 +23,7 @@ import {
   validatePassenger,
   type PassengerDraft,
 } from './PassengerForm';
+import { BookForPicker } from './BookForPicker';
 
 /**
  * Passenger details, review and payment (FRONTEND_MODULE.md §5 screens 5-6).
@@ -142,6 +143,12 @@ export function CheckoutPage({
 
         <section className="space-y-3">
           <h2 className="text-sm font-medium text-slate-700">Passenger</h2>
+          <BookForPicker
+            onSelect={(draft, email) => {
+              setPassenger(draft);
+              if (email) setContactEmail(email);
+            }}
+          />
           <PassengerForm draft={passenger} errors={errors} onChange={setPassenger} />
         </section>
 

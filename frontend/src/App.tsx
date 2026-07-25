@@ -17,6 +17,7 @@ import { SignInForm } from './features/auth/SignInForm';
 import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage';
 import { LandingPage } from './features/home/LandingPage';
+import { ProfilePage } from './features/profile/ProfilePage';
 import { SearchPage } from './features/search/SearchPage';
 import { SiteFooter } from './components/SiteFooter';
 import { FlightQuotePage } from './features/search/FlightQuotePage';
@@ -112,12 +113,13 @@ function Header() {
               >
                 My trips
               </Link>
-              <span
-                className="hidden max-w-[16ch] truncate px-1 text-white/45 sm:inline"
+              <Link
+                to="/profile"
+                className="hidden max-w-[16ch] truncate rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white sm:inline-block"
                 title={subject ?? ''}
               >
                 {subject}
-              </span>
+              </Link>
               <button
                 type="button"
                 onClick={signOut}
@@ -381,6 +383,14 @@ export default function App() {
                 element={
                   <RequireSession>
                     <BookingsRoute />
+                  </RequireSession>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <RequireSession>
+                    <ProfilePage />
                   </RequireSession>
                 }
               />
