@@ -59,6 +59,19 @@ public class GatewayRoutesConfig {
     }
 
     @Bean
+    public RouterFunction<ServerResponse> profileRoute(ServicesProperties services) {
+        // Passenger profile + saved travellers (FRONTEND_MODULE.md Module 14),
+        // served by auth-service (it owns the users table). A wildcard is fine
+        // here - unlike /api/auth, this prefix has no internal-only endpoint to
+        // keep off the edge, and every path requires a valid session (gated by
+        // the gateway JWT filter, since it is NOT in PUBLIC_PATHS).
+        return route("profile")
+                .route(path("/api/profile/**"), http(services.getAuthService().getBaseUrl()))
+                .filter(new DownstreamErrorHandlingFilter())
+                .build();
+    }
+
+    @Bean
     public RouterFunction<ServerResponse> flightServiceRoute(ServicesProperties services) {
         return route("flight-service")
                 .route(path("/api/flights/**", "/api/flight-schedules/**"), http(services.getFlightService().getBaseUrl()))

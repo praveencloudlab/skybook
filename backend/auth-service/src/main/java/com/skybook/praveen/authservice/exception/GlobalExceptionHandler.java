@@ -34,6 +34,20 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.UNAUTHORIZED, exception.getMessage(), request);
     }
 
+    /** A saved traveller the caller doesn't own (or doesn't exist) - 404. */
+    @ExceptionHandler(jakarta.persistence.EntityNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNotFound(
+            jakarta.persistence.EntityNotFoundException exception, HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, exception.getMessage(), request);
+    }
+
+    /** Wrong current password on a signed-in change - clear 400. */
+    @ExceptionHandler(IncorrectCurrentPasswordException.class)
+    public ResponseEntity<ErrorResponse> handleIncorrectCurrentPassword(
+            IncorrectCurrentPasswordException exception, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, exception.getMessage(), request);
+    }
+
     /** Unknown/spent/expired reset token - generic 400, never says which. */
     @ExceptionHandler(InvalidResetTokenException.class)
     public ResponseEntity<ErrorResponse> handleInvalidResetToken(
