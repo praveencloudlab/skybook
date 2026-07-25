@@ -13,6 +13,9 @@ import { setUnauthenticatedHandler } from './api/client';
 import { useSession } from './features/auth/useSession';
 import { RegisterPage } from './features/auth/RegisterPage';
 import { SignInPage } from './features/auth/SignInPage';
+import { SignInForm } from './features/auth/SignInForm';
+import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from './features/auth/ResetPasswordPage';
 import { SearchPage } from './features/search/SearchPage';
 import { FlightQuotePage } from './features/search/FlightQuotePage';
 import { SeatSelectionPage } from './features/seats/SeatSelectionPage';
@@ -119,9 +122,9 @@ function Header() {
         ) : (
           <Link
             to="/sign-in"
-            className="rounded-lg px-2.5 py-1.5 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+            className="rounded-lg bg-white/10 px-3.5 py-1.5 text-sm font-semibold text-white ring-1 ring-white/20 transition hover:bg-white/20"
           >
-            Sign in
+            Log in
           </Link>
         )}
       </div>
@@ -152,7 +155,77 @@ interface FareChoice {
 /** Where the passenger is in the booking journey. */
 type Step = 'search' | 'fares' | 'seat' | 'checkout' | 'confirmed';
 
+/**
+ * The log-in wall that appears the moment an anonymous browser tries to book.
+ *
+ * <p>Rendered INSIDE HomePage rather than as a route redirect, on purpose: the
+ * chosen flight and fare live in HomePage's local state, and bouncing to
+ * /sign-in would throw them away. Signing in here mutates the session, HomePage
+ * re-renders, and the journey resumes exactly where it paused - the selection
+ * intact. It shows what they're about to book so the interruption feels like a
+ * checkpoint, not a dead end.
+ */
+function BookingAuthGate({
+  flight,
+  choice,
+  onBack,
+}: {
+  flight: Flight | null;
+  choice: FareChoice | null;
+  onBack: () => void;
+}) {
+  return (
+    <main className="mx-auto max-w-md px-6 py-12">
+      <button
+        type="button"
+        onClick={onBack}
+        className="mb-6 inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-slate-700"
+      >
+        ← Back to fares
+      </button>
+
+      <div className="card p-6">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700">
+          ✦ One step to book
+        </span>
+        <h1 className="mt-3 text-xl font-semibold tracking-tight text-slate-900">
+          Log in to choose your seat
+        </h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Searching is open to everyone. To hold a seat and book, you'll need an account - your
+          selection is saved while you sign in.
+        </p>
+
+        {flight && choice ? (
+          <div className="tabular mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-3.5 py-2.5 text-sm">
+            <span className="font-semibold text-slate-900">
+              {flight.originAirportCode} → {flight.destinationAirportCode}
+            </span>
+            <span className="text-slate-500">
+              {flight.flightNumber} · {choice.cabin.replace('_', ' ').toLowerCase()}
+            </span>
+          </div>
+        ) : null}
+
+        <div className="mt-6">
+          {/* onSignedIn is intentionally a no-op: the session change alone
+              re-renders HomePage past this gate. */}
+          <SignInForm onSignedIn={() => undefined} />
+        </div>
+
+        <p className="mt-5 text-center text-sm text-slate-600">
+          New to SkyBook?{' '}
+          <Link to="/register" className="font-medium text-brand-700 hover:underline">
+            Create an account
+          </Link>
+        </p>
+      </div>
+    </main>
+  );
+}
+
 function HomePage() {
+  const { signedIn } = useSession();
   // Kept in local state rather than routes: these are steps within one search,
   // and a /flights/:id route would re-fetch (and lose the results behind it) on
   // every back-navigation.
@@ -168,6 +241,14 @@ function HomePage() {
     setChoice(null);
     setSeat(null);
     setResult(null);
+  }
+
+  // Search and fares are public; everything from seat selection on writes owned
+  // data and needs a principal. An anonymous browser that reaches those steps
+  // meets the log-in wall here - with its flight and fare still in state, so it
+  // resumes intact the instant the session appears.
+  if ((step === 'seat' || step === 'checkout' || step === 'confirmed') && !signedIn) {
+    return <BookingAuthGate flight={flight} choice={choice} onBack={() => setStep('fares')} />;
   }
 
   if (step === 'confirmed' && result) {
@@ -260,14 +341,11 @@ export default function App() {
           <Routes>
             <Route path="/sign-in" element={<SignInPage />} />
             <Route path="/register" element={<RegisterPage />} />
-            <Route
-              path="/"
-              element={
-                <RequireSession>
-                  <HomePage />
-                </RequireSession>
-              }
-            />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            {/* Public: anyone may search and price trips; the booking steps
+                inside gate themselves on the session (see HomePage). */}
+            <Route path="/" element={<HomePage />} />
             <Route
               path="/bookings"
               element={

@@ -23,10 +23,19 @@ interface RequestOptions {
   /** Extra headers, e.g. Idempotency-Key on payment creation. */
   headers?: Record<string, string>;
   signal?: AbortSignal;
+  /**
+   * Suppress the global "session ended -> go to sign-in" redirect for this one
+   * call. Used by the first-load identity probe: now that search and fare
+   * browsing are public, an anonymous visitor's `GET /me` returns 401 as the
+   * normal "nobody is signed in" answer, and must NOT throw them onto the
+   * sign-in page. The cached identity is still cleared - only the redirect is
+   * skipped.
+   */
+  silent401?: boolean;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, headers = {}, signal } = options;
+  const { method = 'GET', body, headers = {}, signal, silent401 = false } = options;
 
   const finalHeaders: Record<string, string> = { ...headers };
   if (body !== undefined) {
@@ -73,7 +82,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   // delete.
   if (response.status === 401) {
     session.clear();
-    onUnauthenticated?.();
+    if (!silent401) {
+      onUnauthenticated?.();
+    }
   }
 
   const errorBody = await readErrorBody(response);

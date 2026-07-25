@@ -57,14 +57,40 @@ export const authApi = {
    *
    * Identity comes from the server afterwards, not from decoding anything.
    */
-  async login(request: LoginRequest): Promise<CurrentUser> {
-    await api.post<string>('/api/auth/login', request);
+  async login(request: LoginRequest, remember = false): Promise<CurrentUser> {
+    // "Keep me signed in" is a query param, not a body field - it governs only
+    // how long the cookie lives, never the credential. When true the server
+    // writes a persistent cookie (survives a browser restart, within the token's
+    // own lifetime); when false, a session cookie the browser drops on close.
+    const query = remember ? '?remember=true' : '';
+    await api.post<string>(`/api/auth/login${query}`, request);
     return authApi.me();
   },
 
-  /** Who the server says we are. Also how a returning visitor is recognised. */
-  async me(): Promise<CurrentUser> {
-    const user = await api.get<CurrentUser>('/api/auth/me');
+  /**
+   * Begin a password reset. The server always answers the same way whether or
+   * not the email is registered (no enumeration), so there is nothing to branch
+   * on here - a resolved promise just means "if that address exists, a link is
+   * on its way".
+   */
+  async forgotPassword(email: string): Promise<void> {
+    await api.post<void>('/api/auth/forgot-password', { email });
+  },
+
+  /** Redeem a reset token and set a new password. A 400 means the link is dead. */
+  async resetPassword(token: string, password: string): Promise<void> {
+    await api.post<void>('/api/auth/reset-password', { token, password });
+  },
+
+  /**
+   * Who the server says we are. Also how a returning visitor is recognised.
+   *
+   * `silent` skips the global 401->sign-in redirect: the first-load probe must
+   * be able to conclude "nobody is signed in" without ejecting an anonymous
+   * visitor who is legitimately just browsing public search results.
+   */
+  async me(silent = false): Promise<CurrentUser> {
+    const user = await api.get<CurrentUser>('/api/auth/me', silent ? { silent401: true } : undefined);
     session.set(user);
     return user;
   },
@@ -98,7 +124,7 @@ export const authApi = {
    */
   async restore(): Promise<CurrentUser | null> {
     try {
-      return await authApi.me();
+      return await authApi.me(true);
     } catch {
       session.set(null);
       return null;
