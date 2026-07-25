@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { bookingsApi, type Booking } from '../../api/bookings';
+import { flightsApi, type Flight } from '../../api/flights';
+import { FARE_TYPE_LABELS, TRAVEL_CLASS_LABELS } from '../../api/quotes';
 import {
   checkInClosesAt,
   checkInOpensAt,
@@ -10,15 +12,21 @@ import {
 import { Alert, ErrorAlert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { ApiError } from '../../lib/errors';
-import { money } from '../../lib/format';
+import { dayAndMonth, duration, money, time } from '../../lib/format';
 import { BoardingPassCard } from './BoardingPassCard';
+import { StatusBadge } from './StatusBadge';
+
+// Seeded fares are USD; the booking doesn't carry a currency of its own.
+const CURRENCY = 'USD';
 
 /**
- * One booking, with check-in (FRONTEND_MODULE.md §5 screens 8-9).
+ * One booking, laid out like a real itinerary (FRONTEND_MODULE.md §5 screens 8-9):
+ * a header with the reference and status, the trip, the passengers and what each
+ * paid, the contact on file, then check-in and the boarding pass.
  *
  * <p>Check-in records arrive asynchronously - checkin-service creates one per
- * passenger after consuming the CONFIRMED event - so a just-confirmed booking
- * may briefly have none. That is shown as "preparing", not as an error.
+ * passenger after consuming the CONFIRMED event - so a just-confirmed booking may
+ * briefly have none. That is shown as "preparing", not as an error.
  */
 export function BookingDetailPage({
   booking: initial,
@@ -28,6 +36,7 @@ export function BookingDetailPage({
   onBack: () => void;
 }) {
   const [booking, setBooking] = useState(initial);
+  const [flight, setFlight] = useState<Flight | null>(null);
   const [checkIns, setCheckIns] = useState<CheckIn[] | null>(null);
   const [passes, setPasses] = useState<Record<number, BoardingPass>>({});
   const [error, setError] = useState<ApiError | null>(null);
@@ -42,8 +51,10 @@ export function BookingDetailPage({
       setBooking(fresh);
       setCheckIns(records);
 
-      // Fetch any boarding passes that already exist, so a returning passenger
-      // sees their pass without having to check in again.
+      // The flight is public data; fetch it so the trip can be shown properly
+      // (booking only carries a flightId). A miss here just hides the trip card.
+      flightsApi.byId(fresh.flightId, signal).then(setFlight).catch(() => {});
+
       const issued: Record<number, BoardingPass> = {};
       await Promise.all(
         records
@@ -78,50 +89,162 @@ export function BookingDetailPage({
       setPasses((current) => ({ ...current, [record.id]: pass }));
       await load();
     } catch (cause) {
-      // A 409 here is the window being shut, and the server's message says
-      // exactly when it opens - far more useful than anything invented here.
       setError(cause instanceof ApiError ? cause : null);
     } finally {
       setBusyId(null);
     }
   }
 
+  const seats = booking.passengers.map((p) => p.seatNumber).filter(Boolean) as string[];
+
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <button type="button" onClick={onBack} className="text-sm font-medium text-brand-700 hover:underline">
-        ← All bookings
+    <main className="mx-auto max-w-3xl px-6 py-8">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1 text-sm font-medium text-slate-500 transition hover:text-brand-700"
+      >
+        <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+          <path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z" />
+        </svg>
+        All trips
       </button>
 
-      <h1 className="mt-4 font-mono text-2xl font-semibold tracking-[0.15em] text-brand-700">
-        {booking.bookingReference}
-      </h1>
-      <p className="mt-1 text-sm text-slate-600">
-        {booking.bookingStatus.toLowerCase()} · {money(booking.totalFare, 'USD')}
-      </p>
-
-      <div className="mt-6 space-y-4">
-        <ErrorAlert error={error} />
-
-        {checkIns === null ? (
-          <p className="text-sm text-slate-500">Loading…</p>
-        ) : checkIns.length === 0 ? (
-          <Alert tone="info">
-            {booking.bookingStatus === 'CONFIRMED'
-              ? 'Preparing check-in for this booking — this usually takes a few seconds.'
-              : 'Check-in becomes available once your booking is confirmed.'}
-          </Alert>
-        ) : (
-          checkIns.map((record) => (
-            <CheckInRow
-              key={record.id}
-              record={record}
-              pass={passes[record.id]}
-              busy={busyId === record.id}
-              onCheckIn={() => handleCheckIn(record)}
-            />
-          ))
-        )}
+      {/* Header */}
+      <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Booking reference</p>
+          <h1 className="font-mono text-2xl font-semibold tracking-[0.18em] text-slate-900">
+            {booking.bookingReference}
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">Booked {dayAndMonth(booking.bookingDate)}</p>
+        </div>
+        <div className="text-right">
+          <StatusBadge status={booking.bookingStatus} />
+          <p className="tabular mt-2 text-lg font-semibold text-slate-900">{money(booking.totalFare, CURRENCY)}</p>
+        </div>
       </div>
+
+      {/* Trip */}
+      {flight ? (
+        <section className="card mt-6 p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="grid h-6 w-8 place-items-center rounded bg-brand-600 text-[10px] font-bold text-white">
+              {flight.airlineCode}
+            </span>
+            <span className="tabular text-sm font-medium text-slate-600">{flight.flightNumber}</span>
+            <span className="ml-auto text-xs text-slate-400">{dayAndMonth(flight.departureTime)}</span>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="min-w-[4rem]">
+              <div className="tabular text-2xl font-semibold tracking-tight text-slate-900">{time(flight.departureTime)}</div>
+              <div className="text-xs font-medium tracking-wide text-slate-500">{flight.originAirportCode}</div>
+            </div>
+            <div className="flex flex-1 flex-col items-center gap-1">
+              <span className="tabular text-[11px] font-medium text-slate-500">
+                {duration(flight.departureTime, flight.arrivalTime)}
+              </span>
+              <div className="flex w-full items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                <span className="route-line" />
+              </div>
+              <span className="text-[11px] text-slate-400">Direct</span>
+            </div>
+            <div className="min-w-[4rem] text-right">
+              <div className="tabular text-2xl font-semibold tracking-tight text-slate-900">{time(flight.arrivalTime)}</div>
+              <div className="text-xs font-medium tracking-wide text-slate-500">{flight.destinationAirportCode}</div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* Passengers + fares */}
+      <section className="card mt-5 overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
+          <h2 className="text-sm font-semibold text-slate-700">
+            Passenger{booking.passengers.length === 1 ? '' : 's'} ({booking.passengers.length})
+          </h2>
+          {seats.length ? <span className="tabular text-xs text-slate-500">Seats {seats.join(', ')}</span> : null}
+        </div>
+        <ul className="divide-y divide-slate-100">
+          {booking.passengers.map((p) => {
+            const surcharge = Number(p.seatSurcharge) || 0;
+            const fare = Number(p.fare ?? p.baseFare) || 0;
+            return (
+              <li key={p.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-slate-900">
+                    {p.firstName} {p.lastName}
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {TRAVEL_CLASS_LABELS[p.travelClass]} · {FARE_TYPE_LABELS[p.fareType]}
+                    {p.seatNumber ? (
+                      <>
+                        {' '}
+                        · seat <span className="tabular font-medium text-slate-700">{p.seatNumber}</span>
+                      </>
+                    ) : (
+                      <> · seat assigned at check-in</>
+                    )}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="tabular text-sm font-medium text-slate-900">{money(fare, CURRENCY)}</p>
+                  {surcharge > 0 ? (
+                    <p className="tabular text-[11px] text-slate-400">incl. seat {money(surcharge, CURRENCY)}</p>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3">
+          <span className="text-sm font-medium text-slate-900">Total paid</span>
+          <span className="tabular text-sm font-semibold text-slate-900">{money(booking.totalFare, CURRENCY)}</span>
+        </div>
+      </section>
+
+      {/* Contact */}
+      {booking.contact ? (
+        <section className="card mt-5 px-4 py-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</h2>
+          <div className="mt-2 grid gap-1 text-sm text-slate-700 sm:grid-cols-3">
+            <span>{booking.contact.contactName}</span>
+            <span className="truncate text-slate-500">{booking.contact.contactEmail}</span>
+            {booking.contact.contactPhone ? (
+              <span className="text-slate-500">{booking.contact.contactPhone}</span>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Check-in + boarding passes */}
+      <section className="mt-8">
+        <h2 className="text-sm font-semibold text-slate-700">Check-in &amp; boarding passes</h2>
+        <div className="mt-3 space-y-4">
+          <ErrorAlert error={error} />
+
+          {checkIns === null ? (
+            <p className="text-sm text-slate-500">Loading…</p>
+          ) : checkIns.length === 0 ? (
+            <Alert tone="info">
+              {booking.bookingStatus === 'CONFIRMED'
+                ? 'Preparing check-in for this booking — this usually takes a few seconds.'
+                : 'Check-in becomes available once your booking is confirmed.'}
+            </Alert>
+          ) : (
+            checkIns.map((record) => (
+              <CheckInRow
+                key={record.id}
+                record={record}
+                pass={passes[record.id]}
+                busy={busyId === record.id}
+                onCheckIn={() => handleCheckIn(record)}
+              />
+            ))
+          )}
+        </div>
+      </section>
     </main>
   );
 }
@@ -137,11 +260,8 @@ function CheckInRow({
   busy: boolean;
   onCheckIn: () => void;
 }) {
-  // Gate on the SERVER's status, never on a locally recomputed window. The
-  // window is server configuration (the e2e profile widens it deliberately), so
-  // deriving "too early" from a hardcoded 24 hours would disable a button the
-  // server would happily accept. The times below are only used to EXPLAIN a
-  // NOT_OPEN, never to decide it.
+  // Gate on the SERVER's status, never on a locally recomputed window. The times
+  // below only EXPLAIN a NOT_OPEN, never decide it.
   const done = record.status === 'CHECKED_IN' || record.status === 'BOARDED';
   const canCheckIn = record.status === 'OPEN';
   const notOpenYet = record.status === 'NOT_OPEN';
@@ -160,7 +280,7 @@ function CheckInRow({
         </div>
 
         {done ? (
-          <span className="rounded-lg bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
+          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
             {record.status === 'BOARDED' ? 'boarded' : 'checked in'}
           </span>
         ) : (
@@ -170,11 +290,6 @@ function CheckInRow({
         )}
       </div>
 
-      {/*
-        Explain WHY the control is unavailable rather than leaving a dead button.
-        A passenger who cannot see the reason will simply press it and collect a
-        409 they have no way to interpret.
-      */}
       {!done && !canCheckIn ? (
         <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
           {notOpenYet

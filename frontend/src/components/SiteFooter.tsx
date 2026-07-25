@@ -1,33 +1,24 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { authApi } from '../api/auth';
+import { useSession } from '../features/auth/useSession';
 
 /**
  * Site footer (FRONTEND_MODULE.md Module 2).
  *
  * <p>The quiet credibility marker a real carrier's site always has: a columned
- * footer with the brand, a few honest link groups, and the fine print. Links
- * point at pages that exist (or are clearly informational) - nothing here
- * pretends to a feature the app doesn't have.
+ * footer with the brand, a few honest link groups, and the fine print. The
+ * account column is session-aware - a signed-in visitor sees who they are and a
+ * way out, not "log in / create account".
  */
-const GROUPS: Array<{ heading: string; links: Array<{ label: string; to: string }> }> = [
-  {
-    heading: 'Book',
-    links: [
-      { label: 'Search flights', to: '/search' },
-      { label: 'My trips', to: '/bookings' },
-      { label: 'Check in', to: '/bookings' },
-    ],
-  },
-  {
-    heading: 'Account',
-    links: [
-      { label: 'Log in', to: '/sign-in' },
-      { label: 'Create account', to: '/register' },
-      { label: 'Reset password', to: '/forgot-password' },
-    ],
-  },
-];
-
 export function SiteFooter() {
+  const { signedIn, subject } = useSession();
+  const navigate = useNavigate();
+
+  async function signOut() {
+    await authApi.logout();
+    navigate('/', { replace: true });
+  }
+
   return (
     <footer className="mt-16 border-t border-slate-200 bg-white">
       <div className="mx-auto grid max-w-6xl gap-8 px-6 py-12 sm:grid-cols-2 lg:grid-cols-4">
@@ -46,22 +37,62 @@ export function SiteFooter() {
           </p>
         </div>
 
-        {GROUPS.map((group) => (
-          <div key={group.heading}>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {group.heading}
-            </h3>
+        {/* Book - always the same. */}
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Book</h3>
+          <ul className="mt-3 space-y-2">
+            <li>
+              <Link to="/search" className="text-sm text-slate-600 transition hover:text-brand-700">
+                Search flights
+              </Link>
+            </li>
+            <li>
+              <Link to="/bookings" className="text-sm text-slate-600 transition hover:text-brand-700">
+                My trips
+              </Link>
+            </li>
+          </ul>
+        </div>
+
+        {/* Account - reflects whether someone is signed in. */}
+        <div>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Account</h3>
+          {signedIn ? (
+            <div className="mt-3 space-y-2">
+              <p className="max-w-[22ch] truncate text-sm text-slate-500" title={subject ?? ''}>
+                Signed in as <span className="font-medium text-slate-700">{subject}</span>
+              </p>
+              <button
+                type="button"
+                onClick={signOut}
+                className="text-sm font-medium text-brand-700 transition hover:underline"
+              >
+                Sign out
+              </button>
+            </div>
+          ) : (
             <ul className="mt-3 space-y-2">
-              {group.links.map((link) => (
-                <li key={link.label}>
-                  <Link to={link.to} className="text-sm text-slate-600 transition hover:text-brand-700">
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
+              <li>
+                <Link to="/sign-in" className="text-sm text-slate-600 transition hover:text-brand-700">
+                  Log in
+                </Link>
+              </li>
+              <li>
+                <Link to="/register" className="text-sm text-slate-600 transition hover:text-brand-700">
+                  Create account
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-slate-600 transition hover:text-brand-700"
+                >
+                  Reset password
+                </Link>
+              </li>
             </ul>
-          </div>
-        ))}
+          )}
+        </div>
       </div>
 
       <div className="border-t border-slate-100">

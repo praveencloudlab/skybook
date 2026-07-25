@@ -332,6 +332,15 @@ function BookingJourney() {
  */
 function BookingsRoute() {
   const [open, setOpen] = useState<Booking | null>(null);
+  const location = useLocation();
+
+  // Close the open detail whenever /bookings is navigated to - including
+  // clicking "My trips" in the header while already here (same path, new
+  // history key). Without this the detail is local state that a same-path
+  // navigation can't clear, so the link appears to do nothing.
+  useEffect(() => {
+    setOpen(null);
+  }, [location.key]);
 
   return open ? (
     <BookingDetailPage booking={open} onBack={() => setOpen(null)} />
