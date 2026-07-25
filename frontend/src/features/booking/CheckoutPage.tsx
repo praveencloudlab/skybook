@@ -67,6 +67,7 @@ export function CheckoutPage({
   const [passenger, setPassenger] = useState<PassengerDraft>(emptyPassenger);
   const [contactEmail, setContactEmail] = useState(subject ?? '');
   const [method, setMethod] = useState<PaymentMethod>('CARD');
+  const [agreedTerms, setAgreedTerms] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<ApiError | null>(null);
   const [stage, setStage] = useState<'form' | 'booking' | 'awaitingPayment' | 'paying'>('form');
@@ -81,6 +82,9 @@ export function CheckoutPage({
     const validation = validatePassenger(passenger);
     if (!contactEmail.trim()) {
       validation.contactEmail = 'A contact email is required';
+    }
+    if (!agreedTerms) {
+      validation.terms = 'Please accept the fare rules and terms to continue';
     }
     setErrors(validation);
     if (Object.keys(validation).length > 0) {
@@ -216,8 +220,29 @@ export function CheckoutPage({
         ) : null}
         {stage === 'paying' ? <Alert tone="info">Taking payment…</Alert> : null}
 
+        {/* Accept terms (Module 8) - a real airline gates payment on it. */}
+        <div>
+          <label className="flex cursor-pointer items-start gap-2.5 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              checked={agreedTerms}
+              onChange={(e) => {
+                setAgreedTerms(e.target.checked);
+                if (e.target.checked) setErrors((prev) => ({ ...prev, terms: '' }));
+              }}
+              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500/40"
+            />
+            <span>
+              I accept the fare rules, baggage policy and{' '}
+              <span className="font-medium text-slate-700">terms of carriage</span>, and confirm the
+              passenger details are correct.
+            </span>
+          </label>
+          {errors.terms ? <p className="mt-1 text-sm text-red-600">{errors.terms}</p> : null}
+        </div>
+
         <div className="flex justify-end">
-          <Button type="submit" busy={busy}>
+          <Button type="submit" busy={busy} disabled={!agreedTerms}>
             Pay {money(total, currency)}
           </Button>
         </div>

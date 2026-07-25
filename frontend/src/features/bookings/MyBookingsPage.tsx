@@ -18,8 +18,31 @@ const CURRENCY = 'USD';
  * with. Each row summarises the trip (reference, when it was booked, who is on
  * it, seats, cabin, total) so the list is scannable without opening anything.
  */
+type TripFilter = 'all' | 'upcoming' | 'completed' | 'cancelled';
+
+const FILTERS: Array<{ id: TripFilter; label: string }> = [
+  { id: 'all', label: 'All' },
+  { id: 'upcoming', label: 'Upcoming' },
+  { id: 'completed', label: 'Completed' },
+  { id: 'cancelled', label: 'Cancelled' },
+];
+
+function matchesFilter(booking: Booking, filter: TripFilter): boolean {
+  switch (filter) {
+    case 'upcoming':
+      return booking.bookingStatus === 'CONFIRMED' || booking.bookingStatus === 'CREATED';
+    case 'completed':
+      return booking.bookingStatus === 'COMPLETED';
+    case 'cancelled':
+      return booking.bookingStatus === 'CANCELLED';
+    default:
+      return true;
+  }
+}
+
 export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void }) {
   const [bookings, setBookings] = useState<Booking[] | null>(null);
+  const [filter, setFilter] = useState<TripFilter>('all');
   const [error, setError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -39,6 +62,30 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
       <h1 className="text-2xl font-semibold tracking-tight text-slate-900">My trips</h1>
       <p className="mt-1 text-sm text-slate-500">Your bookings, newest first. Tap one to see the itinerary and check in.</p>
 
+      {/* Status tabs (Module 11). Only shown once there's something to filter. */}
+      {bookings && bookings.length > 0 ? (
+        <div className="mt-5 inline-flex gap-1 rounded-xl bg-slate-100 p-1">
+          {FILTERS.map((f) => {
+            const count = bookings.filter((b) => matchesFilter(b, f.id)).length;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilter(f.id)}
+                aria-pressed={filter === f.id}
+                className={
+                  'rounded-lg px-3 py-1.5 text-sm font-medium transition ' +
+                  (filter === f.id ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500 hover:text-slate-700')
+                }
+              >
+                {f.label}
+                <span className="tabular ml-1.5 text-xs text-slate-400">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       <div className="mt-6 space-y-3">
         <ErrorAlert error={error} />
 
@@ -56,7 +103,11 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
           </div>
         ) : null}
 
-        {bookings?.map((booking) => {
+        {bookings && bookings.length > 0 && bookings.filter((b) => matchesFilter(b, filter)).length === 0 ? (
+          <p className="card px-4 py-6 text-center text-sm text-slate-500">No {filter} trips.</p>
+        ) : null}
+
+        {bookings?.filter((b) => matchesFilter(b, filter)).map((booking) => {
           const seats = booking.passengers.map((p) => p.seatNumber).filter(Boolean) as string[];
           const cabin = booking.passengers[0]?.travelClass;
           return (

@@ -18,6 +18,8 @@ import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage';
 import { LandingPage } from './features/home/LandingPage';
 import { ProfilePage } from './features/profile/ProfilePage';
+import { ErrorPage } from './features/errors/ErrorPage';
+import { RouteErrorBoundary } from './features/errors/RouteErrorBoundary';
 import { SearchPage } from './features/search/SearchPage';
 import { SiteFooter } from './components/SiteFooter';
 import { FlightQuotePage } from './features/search/FlightQuotePage';
@@ -368,6 +370,7 @@ export default function App() {
         <div className="flex min-h-full flex-col">
           <Header />
           <div className="flex-1">
+            <RouteErrorBoundary>
             <Routes>
               <Route path="/sign-in" element={<SignInPage />} />
               <Route path="/register" element={<RegisterPage />} />
@@ -394,8 +397,9 @@ export default function App() {
                   </RequireSession>
                 }
               />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<ErrorPage code="404" />} />
             </Routes>
+            </RouteErrorBoundary>
           </div>
           <ChromeFooter />
         </div>
