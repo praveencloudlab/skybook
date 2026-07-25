@@ -17,6 +17,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -129,7 +130,7 @@ class AuthControllerTest {
     void login_allowsNonComplexPassword() throws Exception {
         // Old-policy accounts: login only requires @NotBlank, not complexity.
         when(authService.login(any())).thenReturn("a.jwt.token");
-        when(sessionCookie.issue(any())).thenReturn("skybook_session=a.jwt.token; Path=/; HttpOnly");
+        when(sessionCookie.issue(any(), anyBoolean())).thenReturn("skybook_session=a.jwt.token; Path=/; HttpOnly");
 
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)

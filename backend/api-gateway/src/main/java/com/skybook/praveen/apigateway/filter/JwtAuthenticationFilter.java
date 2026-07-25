@@ -57,6 +57,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // otherwise a user whose session lapsed could never sign out, and
             // the stale cookie would sit there producing 401s.
             new PathPatternParser().parse("/api/auth/logout"),
+            // Password reset is pre-authentication by definition: the caller has
+            // no session precisely because they cannot sign in.
+            new PathPatternParser().parse("/api/auth/forgot-password"),
+            new PathPatternParser().parse("/api/auth/reset-password"),
+            // Flight schedules and fare quotes are public shopping data - a
+            // visitor browses and prices trips before there is any account, the
+            // way every travel site works. Only booking (seat hold onward) needs
+            // a principal. flight-service still enforces ADMIN on writes and
+            // booking-service still owns everything but /quote, so making these
+            // tokenless at the gateway opens reads only; a write arrives with no
+            // token and is rejected downstream.
+            new PathPatternParser().parse("/api/flights/**"),
+            new PathPatternParser().parse("/api/bookings/quote"),
             // Actuator moved to the internal management port (§7); /livez + /readyz
             // are the k8s probe paths re-exposed on this main port.
             new PathPatternParser().parse("/actuator/**"),

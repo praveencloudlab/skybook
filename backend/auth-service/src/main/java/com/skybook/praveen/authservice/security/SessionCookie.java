@@ -49,16 +49,26 @@ public class SessionCookie {
         this.secure = secure;
     }
 
-    /** A cookie carrying the freshly issued token. */
-    public String issue(String token) {
-        return ResponseCookie.from(NAME, token)
+    /**
+     * A cookie carrying the freshly issued token.
+     *
+     * <p>{@code persistent} is the "keep me signed in" choice. When true the
+     * cookie is written with a Max-Age and survives a browser restart (up to the
+     * token's own 60-minute lifetime - there is no refresh token yet, so this
+     * cannot extend a session beyond that, only let it outlive the window being
+     * closed). When false the Max-Age is omitted, making it a session cookie the
+     * browser discards on close - the safer default for a shared machine.
+     */
+    public String issue(String token, boolean persistent) {
+        ResponseCookie.ResponseCookieBuilder cookie = ResponseCookie.from(NAME, token)
                 .httpOnly(true)
                 .secure(secure)
                 .sameSite("Lax")
-                .path("/")
-                .maxAge(maxAge)
-                .build()
-                .toString();
+                .path("/");
+        if (persistent) {
+            cookie.maxAge(maxAge);
+        }
+        return cookie.build().toString();
     }
 
     /**

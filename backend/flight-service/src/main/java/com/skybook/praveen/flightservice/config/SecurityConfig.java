@@ -47,7 +47,12 @@ public class SecurityConfig {
                         // is scraped tokenless by Prometheus over the internal network (§7);
                         // step 10 isolates it to an internal-only management port.
                         .requestMatchers("/actuator/**", "/livez", "/readyz").permitAll()
-                        // Reads of reference data - any authenticated caller.
+                        // Flight schedules are public shopping data: a visitor
+                        // searches and prices trips before any account exists, so
+                        // reads of /api/flights are tokenless. Writes below still
+                        // require ADMIN, so this opens the search surface only.
+                        .requestMatchers(HttpMethod.GET, "/api/flights/**").permitAll()
+                        // Reads of other reference data - any authenticated caller.
                         .requestMatchers(HttpMethod.GET, "/api/**").authenticated()
                         // Everything else (create/update/cancel/delete/generate) - ADMIN.
                         .anyRequest().hasRole("ADMIN")
