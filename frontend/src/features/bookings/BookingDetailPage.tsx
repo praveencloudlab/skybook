@@ -15,6 +15,7 @@ import { ApiError } from '../../lib/errors';
 import { dayAndMonth, duration, money, time } from '../../lib/format';
 import { BoardingPassCard } from './BoardingPassCard';
 import { StatusBadge } from './StatusBadge';
+import { printETicket } from './printable';
 
 // Seeded fares are USD; the booking doesn't carry a currency of its own.
 const CURRENCY = 'USD';
@@ -122,6 +123,16 @@ export function BookingDetailPage({
         <div className="text-right">
           <StatusBadge status={booking.bookingStatus} />
           <p className="tabular mt-2 text-lg font-semibold text-slate-900">{money(booking.totalFare, CURRENCY)}</p>
+          <button
+            type="button"
+            onClick={() => printETicket(booking, flight, CURRENCY)}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-brand-300 hover:text-brand-700"
+          >
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
+              <path d="M5 20h14v-2H5v2zM12 2v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L12 12.17V2z" />
+            </svg>
+            Download e-ticket
+          </button>
         </div>
       </div>
 

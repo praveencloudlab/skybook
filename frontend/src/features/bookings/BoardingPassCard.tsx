@@ -1,4 +1,5 @@
 import type { BoardingPass } from '../../api/checkin';
+import { printBoardingPass } from './printable';
 
 /**
  * The boarding pass (FRONTEND_MODULE.md §5 screen 10).
@@ -21,7 +22,20 @@ export function BoardingPassCard({ pass }: { pass: BoardingPass }) {
           </svg>
           Boarding pass
         </span>
-        <span className="font-mono text-xs text-white/80">{pass.boardingPassNumber}</span>
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-xs text-white/80">{pass.boardingPassNumber}</span>
+          <button
+            type="button"
+            onClick={() => printBoardingPass(pass)}
+            className="inline-flex items-center gap-1 rounded-md bg-white/15 px-2 py-1 text-[11px] font-semibold text-white transition hover:bg-white/25"
+            title="Download / print boarding pass"
+          >
+            <svg viewBox="0 0 24 24" className="h-3 w-3 fill-current" aria-hidden="true">
+              <path d="M5 20h14v-2H5v2zM12 2v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L12 12.17V2z" />
+            </svg>
+            Download
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4 px-4 py-4">
