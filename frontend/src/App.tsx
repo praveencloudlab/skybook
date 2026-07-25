@@ -16,7 +16,9 @@ import { SignInPage } from './features/auth/SignInPage';
 import { SignInForm } from './features/auth/SignInForm';
 import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage';
+import { LandingPage } from './features/home/LandingPage';
 import { SearchPage } from './features/search/SearchPage';
+import { SiteFooter } from './components/SiteFooter';
 import { FlightQuotePage } from './features/search/FlightQuotePage';
 import { SeatSelectionPage } from './features/seats/SeatSelectionPage';
 import { CheckoutPage } from './features/booking/CheckoutPage';
@@ -87,46 +89,52 @@ function Header() {
         <Link to="/" className="group flex items-center gap-2.5">
           {/* A mark, not just a wordmark - it is what makes the header read as
               an airline rather than an admin console. */}
-          <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 shadow-lg shadow-brand-500/30 transition group-hover:scale-105">
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 transition group-hover:bg-brand-500">
             <svg viewBox="0 0 24 24" className="h-4 w-4 fill-white" aria-hidden="true">
               <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
             </svg>
           </span>
           <span className="text-base font-semibold tracking-tight">SkyBook</span>
         </Link>
-        {signedIn ? (
-          <div className="flex items-center gap-1 text-sm sm:gap-3">
-            <Link
-              to="/"
-              className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
-            >
-              Book
-            </Link>
-            <Link
-              to="/bookings"
-              className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
-            >
-              My bookings
-            </Link>
-            <span className="hidden max-w-[16ch] truncate text-white/50 sm:inline" title={subject ?? ''}>
-              {subject}
-            </span>
-            <button
-              type="button"
-              onClick={signOut}
-              className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
-            >
-              Sign out
-            </button>
-          </div>
-        ) : (
+
+        <nav className="flex items-center gap-1 text-sm sm:gap-2">
           <Link
-            to="/sign-in"
-            className="rounded-lg bg-white/10 px-3.5 py-1.5 text-sm font-semibold text-white ring-1 ring-white/20 transition hover:bg-white/20"
+            to="/search"
+            className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
           >
-            Log in
+            Search flights
           </Link>
-        )}
+          {signedIn ? (
+            <>
+              <Link
+                to="/bookings"
+                className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+              >
+                My trips
+              </Link>
+              <span
+                className="hidden max-w-[16ch] truncate px-1 text-white/45 sm:inline"
+                title={subject ?? ''}
+              >
+                {subject}
+              </span>
+              <button
+                type="button"
+                onClick={signOut}
+                className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <Link
+              to="/sign-in"
+              className="rounded-lg bg-white/10 px-3.5 py-1.5 font-semibold text-white ring-1 ring-white/20 transition hover:bg-white/20"
+            >
+              Log in
+            </Link>
+          )}
+        </nav>
       </div>
     </header>
   );
@@ -224,7 +232,7 @@ function BookingAuthGate({
   );
 }
 
-function HomePage() {
+function BookingJourney() {
   const { signedIn } = useSession();
   // Kept in local state rather than routes: these are steps within one search,
   // and a /flights/:id route would re-fetch (and lose the results behind it) on
@@ -332,30 +340,45 @@ function BookingsRoute() {
   );
 }
 
+/**
+ * The footer belongs under content pages, not the full-height auth split - a
+ * marketing footer beneath a centred sign-in card just pushes it off the fold.
+ */
+function ChromeFooter() {
+  const { pathname } = useLocation();
+  const authPaths = ['/sign-in', '/register', '/forgot-password', '/reset-password'];
+  return authPaths.includes(pathname) ? null : <SiteFooter />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <SessionBootstrap>
-        <div className="min-h-full">
+        <div className="flex min-h-full flex-col">
           <Header />
-          <Routes>
-            <Route path="/sign-in" element={<SignInPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            {/* Public: anyone may search and price trips; the booking steps
-                inside gate themselves on the session (see HomePage). */}
-            <Route path="/" element={<HomePage />} />
-            <Route
-              path="/bookings"
-              element={
-                <RequireSession>
-                  <BookingsRoute />
-                </RequireSession>
-              }
-            />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <div className="flex-1">
+            <Routes>
+              <Route path="/sign-in" element={<SignInPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              {/* Landing (Module 2). */}
+              <Route path="/" element={<LandingPage />} />
+              {/* Public search + booking journey; the booking steps gate
+                  themselves on the session (see BookingJourney). */}
+              <Route path="/search" element={<BookingJourney />} />
+              <Route
+                path="/bookings"
+                element={
+                  <RequireSession>
+                    <BookingsRoute />
+                  </RequireSession>
+                }
+              />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </div>
+          <ChromeFooter />
         </div>
       </SessionBootstrap>
     </BrowserRouter>

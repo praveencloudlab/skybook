@@ -1,45 +1,49 @@
 @import 'tailwindcss';
 
 /*
- * Design system (FRONTEND_MODULE.md §10.2). Still airline-credible - dense where
- * the data lives - but modern: a fresh indigo/violet brand, soft large radii,
- * layered low-contrast shadows, and a quiet gradient canvas rather than flat
- * grey. Tokens live here so the look is set in one place, not re-litigated per
- * component; most components reference `brand-*`, so re-basing the ramp restyles
- * the whole app.
+ * Design system (FRONTEND_MODULE.md §10.2), professional revision.
+ *
+ * The brief was "neat and professional", so this deliberately steps back from
+ * the previous startup-gradient look (violet + pink glow orbs): a confident
+ * airline navy/azure, a single restrained gold accent for premium, precise
+ * neutral shadows rather than coloured glows, and a near-white canvas. Tokens
+ * live here so the whole app restyles from one place - most components reference
+ * `brand-*`, so re-basing the ramp is the redesign.
  */
 @theme {
-  /* Indigo→violet: reads as current and friendly without losing the
-     seriousness a booking flow needs. The deep end (900/950) carries the header
-     and hero; the mid end (500/600) carries actions and wayfinding. */
-  --color-brand-50: #eef2ff;
-  --color-brand-100: #e0e7ff;
-  --color-brand-200: #c7d2fe;
-  --color-brand-300: #a5b4fc;
-  --color-brand-400: #818cf8;
-  --color-brand-500: #6366f1;
-  --color-brand-600: #4f46e5;
-  --color-brand-700: #4338ca;
-  --color-brand-800: #3730a3;
-  --color-brand-900: #312e81;
-  --color-brand-950: #1e1b4b;
+  /* Azure→navy. The deep end (800/900/950) carries the header, hero and
+     footer - the "established carrier" navy; the mid end (600/700) carries
+     actions and wayfinding. Chosen to read as trustworthy and precise, not
+     playful. */
+  --color-brand-50: #eff5ff;
+  --color-brand-100: #dbe7fe;
+  --color-brand-200: #bfd3fe;
+  --color-brand-300: #93b4fd;
+  --color-brand-400: #608afa;
+  --color-brand-500: #3b66f6;
+  --color-brand-600: #2547eb;
+  --color-brand-700: #1d38d8;
+  --color-brand-800: #1e30af;
+  --color-brand-900: #16235f;
+  --color-brand-950: #0d1633;
 
-  /* Warm accent - the "this costs more" family (seat surcharges, upgrades),
-     kept distinct from the amber used for warnings. */
-  --color-accent-50: #fff7ed;
-  --color-accent-100: #ffedd5;
-  --color-accent-200: #fed7aa;
-  --color-accent-500: #f97316;
-  --color-accent-600: #ea580c;
-  --color-accent-700: #c2410c;
+  /* Gold - the premium/upgrade family (seat surcharges, cabin upgrades, loyalty),
+     the colour airlines reserve for "the better thing". Kept clear of the amber
+     used for warnings. */
+  --color-accent-50: #fffbeb;
+  --color-accent-100: #fef3c7;
+  --color-accent-200: #fde68a;
+  --color-accent-500: #f0b429;
+  --color-accent-600: #d69e17;
+  --color-accent-700: #b47d0d;
 
   --font-display: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  /* Soft, layered shadows tinted toward the brand - the modern "floating card"
-     look, but restrained so a dense screen does not turn into confetti. */
-  --shadow-card: 0 1px 2px rgb(30 27 75 / 0.04), 0 4px 16px -8px rgb(30 27 75 / 0.12);
-  --shadow-lift: 0 2px 8px rgb(30 27 75 / 0.08), 0 12px 32px -12px rgb(30 27 75 / 0.22);
-  --shadow-btn: 0 1px 2px rgb(30 27 75 / 0.12), 0 4px 12px -4px rgb(79 70 229 / 0.4);
+  /* Precise, near-neutral shadows: a professional surface reads as crisply
+     placed, not floating in coloured haze. Two steps - resting and lifted. */
+  --shadow-card: 0 1px 2px rgb(13 22 51 / 0.05), 0 1px 3px rgb(13 22 51 / 0.06);
+  --shadow-lift: 0 4px 12px -2px rgb(13 22 51 / 0.10), 0 10px 28px -8px rgb(13 22 51 / 0.16);
+  --shadow-btn: 0 1px 2px rgb(13 22 51 / 0.16);
 }
 
 html,
@@ -51,12 +55,10 @@ body,
 body {
   @apply text-slate-900 antialiased;
   font-family: var(--font-display);
-  /* A whisper-quiet gradient canvas so cards read as lifted off it, rather than
-     the flat grey that made the app look unfinished. */
+  /* A clean, near-white canvas with the faintest cool tint at the top - enough
+     to lift a white card off it, nothing more. Restraint is the point. */
   background:
-    radial-gradient(60rem 40rem at 15% -10%, rgb(99 102 241 / 0.08), transparent 60%),
-    radial-gradient(50rem 40rem at 100% 0%, rgb(244 114 182 / 0.06), transparent 55%),
-    #f6f7fb;
+    linear-gradient(180deg, #f4f7fc 0%, #f8fafc 40%);
   background-attachment: fixed;
 }
 
@@ -69,9 +71,10 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* The primary surface: soft, rounded, gently lifted. */
+/* The primary surface: crisp, hairline-bordered, gently lifted. rounded-xl
+   (12px) rather than 2xl reads sharper and more considered. */
 .card {
-  @apply rounded-2xl border border-slate-200/70 bg-white;
+  @apply rounded-xl border border-slate-200 bg-white;
   box-shadow: var(--shadow-card);
 }
 
@@ -79,19 +82,18 @@ body {
   @apply transition duration-200 ease-out;
 }
 .card-hover:hover {
-  @apply -translate-y-0.5 border-brand-200;
+  @apply -translate-y-0.5 border-slate-300;
   box-shadow: var(--shadow-lift);
 }
 
-/* Glassy translucent surface - used for the sticky header and lifted panels. */
+/* Deep-navy translucent surface for the sticky header. */
 .glass {
-  @apply border border-white/10 bg-brand-950/80 backdrop-blur-lg;
+  @apply border-b border-white/10 bg-brand-950/85 backdrop-blur-lg;
 }
 
 /*
  * The boarding-pass notch: two half-circles punched out of the sides, the way a
- * real pass is perforated where the stub tears off. It is the detail that makes
- * the artefact read as a boarding pass at a glance.
+ * real pass is perforated where the stub tears off.
  */
 .notched {
   --notch: 16px;
@@ -111,9 +113,17 @@ body {
 }
 .route-line::after {
   content: '';
-  @apply absolute h-2 w-2 rounded-full bg-brand-500 ring-4 ring-brand-100;
+  @apply absolute h-2 w-2 rounded-full bg-brand-600 ring-4 ring-brand-100;
   right: -4px;
   top: -5px;
+}
+
+/* A subtle grid texture for hero/navy panels - reads as engineered, not empty. */
+.grid-texture {
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.04) 1px, transparent 1px);
+  background-size: 44px 44px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -123,4 +133,19 @@ body {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Count-up numbers on the landing page settle rather than pop. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise-in {
+  animation: rise-in 0.5s ease-out both;
 }

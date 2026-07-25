@@ -31,12 +31,12 @@ export function AuthLayout({
         className="relative hidden overflow-hidden bg-brand-900 lg:block"
         aria-hidden="true"
       >
-        {/* A suggestion of altitude: layered gradients rather than a stock photo,
-            so there is no asset to ship, nothing to load, and it cannot look
-            dated the way a hero image does. */}
-        <div className="absolute inset-0 bg-gradient-to-br from-brand-600 via-brand-800 to-brand-950" />
-        <div className="absolute -top-24 -right-24 h-96 w-96 rounded-full bg-brand-400/25 blur-3xl" />
-        <div className="absolute bottom-0 left-0 h-80 w-80 rounded-full bg-fuchsia-500/15 blur-3xl" />
+        {/* A suggestion of altitude: a deep navy with a faint engineered grid,
+            rather than a stock photo - nothing to ship, nothing to load, and it
+            cannot look dated the way a hero image does. */}
+        <div className="absolute inset-0 bg-brand-950" />
+        <div className="grid-texture absolute inset-0" />
+        <div className="absolute inset-0 bg-gradient-to-t from-brand-950 via-transparent to-brand-900/40" />
 
         {/* Flight paths. */}
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 400 600" fill="none">

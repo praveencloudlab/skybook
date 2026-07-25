@@ -1,5 +1,7 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
+  AIRPORTS,
   POPULAR_ROUTES,
   flightsApi,
   type Flight,
@@ -23,12 +25,19 @@ import { applyFilters, initialFilters, type FilterState } from './filters';
  * brand band up top, a filter rail down the left once there are results, and the
  * flights themselves as dense, scannable cards on the right.
  */
+function knownCode(code: string | null, fallback: string): string {
+  return code && AIRPORTS.some((airport) => airport.code === code) ? code : fallback;
+}
+
 export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Flight) => void }) {
-  const [origin, setOrigin] = useState('LHR');
-  const [destination, setDestination] = useState('JFK');
+  // Deep links from the landing page (its hero search and destination cards)
+  // arrive as ?from=&to=&date= and prefill + auto-run the search below.
+  const [params] = useSearchParams();
+  const [origin, setOrigin] = useState(() => knownCode(params.get('from'), 'LHR'));
+  const [destination, setDestination] = useState(() => knownCode(params.get('to'), 'JFK'));
   // Tomorrow, not today: same-day departures may already have left, and an
   // empty first result is a poor first impression of a working system.
-  const [date, setDate] = useState(addDaysIso(todayIso(), 1));
+  const [date, setDate] = useState(() => params.get('date') || addDaysIso(todayIso(), 1));
 
   const [results, setResults] = useState<Flight[] | null>(null);
   const [searched, setSearched] = useState<SearchCriteria | null>(null);
@@ -76,33 +85,50 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
     setDestination(origin);
   }
 
+  // Auto-run once when arriving from a landing-page deep link, so the visitor
+  // lands directly on results rather than having to press Search again.
+  const autoRan = useRef(false);
+  useEffect(() => {
+    if (autoRan.current) {
+      return;
+    }
+    autoRan.current = true;
+    const from = knownCode(params.get('from'), '');
+    const to = knownCode(params.get('to'), '');
+    if (from && to && from !== to) {
+      void runSearch({ origin: from, destination: to, date: params.get('date') || date });
+    }
+    // Run only on mount; the deep link is read once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const sameAirport = origin === destination;
 
   return (
     <>
-      {/* Brand band the search bar sits on - a modern travel hero, not a
-          form-on-grey. */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-brand-700 via-brand-800 to-brand-950">
-        <div className="absolute -top-24 -left-16 h-80 w-80 rounded-full bg-brand-400/25 blur-3xl" />
-        <div className="absolute -top-10 right-0 h-72 w-72 rounded-full bg-fuchsia-500/20 blur-3xl" />
+      {/* Navy band the search bar sits on - restrained and engineered, not a
+          glow. A faint grid texture + a single hairline flight path. */}
+      <div className="relative overflow-hidden bg-brand-950">
+        <div className="grid-texture absolute inset-0" />
+        <div className="absolute inset-0 bg-gradient-to-b from-brand-900/40 to-brand-950" />
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1200 260" fill="none" aria-hidden="true">
           <path
-            d="M-50 240 C 300 190, 700 80, 1250 20"
+            d="M-50 230 C 320 180, 720 90, 1250 30"
             stroke="white"
-            strokeOpacity="0.14"
+            strokeOpacity="0.12"
             strokeWidth="1.5"
-            strokeDasharray="6 8"
+            strokeDasharray="6 9"
           />
-          <circle cx="900" cy="66" r="4" fill="white" fillOpacity="0.7" />
+          <circle cx="900" cy="72" r="3.5" fill="white" fillOpacity="0.6" />
         </svg>
 
         <div className="relative mx-auto max-w-6xl px-6 pt-12 pb-24">
           <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-            Millions of real departures. One simple search.
+            Search flights
           </h1>
-          <p className="mt-2 max-w-md text-sm text-white/70">
-            Search a year of schedules, pick your seat from the actual cabin, and carry a boarding
-            pass you can scan. No account needed to look.
+          <p className="mt-2 max-w-md text-sm text-white/60">
+            A year of real schedules across 30 routes. Compare fares, pick your seat from the actual
+            cabin — no account needed to look.
           </p>
         </div>
       </div>
