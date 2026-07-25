@@ -4,7 +4,7 @@ import { FARE_TYPE_LABELS, TRAVEL_CLASS_LABELS, type FareType, type TravelClass 
 import { seatsApi, type AircraftSeat, type FlightSeatMap } from '../../api/seats';
 import { ErrorAlert } from '../../components/Alert';
 import { Button } from '../../components/Button';
-import { FlightCard } from '../../components/FlightCard';
+import { TripSummaryBar } from '../../components/TripSummaryBar';
 import { ApiError } from '../../lib/errors';
 import { money } from '../../lib/format';
 import { SeatMap } from './SeatMap';
@@ -61,25 +61,16 @@ export function SeatSelectionPage({
   const total = baseFare + surcharge;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <button
-        type="button"
-        onClick={onBack}
-        className="text-sm font-medium text-brand-700 hover:underline"
-      >
-        ← Back to fares
-      </button>
+    <>
+      <TripSummaryBar flight={flight} step="seat" onBack={onBack} backLabel="Back to fares" />
 
-      <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">Choose your seat</h1>
-      <p className="mt-1 text-sm text-slate-600">
-        {TRAVEL_CLASS_LABELS[cabin]} · {FARE_TYPE_LABELS[fare]}
-      </p>
+      <main className="mx-auto max-w-3xl px-6 py-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Choose your seat</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          {TRAVEL_CLASS_LABELS[cabin]} · {FARE_TYPE_LABELS[fare]}
+        </p>
 
-      <div className="mt-4">
-        <FlightCard flight={flight} />
-      </div>
-
-      <div className="mt-6 space-y-4">
+        <div className="mt-6 space-y-4">
         <ErrorAlert error={error} />
 
         {busy ? (
@@ -123,7 +114,8 @@ export function SeatSelectionPage({
             </div>
           </>
         ) : null}
-      </div>
-    </main>
+        </div>
+      </main>
+    </>
   );
 }
