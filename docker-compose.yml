@@ -76,6 +76,9 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
       SKYBOOK_BOOTSTRAP_ADMIN_EMAIL: ${SKYBOOK_BOOTSTRAP_ADMIN_EMAIL:-}
+      # Where the SPA lives, so the password-reset email links back to it. The
+      # container serves the front end on :3000; override for other origins.
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:3000}
       # Service-client registry secrets (SECURITY_HARDENING_MODULE.md §3.3/§10):
       # auth hashes these into the client registry so booking/checkin/inventory
       # can obtain ROLE_SERVICE tokens. Required - no committed default. payment

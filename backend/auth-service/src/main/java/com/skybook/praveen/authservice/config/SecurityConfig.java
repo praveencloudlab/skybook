@@ -97,6 +97,12 @@ public class SecurityConfig {
                         // caller is the whole thing it must not do.)
                         .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/logout")
                         .permitAll()
+                        // Password reset is pre-authentication by definition: the
+                        // caller cannot sign in, which is the whole reason they are
+                        // here. forgot-password never confirms whether an account
+                        // exists; reset-password succeeds only against a valid token.
+                        .requestMatchers("/api/auth/forgot-password", "/api/auth/reset-password")
+                        .permitAll()
                         .requestMatchers("/actuator/**", "/livez", "/readyz").permitAll()
                         .anyRequest().authenticated()
                 )

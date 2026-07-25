@@ -46,7 +46,13 @@ public class GatewayRoutesConfig {
         // nor read who it belongs to, so both have to be server round-trips.
         return route("auth-service")
                 .route(path("/api/auth/register", "/api/auth/login",
-                                "/api/auth/logout", "/api/auth/me"),
+                                "/api/auth/logout", "/api/auth/me",
+                                // Password reset: pre-authentication, so both are
+                                // also in the gateway's PUBLIC_PATHS. Listed here
+                                // explicitly like every other auth path - the
+                                // wildcard is deliberately never used, so
+                                // /api/auth/service-token stays off the edge.
+                                "/api/auth/forgot-password", "/api/auth/reset-password"),
                         http(services.getAuthService().getBaseUrl()))
                 .filter(new DownstreamErrorHandlingFilter())
                 .build();
