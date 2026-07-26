@@ -40,18 +40,33 @@ const CSS = `
   @media print { body { padding: 0; } }
 `;
 
+/**
+ * Download the document as a real, self-contained HTML file (lands in Downloads).
+ *
+ * <p>Earlier attempts used {@code window.open} (pop-up-blocked, appeared to do
+ * nothing) and a hidden-iframe {@code print()} (a Save-as-PDF dialog, not a
+ * download). A Blob + {@code <a download>} is the only mechanism that reliably
+ * produces an actual file in every browser with no pop-up and no dialog. The
+ * file carries a print-on-open button so it converts to PDF in one click.
+ */
 function open(title: string, body: string): void {
-  const w = window.open('', '_blank', 'width=760,height=920');
-  if (!w) {
-    // Pop-up blocked - the only honest thing is to say so.
-    alert('Please allow pop-ups for this site to download.');
-    return;
-  }
-  w.document.write(
-    `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${CSS}</style></head>` +
-      `<body><div class="doc">${body}</div><script>window.onload=function(){setTimeout(function(){window.print();},150);};</script></body></html>`,
-  );
-  w.document.close();
+  const filename = `SkyBook-${title.replace(/[^\w.-]+/g, '-')}.html`;
+  const html =
+    `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${CSS}` +
+    `.print-bar{position:fixed;top:10px;right:10px;} .print-bar button{font:600 13px system-ui;background:#2547eb;color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;} @media print{.print-bar{display:none;}}</style></head>` +
+    `<body><div class="print-bar"><button onclick="window.print()">Save as PDF / Print</button></div>` +
+    `<div class="doc">${body}</div></body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 function bars(token: string): string {
