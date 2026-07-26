@@ -150,34 +150,100 @@ public class BookingEmailTemplate {
         }
         String originCity = AirportCityLookup.cityFor(event.getOriginAirportCode());
         String destinationCity = AirportCityLookup.cityFor(event.getDestinationAirportCode());
+        String duration = flightDuration(event);
+        String durationLabel = duration.isEmpty() ? escape(nvl(event.getFlightNumber(), "")) : duration;
 
+        String checkInOpens = checkInOpens(event);
+        String checkInRow = checkInOpens.isEmpty() ? "" : """
+                  <tr>
+                    <td colspan="3" style="border-top:1px solid #e5e7eb;padding:9px 16px;text-align:center;color:#57606a;font-size:12px;">
+                      &#128336; Online check-in opens 24 hours before departure &mdash; around <b>%s</b>.
+                    </td>
+                  </tr>
+                """.formatted(escape(checkInOpens));
+
+        // Email-safe route line: a plane centred between two rules drawn with
+        // cell border-bottom (box-drawing characters render inconsistently across
+        // mail clients, which is what made the old line look broken).
         return """
                 <table style="width:100%%;border-collapse:collapse;margin-top:12px;background:#f6f8fa;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;">
                   <tr>
-                    <td style="padding:14px 16px;text-align:center;width:33%%;">
+                    <td style="padding:14px 12px;text-align:center;width:33%%;">
                       <div style="font-size:26px;font-weight:700;letter-spacing:1px;">%s</div>
                       <div style="color:#57606a;font-size:12px;">%s</div>
                       <div style="color:#57606a;font-size:12px;">Departs<br>%s</div>
                     </td>
-                    <td style="padding:14px 8px;text-align:center;color:#0b3d91;font-size:18px;">
-                      ────── ✈ ──────
-                      <div style="color:#57606a;font-size:12px;margin-top:2px;">%s</div>
+                    <td style="padding:14px 4px;text-align:center;width:34%%;">
+                      <div style="color:#57606a;font-size:12px;margin-bottom:5px;">%s</div>
+                      <table style="width:100%%;border-collapse:collapse;">
+                        <tr>
+                          <td style="border-bottom:2px solid #c8d0da;font-size:0;line-height:0;">&nbsp;</td>
+                          <td style="padding:0 6px;color:#0b3d91;font-size:17px;white-space:nowrap;vertical-align:middle;">&#9992;</td>
+                          <td style="border-bottom:2px solid #c8d0da;font-size:0;line-height:0;">&nbsp;</td>
+                        </tr>
+                      </table>
+                      <div style="color:#8a94a6;font-size:11px;margin-top:5px;">%s &middot; Direct</div>
                     </td>
-                    <td style="padding:14px 16px;text-align:center;width:33%%;">
+                    <td style="padding:14px 12px;text-align:center;width:33%%;">
                       <div style="font-size:26px;font-weight:700;letter-spacing:1px;">%s</div>
                       <div style="color:#57606a;font-size:12px;">%s</div>
                       <div style="color:#57606a;font-size:12px;">Arrives<br>%s</div>
                     </td>
                   </tr>
+                  %s
                 </table>
                 """.formatted(
                 escape(event.getOriginAirportCode()),
                 escape(nvl(originCity, "")),
                 escape(nvl(event.getDepartureTime(), "—")),
+                durationLabel,
                 escape(nvl(event.getFlightNumber(), "")),
                 escape(event.getDestinationAirportCode()),
                 escape(nvl(destinationCity, "")),
-                escape(nvl(event.getArrivalTime(), "—")));
+                escape(nvl(event.getArrivalTime(), "—")),
+                checkInRow);
+    }
+
+    /** Parses the event's loosely-formatted local time ("yyyy-MM-dd[ T]HH:mm[...]"). */
+    private static java.time.LocalDateTime parseTime(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            String iso = value.trim().replace(' ', 'T');
+            if (iso.length() > 16) {
+                iso = iso.substring(0, 16);
+            }
+            return java.time.LocalDateTime.parse(iso);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** "8h 10m" between departure and arrival, or "" if the times can't be read. */
+    private static String flightDuration(BookingEvent event) {
+        java.time.LocalDateTime dep = parseTime(event.getDepartureTime());
+        java.time.LocalDateTime arr = parseTime(event.getArrivalTime());
+        if (dep == null || arr == null) {
+            return "";
+        }
+        long minutes = java.time.Duration.between(dep, arr).toMinutes();
+        if (minutes <= 0) {
+            return "";
+        }
+        long hours = minutes / 60;
+        long mins = minutes % 60;
+        return mins == 0 ? hours + "h" : hours + "h " + mins + "m";
+    }
+
+    /** When online check-in opens (24h before departure), or "" if unknown. */
+    private static String checkInOpens(BookingEvent event) {
+        java.time.LocalDateTime dep = parseTime(event.getDepartureTime());
+        if (dep == null) {
+            return "";
+        }
+        java.time.LocalDateTime open = dep.minusHours(24);
+        return String.format("%s %02d:%02d", open.toLocalDate(), open.getHour(), open.getMinute());
     }
 
     private static String qrBlock() {
