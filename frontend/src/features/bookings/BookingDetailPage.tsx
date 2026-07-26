@@ -114,7 +114,11 @@ export function BookingDetailPage({
   }
 
   const seats = booking.passengers.map((p) => p.seatNumber).filter(Boolean) as string[];
-  const cancellable = booking.bookingStatus === 'CONFIRMED' || booking.bookingStatus === 'CREATED';
+  // The flight time is airport-local; comparing to the viewer's clock is close
+  // enough to stop a departed flight from offering a cancel it can't honour.
+  const departed = flight ? new Date(flight.departureTime) < new Date() : false;
+  const cancellable =
+    (booking.bookingStatus === 'CONFIRMED' || booking.bookingStatus === 'CREATED') && !departed;
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
@@ -162,6 +166,11 @@ export function BookingDetailPage({
               {flight.airlineCode}
             </span>
             <span className="tabular text-sm font-medium text-slate-600">{flight.flightNumber}</span>
+            {departed ? (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 ring-1 ring-inset ring-slate-200">
+                Departed
+              </span>
+            ) : null}
             <span className="ml-auto text-xs text-slate-400">{dayAndMonth(flight.departureTime)}</span>
           </div>
           <div className="flex items-center gap-4">
@@ -290,6 +299,10 @@ export function BookingDetailPage({
               Cancel booking
             </button>
           )
+        ) : departed ? (
+          <p className="mt-4 text-sm text-slate-500">
+            This flight has already departed — the booking can no longer be cancelled or changed.
+          </p>
         ) : (
           <p className="mt-4 text-sm text-slate-400">
             This booking is {booking.bookingStatus.toLowerCase()} and can no longer be changed.
