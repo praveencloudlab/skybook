@@ -18,6 +18,7 @@ import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage';
 import { LandingPage } from './features/home/LandingPage';
 import { ProfilePage } from './features/profile/ProfilePage';
+import { AdminPage } from './features/admin/AdminPage';
 import { ErrorPage } from './features/errors/ErrorPage';
 import { RouteErrorBoundary } from './features/errors/RouteErrorBoundary';
 import { SearchPage } from './features/search/SearchPage';
@@ -76,7 +77,7 @@ function SessionBootstrap({ children }: { children: React.ReactNode }) {
 }
 
 function Header() {
-  const { signedIn, subject } = useSession();
+  const { signedIn, subject, isAdmin } = useSession();
   const navigate = useNavigate();
 
   async function signOut() {
@@ -115,6 +116,14 @@ function Header() {
               >
                 My trips
               </Link>
+              {isAdmin ? (
+                <Link
+                  to="/admin"
+                  className="rounded-lg px-2.5 py-1.5 font-medium text-accent-200 transition hover:bg-white/10 hover:text-accent-100"
+                >
+                  Admin
+                </Link>
+              ) : null}
               <Link
                 to="/profile"
                 className="hidden max-w-[16ch] truncate rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white sm:inline-block"
@@ -152,6 +161,26 @@ function RequireSession({ children }: { children: React.ReactNode }) {
   if (!signedIn) {
     session.setReturnTo(location.pathname + location.search);
     return <Navigate to="/sign-in" replace />;
+  }
+  return <>{children}</>;
+}
+
+/**
+ * Gate for admin screens. Cosmetic only - the server enforces ADMIN on every
+ * admin endpoint regardless - but it keeps a passenger out of a console they
+ * could not use and would only collect 403s in. A signed-in non-admin gets the
+ * 403 page rather than a redirect, because the answer is "not you", not "sign in".
+ */
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const { signedIn, isAdmin } = useSession();
+  const location = useLocation();
+
+  if (!signedIn) {
+    session.setReturnTo(location.pathname + location.search);
+    return <Navigate to="/sign-in" replace />;
+  }
+  if (!isAdmin) {
+    return <ErrorPage code="403" />;
   }
   return <>{children}</>;
 }
@@ -395,6 +424,14 @@ export default function App() {
                   <RequireSession>
                     <ProfilePage />
                   </RequireSession>
+                }
+              />
+              <Route
+                path="/admin"
+                element={
+                  <RequireAdmin>
+                    <AdminPage />
+                  </RequireAdmin>
                 }
               />
               <Route path="*" element={<ErrorPage code="404" />} />
