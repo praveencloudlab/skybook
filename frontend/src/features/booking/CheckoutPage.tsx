@@ -64,30 +64,48 @@ export function CheckoutPage({
 }) {
   const { subject } = useSession();
 
-  const [passenger, setPassenger] = useState<PassengerDraft>(emptyPassenger);
+  // A real booking can carry several passengers - the API models a list. Start
+  // with one; the traveller adds more below.
+  const [passengers, setPassengers] = useState<PassengerDraft[]>(() => [emptyPassenger()]);
   const [contactEmail, setContactEmail] = useState(subject ?? '');
   const [method, setMethod] = useState<PaymentMethod>('CARD');
   const [agreedTerms, setAgreedTerms] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [paxErrors, setPaxErrors] = useState<Record<string, string>[]>([{}]);
+  const [formErrors, setFormErrors] = useState<{ contactEmail?: string; terms?: string }>({});
   const [error, setError] = useState<ApiError | null>(null);
   const [stage, setStage] = useState<'form' | 'booking' | 'awaitingPayment' | 'paying'>('form');
 
   const surcharge = seat ? Number(seat.listedSurcharge) || 0 : 0;
-  const total = baseFare + surcharge;
+  const paxCount = passengers.length;
+  const total = baseFare * paxCount + surcharge;
+
+  function updatePassenger(index: number, draft: PassengerDraft) {
+    setPassengers((list) => list.map((p, i) => (i === index ? draft : p)));
+  }
+  function addPassenger() {
+    setPassengers((list) => [...list, emptyPassenger()]);
+    setPaxErrors((list) => [...list, {}]);
+  }
+  function removePassenger(index: number) {
+    setPassengers((list) => (list.length > 1 ? list.filter((_, i) => i !== index) : list));
+    setPaxErrors((list) => (list.length > 1 ? list.filter((_, i) => i !== index) : list));
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
 
-    const validation = validatePassenger(passenger);
+    const perPax = passengers.map((p) => validatePassenger(p));
+    const fErr: { contactEmail?: string; terms?: string } = {};
     if (!contactEmail.trim()) {
-      validation.contactEmail = 'A contact email is required';
+      fErr.contactEmail = 'A contact email is required';
     }
     if (!agreedTerms) {
-      validation.terms = 'Please accept the fare rules and terms to continue';
+      fErr.terms = 'Please accept the fare rules and terms to continue';
     }
-    setErrors(validation);
-    if (Object.keys(validation).length > 0) {
+    setPaxErrors(perPax);
+    setFormErrors(fErr);
+    if (perPax.some((e) => Object.keys(e).length > 0) || Object.keys(fErr).length > 0) {
       return;
     }
 
@@ -95,9 +113,13 @@ export function CheckoutPage({
       setStage('booking');
       const booking = await bookingsApi.create({
         flightId: flight.id,
-        passengers: [toPassengerDetail(passenger, cabin, fare, seat?.seatNumber ?? null)],
+        // The chosen seat goes to passenger 1; the rest get a free seat assigned
+        // at check-in (a single seat was selected upstream).
+        passengers: passengers.map((p, i) =>
+          toPassengerDetail(p, cabin, fare, i === 0 ? (seat?.seatNumber ?? null) : null),
+        ),
         contact: {
-          contactName: `${passenger.firstName} ${passenger.lastName}`.trim(),
+          contactName: `${passengers[0].firstName} ${passengers[0].lastName}`.trim(),
           contactEmail: contactEmail.trim(),
         },
       });
@@ -116,7 +138,8 @@ export function CheckoutPage({
       setError(cause instanceof ApiError ? cause : null);
       setStage('form');
       if (cause instanceof ApiError && cause.kind === 'validation') {
-        setErrors(fieldErrors(cause));
+        const mapped = fieldErrors(cause);
+        setPaxErrors((prev) => prev.map((e, i) => (i === 0 ? { ...e, ...mapped } : e)));
       }
     }
   }
@@ -140,14 +163,48 @@ export function CheckoutPage({
         <ErrorAlert error={error} />
 
         <section className="space-y-3">
-          <h2 className="text-sm font-medium text-slate-700">Passenger</h2>
-          <BookForPicker
-            onSelect={(draft, email) => {
-              setPassenger(draft);
-              if (email) setContactEmail(email);
-            }}
-          />
-          <PassengerForm draft={passenger} errors={errors} onChange={setPassenger} />
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-medium text-slate-700">
+              Passenger{paxCount === 1 ? '' : 's'} ({paxCount})
+            </h2>
+            <button
+              type="button"
+              onClick={addPassenger}
+              className="text-sm font-semibold text-brand-700 transition hover:underline"
+            >
+              + Add passenger
+            </button>
+          </div>
+
+          {passengers.map((p, i) => (
+            <div key={i} className="card space-y-3 p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-800">Passenger {i + 1}</h3>
+                {i > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => removePassenger(i)}
+                    className="text-xs font-medium text-red-600 transition hover:underline"
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+              <BookForPicker
+                onSelect={(draft, email) => {
+                  updatePassenger(i, draft);
+                  if (i === 0 && email) setContactEmail(email);
+                }}
+              />
+              <PassengerForm draft={p} errors={paxErrors[i] ?? {}} onChange={(d) => updatePassenger(i, d)} />
+              {i === 0 && seat ? (
+                <p className="text-xs text-slate-500">
+                  Seat {seat.seatNumber} is assigned to passenger 1. Additional passengers get a free
+                  seat at check-in.
+                </p>
+              ) : null}
+            </div>
+          ))}
         </section>
 
         <section className="space-y-3">
@@ -157,7 +214,7 @@ export function CheckoutPage({
             type="email"
             value={contactEmail}
             onChange={(e) => setContactEmail(e.target.value)}
-            error={errors.contactEmail}
+            error={formErrors.contactEmail}
             autoComplete="email"
           />
         </section>
@@ -189,8 +246,9 @@ export function CheckoutPage({
           <div className="flex justify-between px-4 py-2">
             <dt className="text-slate-600">
               {TRAVEL_CLASS_LABELS[cabin]} · {FARE_TYPE_LABELS[fare]}
+              {paxCount > 1 ? ` · ${money(baseFare, currency)} × ${paxCount}` : ''}
             </dt>
-            <dd className="tabular text-slate-900">{money(baseFare, currency)}</dd>
+            <dd className="tabular text-slate-900">{money(baseFare * paxCount, currency)}</dd>
           </div>
           <div className="flex justify-between border-t border-slate-100 px-4 py-2">
             <dt className="text-slate-600">
@@ -201,7 +259,9 @@ export function CheckoutPage({
             </dd>
           </div>
           <div className="flex justify-between border-t border-slate-200 px-4 py-2 font-medium">
-            <dt className="text-slate-900">Total</dt>
+            <dt className="text-slate-900">
+              Total{paxCount > 1 ? ` · ${paxCount} passengers` : ''}
+            </dt>
             <dd className="tabular text-slate-900">{money(total, currency)}</dd>
           </div>
         </dl>
@@ -222,7 +282,7 @@ export function CheckoutPage({
               checked={agreedTerms}
               onChange={(e) => {
                 setAgreedTerms(e.target.checked);
-                if (e.target.checked) setErrors((prev) => ({ ...prev, terms: '' }));
+                if (e.target.checked) setFormErrors((prev) => ({ ...prev, terms: undefined }));
               }}
               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500/40"
             />
@@ -232,7 +292,7 @@ export function CheckoutPage({
               passenger details are correct.
             </span>
           </label>
-          {errors.terms ? <p className="mt-1 text-sm text-red-600">{errors.terms}</p> : null}
+          {formErrors.terms ? <p className="mt-1 text-sm text-red-600">{formErrors.terms}</p> : null}
         </div>
 
         <div className="flex justify-end">

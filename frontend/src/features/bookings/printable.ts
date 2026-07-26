@@ -202,11 +202,12 @@ function addDaysMon(iso: string, days: number): string {
   dt.setUTCDate(dt.getUTCDate() + days);
   return ddMon(dt.toISOString());
 }
+/** Default max baggage allowance per cabin (checked + cabin), shown on the ticket. */
 const BAGGAGE: Record<string, string> = {
-  ECONOMY: '25K',
-  PREMIUM_ECONOMY: '30K',
-  BUSINESS: '40K',
-  FIRST: '50K',
+  ECONOMY: '25 kg checked + 7 kg cabin',
+  PREMIUM_ECONOMY: '30 kg checked + 7 kg cabin',
+  BUSINESS: '40 kg checked + 10 kg cabin',
+  FIRST: '50 kg checked + 10 kg cabin',
 };
 
 /**
@@ -226,7 +227,7 @@ export function printETicket(booking: Booking, flight: Flight | null, _currency 
   const cabin = p0 ? TRAVEL_CLASS_LABELS[p0.travelClass].toUpperCase() : 'ECONOMY';
   const fareBasis = p0 ? `${p0.travelClass[0]}${p0.fareType.slice(0, 3)}${booking.bookingReference}`.toUpperCase() : '';
   const classCode = p0 ? p0.fareType[0] : '';
-  const baggage = p0 ? (BAGGAGE[p0.travelClass] ?? '25K') : '25K';
+  const baggage = (p0 && BAGGAGE[p0.travelClass]) || '25 kg checked + 7 kg cabin';
 
   const segment = flight
     ? `
@@ -248,7 +249,7 @@ export function printETicket(booking: Booking, flight: Flight | null, _currency 
         <td colspan="2" style="padding:10px 12px;vertical-align:top;">
           <div>Class: <b>${classCode}</b></div>
           <div>Cabin: ${cabin}</div>
-          <div>Baggage (4): ${baggage}</div>
+          <div>Max baggage (4): ${baggage}</div>
           <div>Fare basis: ${fareBasis}</div>
         </td>
         <td colspan="2" style="padding:10px 12px;vertical-align:top;">
