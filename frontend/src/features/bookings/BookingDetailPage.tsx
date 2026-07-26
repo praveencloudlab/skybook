@@ -42,6 +42,8 @@ export function BookingDetailPage({
   const [passes, setPasses] = useState<Record<number, BoardingPass>>({});
   const [error, setError] = useState<ApiError | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -96,7 +98,23 @@ export function BookingDetailPage({
     }
   }
 
+  async function cancelBooking() {
+    setCancelling(true);
+    setError(null);
+    try {
+      const updated = await bookingsApi.cancel(booking.id);
+      setBooking(updated);
+      setConfirmCancel(false);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause : null);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   const seats = booking.passengers.map((p) => p.seatNumber).filter(Boolean) as string[];
+  const cancellable = booking.bookingStatus === 'CONFIRMED' || booking.bookingStatus === 'CREATED';
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
@@ -229,6 +247,56 @@ export function BookingDetailPage({
         </section>
       ) : null}
 
+      {/* Manage booking - cancellation (update/reschedule has no backend yet). */}
+      <section className="card mt-5 p-5">
+        <h2 className="text-sm font-semibold text-slate-900">Manage booking</h2>
+        <div className="mt-3 rounded-xl bg-slate-50 p-4 text-sm">
+          <p className="font-medium text-slate-700">Cancellation &amp; refund rules</p>
+          <ul className="mt-2 space-y-1 text-slate-600">
+            <li>• <span className="font-medium">Saver</span> — cancellable; a cancellation fee applies and the refund is partial.</li>
+            <li>• <span className="font-medium">Flexi</span> — cancellable with a more generous refund.</li>
+            <li>• <span className="font-medium">Premium</span> — fully flexible; highest refund.</li>
+            <li>• A captured payment is refunded automatically to the original method; check-in closes for every passenger.</li>
+          </ul>
+        </div>
+
+        {cancellable ? (
+          confirmCancel ? (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
+              <p className="text-sm font-medium text-red-800">Cancel this booking?</p>
+              <p className="mt-1 text-sm text-red-700">
+                This can't be undone. Any captured payment is refunded per the fare rules above.
+              </p>
+              <div className="mt-3 flex gap-2">
+                <Button variant="secondary" onClick={() => setConfirmCancel(false)} disabled={cancelling}>
+                  Keep booking
+                </Button>
+                <button
+                  type="button"
+                  onClick={cancelBooking}
+                  disabled={cancelling}
+                  className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+                >
+                  {cancelling ? 'Cancelling…' : 'Yes, cancel booking'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmCancel(true)}
+              className="mt-4 text-sm font-semibold text-red-600 transition hover:underline"
+            >
+              Cancel booking
+            </button>
+          )
+        ) : (
+          <p className="mt-4 text-sm text-slate-400">
+            This booking is {booking.bookingStatus.toLowerCase()} and can no longer be changed.
+          </p>
+        )}
+      </section>
+
       {/* Check-in + boarding passes */}
       <section className="mt-8">
         <h2 className="text-sm font-semibold text-slate-700">Check-in &amp; boarding passes</h2>
@@ -276,6 +344,7 @@ function CheckInRow({
   const done = record.status === 'CHECKED_IN' || record.status === 'BOARDED';
   const canCheckIn = record.status === 'OPEN';
   const notOpenYet = record.status === 'NOT_OPEN';
+  const noShow = record.status === 'NO_SHOW';
   const opens = checkInOpensAt(record.departureTime);
   const closes = checkInClosesAt(record.departureTime);
 
@@ -294,6 +363,10 @@ function CheckInRow({
           <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
             {record.status === 'BOARDED' ? 'boarded' : 'checked in'}
           </span>
+        ) : noShow ? (
+          <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 ring-1 ring-inset ring-red-200">
+            No show
+          </span>
         ) : (
           <Button onClick={onCheckIn} busy={busy} disabled={!canCheckIn}>
             Check in
@@ -302,11 +375,16 @@ function CheckInRow({
       </div>
 
       {!done && !canCheckIn ? (
-        <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
+        <p
+          className={
+            'border-t px-4 py-2 text-xs ' +
+            (noShow ? 'border-red-100 bg-red-50/50 text-red-700' : 'border-slate-100 text-slate-500')
+          }
+        >
           {notOpenYet
             ? `Check-in opens around ${opens.toLocaleString()}, 24 hours before departure.`
-            : record.status === 'NO_SHOW'
-              ? `Check-in closed at ${closes.toLocaleString()}, 45 minutes before departure.`
+            : noShow
+              ? `No show — this passenger did not check in, and the check-in window closed at ${closes.toLocaleString()} (45 minutes before departure).`
               : `Check-in is not available for this passenger (${record.status.toLowerCase()}).`}
         </p>
       ) : null}

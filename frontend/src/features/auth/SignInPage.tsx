@@ -29,9 +29,15 @@ export function SignInPage() {
       <SignInForm
         onSignedIn={() => {
           // Back where they were interrupted - an expiry mid-journey should not
-          // cost someone their place.
+          // cost someone their place. Otherwise admins land in the console
+          // (their whole job is there), passengers on the home page.
           const returnTo = session.takeReturnTo();
-          navigate(returnTo ?? '/', { replace: true });
+          if (returnTo) {
+            navigate(returnTo, { replace: true });
+            return;
+          }
+          const isAdmin = session.current()?.roles.includes('ROLE_ADMIN') ?? false;
+          navigate(isAdmin ? '/admin' : '/', { replace: true });
         }}
       />
     </AuthLayout>

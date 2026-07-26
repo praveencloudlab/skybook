@@ -12,7 +12,7 @@ import { paymentsApi, PAYMENT_METHOD_LABELS, type Payment, type PaymentMethod } 
 import { Alert, ErrorAlert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { Field } from '../../components/Field';
-import { FlightCard } from '../../components/FlightCard';
+import { TripSummaryBar } from '../../components/TripSummaryBar';
 import { ApiError, fieldErrors } from '../../lib/errors';
 import { money } from '../../lib/format';
 import { useSession } from '../auth/useSession';
@@ -124,23 +124,17 @@ export function CheckoutPage({
   const busy = stage !== 'form';
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <button
-        type="button"
-        onClick={onBack}
-        disabled={busy}
-        className="text-sm font-medium text-brand-700 hover:underline disabled:text-slate-400"
-      >
-        ← Back to seats
-      </button>
+    <>
+      <TripSummaryBar flight={flight} step="review" onBack={onBack} backLabel="Back to seats" />
 
-      <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">
-        Passenger &amp; payment
-      </h1>
-
-      <div className="mt-4">
-        <FlightCard flight={flight} />
-      </div>
+      <main className="mx-auto max-w-3xl px-6 py-8">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+          Review &amp; payment
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          {TRAVEL_CLASS_LABELS[cabin]} · {FARE_TYPE_LABELS[fare]}
+          {seat ? ` · seat ${seat.seatNumber}` : ' · seat assigned at check-in'}
+        </p>
 
       <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-6">
         <ErrorAlert error={error} />
@@ -247,7 +241,8 @@ export function CheckoutPage({
           </Button>
         </div>
       </form>
-    </main>
+      </main>
+    </>
   );
 }
 

@@ -47,10 +47,15 @@ test('book a flight end to end', async ({ page }) => {
   // captures, then the booking confirms (Kafka again).
   await page.getByRole('button', { name: /Pay US\$/ }).click();
 
-  // Confirmation: a booking reference is shown.
-  await expect(page.getByText(/SB[A-Z0-9]{4,}/).first()).toBeVisible({ timeout: 90_000 });
+  // Confirmation: the PNR page appears (the reference shows immediately, before
+  // the async confirmation resolves). Generous timeout - real Kafka round-trips.
+  await expect(page.getByRole('heading', { name: /your booking reference/i })).toBeVisible({
+    timeout: 90_000,
+  });
+  const pnr = (await page.getByText(/SB[A-Z0-9]{4,}/).first().textContent())?.trim() ?? '';
+  expect(pnr).toMatch(/^SB[A-Z0-9]{4,}$/);
 
-  // And it appears under My trips.
+  // And it appears under this user's owner-scoped My Trips.
   await page.goto('/bookings');
-  await expect(page.getByText(/SB[A-Z0-9]{4,}/).first()).toBeVisible();
+  await expect(page.getByText(pnr).first()).toBeVisible();
 });

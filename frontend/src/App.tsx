@@ -102,26 +102,30 @@ function Header() {
         </Link>
 
         <nav className="flex items-center gap-1 text-sm sm:gap-2">
-          <Link
-            to="/search"
-            className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
-          >
-            Search flights
-          </Link>
+          {/* Admins get an operations-only menu; passengers get the booking menu. */}
+          {isAdmin ? (
+            <Link
+              to="/admin"
+              className="rounded-lg px-2.5 py-1.5 font-semibold text-accent-200 transition hover:bg-white/10 hover:text-accent-100"
+            >
+              Admin console
+            </Link>
+          ) : (
+            <Link
+              to="/search"
+              className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+            >
+              Search flights
+            </Link>
+          )}
           {signedIn ? (
             <>
-              <Link
-                to="/bookings"
-                className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
-              >
-                My trips
-              </Link>
-              {isAdmin ? (
+              {!isAdmin ? (
                 <Link
-                  to="/admin"
-                  className="rounded-lg px-2.5 py-1.5 font-medium text-accent-200 transition hover:bg-white/10 hover:text-accent-100"
+                  to="/bookings"
+                  className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
                 >
-                  Admin
+                  My trips
                 </Link>
               ) : null}
               <Link

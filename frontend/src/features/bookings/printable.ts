@@ -2,7 +2,7 @@ import type { Booking } from '../../api/bookings';
 import type { Flight } from '../../api/flights';
 import type { BoardingPass } from '../../api/checkin';
 import { TRAVEL_CLASS_LABELS, FARE_TYPE_LABELS } from '../../api/quotes';
-import { dayAndMonth, money, time } from '../../lib/format';
+import { dayAndMonth, duration, money, time } from '../../lib/format';
 
 /**
  * Client-side "download" for the boarding pass and e-ticket (FRONTEND_MODULE.md
@@ -91,39 +91,91 @@ export function printBoardingPass(pass: BoardingPass): void {
 }
 
 export function printETicket(booking: Booking, flight: Flight | null, currency = 'USD'): void {
-  const trip = flight
-    ? `<div class="grid" style="margin-top:8px">
-         ${cell('From', `${time(flight.departureTime)} ${flight.originAirportCode}`)}
-         ${cell('To', `${time(flight.arrivalTime)} ${flight.destinationAirportCode}`)}
-         ${cell('Date', dayAndMonth(flight.departureTime))}
+  const flightBlock = flight
+    ? `<div class="hr"></div>
+       <div class="row">
+         <div class="label">Flight</div>
+         <div class="muted">${dayAndMonth(flight.departureTime)}</div>
+       </div>
+       <div class="row" style="align-items:flex-start;margin-top:6px">
+         <div>
+           <div class="big">${time(flight.departureTime)}</div>
+           <div class="muted">${flight.originAirportCode}</div>
+         </div>
+         <div style="text-align:center;flex:1;padding:0 16px">
+           <div class="muted">${duration(flight.departureTime, flight.arrivalTime)} · Direct</div>
+           <div style="border-top:1px dashed #cbd5e1;margin:8px 0"></div>
+           <div class="mono muted" style="font-size:11px">${flight.airlineCode} ${flight.flightNumber}</div>
+         </div>
+         <div style="text-align:right">
+           <div class="big">${time(flight.arrivalTime)}</div>
+           <div class="muted">${flight.destinationAirportCode}</div>
+         </div>
        </div>`
     : '';
+
   const rows = booking.passengers
     .map(
-      (p) => `<tr>
-        <td>${p.firstName} ${p.lastName}</td>
+      (p, i) => `<tr>
+        <td>${i + 1}. ${p.firstName} ${p.lastName}</td>
         <td>${TRAVEL_CLASS_LABELS[p.travelClass]} · ${FARE_TYPE_LABELS[p.fareType]}</td>
-        <td>${p.seatNumber ?? '—'}</td>
+        <td>${p.seatNumber ?? 'At check-in'}</td>
         <td style="text-align:right">${money(p.fare ?? p.baseFare, currency)}</td>
       </tr>`,
     )
     .join('');
+
+  const contact = booking.contact
+    ? `<div class="hr"></div>
+       <div class="label">Contact</div>
+       <div class="muted" style="margin-top:4px">
+         ${booking.contact.contactName} · ${booking.contact.contactEmail}${booking.contact.contactPhone ? ' · ' + booking.contact.contactPhone : ''}
+       </div>`
+    : '';
+
   const body = `
     <div class="card">
       <div class="navy pad row">
-        <span class="brand">✈ SkyBook · E-ticket</span>
+        <span class="brand">✈ SkyBook · E-ticket / Itinerary receipt</span>
         <span class="mono" style="font-size:12px;opacity:.8">${booking.bookingReference}</span>
       </div>
       <div class="pad">
-        <div class="row"><div class="label">Booking reference</div><div class="muted">${dayAndMonth(booking.bookingDate)}</div></div>
-        <div class="mono big" style="letter-spacing:3px;margin-top:2px">${booking.bookingReference}</div>
-        ${flight ? `<div class="hr"></div><div class="label">Flight ${flight.airlineCode} ${flight.flightNumber}</div>${trip}` : ''}
+        <div class="row">
+          <div>
+            <div class="label">Booking reference</div>
+            <div class="mono big" style="letter-spacing:3px">${booking.bookingReference}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="label">Status</div>
+            <div class="val">${booking.bookingStatus}</div>
+            <div class="muted" style="font-size:12px">Booked ${dayAndMonth(booking.bookingDate)}</div>
+          </div>
+        </div>
+
+        ${flightBlock}
+
         <div class="hr"></div>
+        <div class="label">Passengers</div>
         <table>
-          <thead><tr><th>Passenger</th><th>Cabin</th><th>Seat</th><th style="text-align:right">Fare</th></tr></thead>
+          <thead><tr><th>Name</th><th>Cabin &amp; fare</th><th>Seat</th><th style="text-align:right">Fare</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
         <div class="total"><span>Total paid</span><span>${money(booking.totalFare, currency)}</span></div>
+
+        ${contact}
+
+        <div class="hr"></div>
+        <div class="label">Fare rules (summary)</div>
+        <div class="muted" style="margin-top:4px;font-size:12px;line-height:1.5">
+          Saver — cancellable, fee applies, partial refund. Flexi — more generous refund.
+          Premium — fully flexible. A captured payment is refunded to the original method on cancellation.
+          Carry a valid passport; check in online 24 hours before departure.
+        </div>
+
+        ${bars(booking.bookingReference.repeat(6))}
+        <p class="mono muted" style="margin-top:6px;font-size:10px;text-align:center">
+          ${booking.bookingReference} · This is an itinerary receipt, not a boarding pass.
+        </p>
       </div>
     </div>`;
   open(`E-ticket ${booking.bookingReference}`, body);

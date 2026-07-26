@@ -99,10 +99,12 @@ function PersonalAndDocuments({ profile, onSaved }: { profile: Profile; onSaved:
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [dirty, setDirty] = useState(false);
 
   function set<K extends keyof typeof form>(key: K, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
     setSaved(false);
+    setDirty(true);
   }
 
   async function submit(event: FormEvent) {
@@ -122,6 +124,7 @@ function PersonalAndDocuments({ profile, onSaved }: { profile: Profile; onSaved:
       });
       onSaved(updated);
       setSaved(true);
+      setDirty(false);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : null);
     } finally {
@@ -131,6 +134,18 @@ function PersonalAndDocuments({ profile, onSaved }: { profile: Profile; onSaved:
 
   return (
     <form onSubmit={submit}>
+      {/* A sticky action bar so saving is never missed - the previous single
+          button lived at the bottom of the third section and people edited then
+          navigated away without pressing it, so their changes looked "not saved". */}
+      <div className="sticky top-14 z-10 -mx-6 mb-4 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-6 py-2.5 backdrop-blur">
+        <span className="text-sm text-slate-500">
+          {dirty ? 'You have unsaved changes' : saved ? 'All changes saved ✓' : 'Your saved details'}
+        </span>
+        <Button type="submit" busy={busy} disabled={!dirty} size="md">
+          Save changes
+        </Button>
+      </div>
+
       <Section title="Personal information" subtitle="Used to fill in your bookings.">
         <ErrorAlert error={error} />
         <div className="grid gap-4 sm:grid-cols-2">
