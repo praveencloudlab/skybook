@@ -2,6 +2,7 @@ package com.skybook.praveen.checkinservice.mapper;
 
 import com.skybook.praveen.checkinservice.dto.response.CheckInResponse;
 import com.skybook.praveen.checkinservice.entity.CheckIn;
+import com.skybook.praveen.checkinservice.enums.CheckInStatus;
 
 public final class CheckInMapper {
 
@@ -9,6 +10,15 @@ public final class CheckInMapper {
     }
 
     public static CheckInResponse toResponse(CheckIn checkIn) {
+        return toResponse(checkIn, checkIn.getStatus());
+    }
+
+    /**
+     * Map with an explicit DISPLAY status - used by the read path to show the
+     * status reconciled against the clock (see CheckInValidator.effectiveStatus)
+     * without mutating the stored row.
+     */
+    public static CheckInResponse toResponse(CheckIn checkIn, CheckInStatus displayStatus) {
         return new CheckInResponse(
                 checkIn.getId(),
                 checkIn.getBookingId(),
@@ -26,7 +36,7 @@ public final class CheckInMapper {
                 checkIn.getFareType(),
                 checkIn.getSeatSurchargeEntitlement(),
                 checkIn.getEntitlementCurrency(),
-                checkIn.getStatus(),
+                displayStatus,
                 checkIn.isDocumentVerified(),
                 checkIn.getCheckedInAt(),
                 checkIn.getBoardedAt(),

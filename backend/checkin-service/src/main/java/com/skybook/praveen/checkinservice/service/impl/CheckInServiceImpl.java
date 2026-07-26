@@ -87,13 +87,23 @@ public class CheckInServiceImpl implements CheckInService {
     @Override
     @Transactional(readOnly = true)
     public CheckInResponse getById(Long id) {
-        return CheckInMapper.toResponse(findCheckInOrThrow(id));
+        return toResponseWithLiveStatus(findCheckInOrThrow(id));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<CheckInResponse> getByBookingId(Long bookingId) {
-        return checkInRepository.findByBookingId(bookingId).stream().map(CheckInMapper::toResponse).toList();
+        return checkInRepository.findByBookingId(bookingId).stream()
+                .map(this::toResponseWithLiveStatus).toList();
+    }
+
+    /**
+     * Read-path mapping that shows the status reconciled against the clock, since
+     * there is no scheduler advancing NOT_OPEN -> OPEN -> NO_SHOW. Display only -
+     * the stored row is never changed here.
+     */
+    private CheckInResponse toResponseWithLiveStatus(CheckIn checkIn) {
+        return CheckInMapper.toResponse(checkIn, validator.effectiveStatus(checkIn, LocalDateTime.now()));
     }
 
     @Override
