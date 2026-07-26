@@ -404,7 +404,7 @@ function CheckInRow({
 
       {pass ? (
         <div className="border-t border-slate-100 p-4">
-          <BoardingPassCard pass={pass} />
+          <BoardingPassCard pass={pass} record={record} />
         </div>
       ) : null}
     </div>

@@ -1,6 +1,6 @@
 import type { Booking } from '../../api/bookings';
 import type { Flight } from '../../api/flights';
-import type { BoardingPass } from '../../api/checkin';
+import type { BoardingPass, CheckIn } from '../../api/checkin';
 import { TRAVEL_CLASS_LABELS, FARE_TYPE_LABELS } from '../../api/quotes';
 import { dayAndMonth, duration, money, time } from '../../lib/format';
 
@@ -76,10 +76,27 @@ function checkInOpensText(flight: Flight): string {
   return `${dayAndMonth(iso)} at ${time(iso)}`;
 }
 
-export function printBoardingPass(pass: BoardingPass): void {
+export function printBoardingPass(pass: BoardingPass, record?: CheckIn): void {
   const boarding = pass.boardingTime
     ? new Date(pass.boardingTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '—';
+  const cabin = record
+    ? record.travelClass.split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ')
+    : '';
+
+  const routeBlock = record
+    ? `<div class="hr"></div>
+       <div class="row" style="align-items:flex-start">
+         <div><div class="big">${time(record.departureTime)}</div><div class="muted">${record.originAirportCode}</div></div>
+         <div style="text-align:center;flex:1;padding:0 12px">
+           <div class="muted">${dayAndMonth(record.departureTime)}</div>
+           <div style="border-top:2px dashed #cbd5e1;margin:8px 0"></div>
+           <div class="muted" style="font-size:11px">Direct</div>
+         </div>
+         <div style="text-align:right"><div class="muted" style="font-size:20px;font-weight:700;color:#0f172a">${record.destinationAirportCode}</div></div>
+       </div>`
+    : '';
+
   const body = `
     <div class="card">
       <div class="navy pad row">
@@ -87,13 +104,17 @@ export function printBoardingPass(pass: BoardingPass): void {
         <span class="mono" style="font-size:12px;opacity:.8">${pass.boardingPassNumber}</span>
       </div>
       <div class="pad">
+        ${routeBlock}
+        <div class="hr"></div>
         <div class="grid">
           ${cell('Passenger', pass.passengerName)}
           ${cell('Flight', pass.flightNumber)}
-          ${cell('Boarding', boarding)}
+          ${record ? cell('Class', cabin) : ''}
+          ${record ? cell('Booking ref', record.bookingReference) : ''}
           ${cell('Seat', pass.seatNumber, 'big')}
           ${cell('Gate', pass.gate ?? '—', 'big')}
           ${cell('Group', pass.boardingGroup ?? '—', 'big')}
+          ${cell('Boarding', boarding, 'big')}
         </div>
         ${pass.barcodeToken ? bars(pass.barcodeToken) + `<p class="mono muted" style="margin-top:6px;font-size:10px">${pass.barcodeToken}</p>` : ''}
       </div>
