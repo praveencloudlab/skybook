@@ -11,7 +11,7 @@ import { useSession } from '../features/auth/useSession';
  * way out, not "log in / create account".
  */
 export function SiteFooter() {
-  const { signedIn, subject } = useSession();
+  const { signedIn, subject, isAdmin } = useSession();
   const navigate = useNavigate();
 
   async function signOut() {
@@ -37,22 +37,35 @@ export function SiteFooter() {
           </p>
         </div>
 
-        {/* Book - always the same. */}
-        <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Book</h3>
-          <ul className="mt-3 space-y-2">
-            <li>
-              <Link to="/search" className="text-sm text-slate-600 transition hover:text-brand-700">
-                Search flights
-              </Link>
-            </li>
-            <li>
-              <Link to="/bookings" className="text-sm text-slate-600 transition hover:text-brand-700">
-                My trips
-              </Link>
-            </li>
-          </ul>
-        </div>
+        {/* Admins get operations links here, not the passenger booking menu. */}
+        {isAdmin ? (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Operations</h3>
+            <ul className="mt-3 space-y-2">
+              <li>
+                <Link to="/admin" className="text-sm text-slate-600 transition hover:text-brand-700">
+                  Admin console
+                </Link>
+              </li>
+            </ul>
+          </div>
+        ) : (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Book</h3>
+            <ul className="mt-3 space-y-2">
+              <li>
+                <Link to="/search" className="text-sm text-slate-600 transition hover:text-brand-700">
+                  Search flights
+                </Link>
+              </li>
+              <li>
+                <Link to="/bookings" className="text-sm text-slate-600 transition hover:text-brand-700">
+                  My trips
+                </Link>
+              </li>
+            </ul>
+          </div>
+        )}
 
         {/* Account - reflects whether someone is signed in. */}
         <div>
