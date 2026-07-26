@@ -106,9 +106,10 @@ public class CheckInEmailTemplate {
                         </td>
                         <td style="padding:16px 6px;text-align:center;width:34%%;">
                           <div style="color:%s;font-size:11px;font-weight:700;letter-spacing:1px;">FLIGHT %s</div>
-                          <table width="100%%" style="margin-top:8px;"><tr>
-                            <td style="border-top:2px dashed %s;font-size:0;">&#160;</td>
-                            <td style="width:0;"><div style="width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:8px solid %s;"></div></td>
+                          <table width="100%%" style="margin-top:8px;border-collapse:collapse;"><tr>
+                            <td style="border-bottom:2px solid #c8d0da;font-size:0;line-height:0;">&#160;</td>
+                            <td style="padding:0 6px;color:%s;font-size:16px;white-space:nowrap;vertical-align:middle;">&#9992;</td>
+                            <td style="border-bottom:2px solid #c8d0da;font-size:0;line-height:0;">&#160;</td>
                           </tr></table>
                         </td>
                         <td style="padding:16px;text-align:center;width:33%%;">
@@ -173,7 +174,7 @@ public class CheckInEmailTemplate {
                 escape(nvl(event.getOriginAirportCode(), "-")),
                 escape(nvl(originCity, "")),
                 brand.primaryColor(), escape(nvl(event.getFlightNumber(), "")),
-                brand.secondaryColor(), brand.secondaryColor(),
+                brand.secondaryColor(),
                 escape(nvl(event.getDestinationAirportCode(), "-")),
                 escape(nvl(destinationCity, "")),
                 brand.primaryColor(), escape(nvl(event.getSeatNumber(), "-")),

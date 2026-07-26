@@ -65,6 +65,17 @@ function bars(token: string): string {
 const cell = (label: string, value: string, cls = 'val') =>
   `<div><div class="label">${label}</div><div class="${cls}">${value}</div></div>`;
 
+/** When online check-in opens: 24h before departure, in the flight's own clock. */
+function checkInOpensText(flight: Flight): string {
+  const base = new Date(`${flight.departureTime.slice(0, 16)}:00Z`);
+  if (Number.isNaN(base.getTime())) {
+    return '';
+  }
+  base.setUTCHours(base.getUTCHours() - 24);
+  const iso = base.toISOString().slice(0, 16);
+  return `${dayAndMonth(iso)} at ${time(iso)}`;
+}
+
 export function printBoardingPass(pass: BoardingPass): void {
   const boarding = pass.boardingTime
     ? new Date(pass.boardingTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -111,7 +122,8 @@ export function printETicket(booking: Booking, flight: Flight | null, currency =
            <div class="big">${time(flight.arrivalTime)}</div>
            <div class="muted">${flight.destinationAirportCode}</div>
          </div>
-       </div>`
+       </div>
+       ${checkInOpensText(flight) ? `<div class="muted" style="margin-top:10px;font-size:12px">🕐 Online check-in opens 24 hours before departure — around <b>${checkInOpensText(flight)}</b>.</div>` : ''}`
     : '';
 
   const rows = booking.passengers
