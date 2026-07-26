@@ -1,8 +1,8 @@
 import type { Booking } from '../../api/bookings';
 import { AIRPORTS, type Flight } from '../../api/flights';
 import type { BoardingPass, CheckIn } from '../../api/checkin';
-import { TRAVEL_CLASS_LABELS, FARE_TYPE_LABELS } from '../../api/quotes';
-import { dayAndMonth, duration, money, time } from '../../lib/format';
+import { TRAVEL_CLASS_LABELS } from '../../api/quotes';
+import { money, time } from '../../lib/format';
 
 /**
  * Client-side "download" for the boarding pass and e-ticket (FRONTEND_MODULE.md
@@ -77,16 +77,6 @@ function bars(token: string): string {
   );
 }
 
-/** When online check-in opens: 24h before departure, in the flight's own clock. */
-function checkInOpensText(flight: Flight): string {
-  const base = new Date(`${flight.departureTime.slice(0, 16)}:00Z`);
-  if (Number.isNaN(base.getTime())) {
-    return '';
-  }
-  base.setUTCHours(base.getUTCHours() - 24);
-  const iso = base.toISOString().slice(0, 16);
-  return `${dayAndMonth(iso)} at ${time(iso)}`;
-}
 
 function cityFor(code: string): string {
   return AIRPORTS.find((a) => a.code === code)?.city ?? code;
@@ -186,93 +176,156 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
   open(`Boarding pass ${pass.boardingPassNumber}`, body);
 }
 
-export function printETicket(booking: Booking, flight: Flight | null, currency = 'USD'): void {
-  const flightBlock = flight
-    ? `<div class="hr"></div>
-       <div class="row">
-         <div class="label">Flight</div>
-         <div class="muted">${dayAndMonth(flight.departureTime)}</div>
-       </div>
-       <div class="row" style="align-items:flex-start;margin-top:6px">
-         <div>
-           <div class="big">${time(flight.departureTime)}</div>
-           <div class="muted">${flight.originAirportCode}</div>
-         </div>
-         <div style="text-align:center;flex:1;padding:0 16px">
-           <div class="muted">${duration(flight.departureTime, flight.arrivalTime)} · Direct</div>
-           <div style="border-top:1px dashed #cbd5e1;margin:8px 0"></div>
-           <div class="mono muted" style="font-size:11px">${flight.airlineCode} ${flight.flightNumber}</div>
-         </div>
-         <div style="text-align:right">
-           <div class="big">${time(flight.arrivalTime)}</div>
-           <div class="muted">${flight.destinationAirportCode}</div>
-         </div>
-       </div>
-       ${checkInOpensText(flight) ? `<div class="muted" style="margin-top:10px;font-size:12px">🕐 Online check-in opens 24 hours before departure — around <b>${checkInOpensText(flight)}</b>.</div>` : ''}`
-    : '';
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function ddMon(iso: string): string {
+  const [d] = iso.split('T');
+  const [y, m, day] = d.split('-');
+  return `${day}${MONTHS[Number(m) - 1] ?? m}${y}`;
+}
+function durationHM(dep: string, arr: string): string {
+  const mins = (Date.parse(`${arr}Z`) - Date.parse(`${dep}Z`)) / 60_000;
+  if (!Number.isFinite(mins) || mins <= 0) {
+    return '';
+  }
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(Math.round(mins % 60)).padStart(2, '0')}`;
+}
+function shiftTime(iso: string, deltaMinutes: number): string {
+  const dt = new Date(`${iso.slice(0, 16)}:00Z`);
+  if (Number.isNaN(dt.getTime())) {
+    return '';
+  }
+  dt.setUTCMinutes(dt.getUTCMinutes() + deltaMinutes);
+  return `${String(dt.getUTCHours()).padStart(2, '0')}:${String(dt.getUTCMinutes()).padStart(2, '0')}`;
+}
+function addDaysMon(iso: string, days: number): string {
+  const dt = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return ddMon(dt.toISOString());
+}
+const BAGGAGE: Record<string, string> = {
+  ECONOMY: '25K',
+  PREMIUM_ECONOMY: '30K',
+  BUSINESS: '40K',
+  FIRST: '50K',
+};
 
-  const rows = booking.passengers
-    .map(
-      (p, i) => `<tr>
-        <td>${i + 1}. ${p.firstName} ${p.lastName}</td>
-        <td>${TRAVEL_CLASS_LABELS[p.travelClass]} · ${FARE_TYPE_LABELS[p.fareType]}</td>
-        <td>${p.seatNumber ?? 'At check-in'}</td>
-        <td style="text-align:right">${money(p.fare ?? p.baseFare, currency)}</td>
-      </tr>`,
-    )
-    .join('');
+/**
+ * Electronic ticket receipt (FRONTEND_MODULE.md Modules 10) - laid out like a
+ * carrier's itinerary receipt: maroon wave header, passenger + barcode block,
+ * an "ELECTRONIC TICKET RECEIPT" band, the grey itinerary table with per-segment
+ * detail rows, and the fare-condition footnotes.
+ */
+export function printETicket(booking: Booking, flight: Flight | null, _currency = 'USD'): void {
+  const MAROON = '#5a1836';
+  const p0 = booking.passengers[0];
+  const paxLines = booking.passengers
+    .map((p) => `${p.firstName} ${p.lastName} (ADT)`)
+    .join('<br>');
+  const ticketNo = `157 ${2100000000 + booking.id}`;
 
-  const contact = booking.contact
-    ? `<div class="hr"></div>
-       <div class="label">Contact</div>
-       <div class="muted" style="margin-top:4px">
-         ${booking.contact.contactName} · ${booking.contact.contactEmail}${booking.contact.contactPhone ? ' · ' + booking.contact.contactPhone : ''}
-       </div>`
+  const cabin = p0 ? TRAVEL_CLASS_LABELS[p0.travelClass].toUpperCase() : 'ECONOMY';
+  const fareBasis = p0 ? `${p0.travelClass[0]}${p0.fareType.slice(0, 3)}${booking.bookingReference}`.toUpperCase() : '';
+  const classCode = p0 ? p0.fareType[0] : '';
+  const baggage = p0 ? (BAGGAGE[p0.travelClass] ?? '25K') : '25K';
+
+  const segment = flight
+    ? `
+      <tr>
+        <td style="padding:10px 12px;vertical-align:top;">
+          <div><b style="font-size:15px;">${flight.originAirportCode}</b> ${cityFor(flight.originAirportCode).toUpperCase()}</div>
+          <div style="color:#333;">Terminal: M</div>
+        </td>
+        <td style="padding:10px 12px;vertical-align:top;">
+          <div><b style="font-size:15px;">${flight.destinationAirportCode}</b> ${cityFor(flight.destinationAirportCode).toUpperCase()}</div>
+          <div style="color:#333;">Terminal: 4</div>
+        </td>
+        <td style="padding:10px 12px;vertical-align:top;">${flight.airlineCode}${flight.flightNumber.replace(/\D/g, '') || flight.flightNumber}</td>
+        <td style="padding:10px 12px;vertical-align:top;"><b>${time(flight.departureTime)}</b><br>${ddMon(flight.departureTime)}</td>
+        <td style="padding:10px 12px;vertical-align:top;"><b>${time(flight.arrivalTime)}</b><br>${ddMon(flight.arrivalTime)}</td>
+        <td style="padding:10px 12px;vertical-align:top;">${shiftTime(flight.departureTime, -60)}</td>
+      </tr>
+      <tr style="background:#ececec;font-size:12px;color:#222;">
+        <td colspan="2" style="padding:10px 12px;vertical-align:top;">
+          <div>Class: <b>${classCode}</b></div>
+          <div>Cabin: ${cabin}</div>
+          <div>Baggage (4): ${baggage}</div>
+          <div>Fare basis: ${fareBasis}</div>
+        </td>
+        <td colspan="2" style="padding:10px 12px;vertical-align:top;">
+          <div>Operated by: SKYBOOK</div>
+          <div>Marketed by: SKYBOOK</div>
+          <div>Booking status (1): OK</div>
+          <div>Frequent flyer number &nbsp;&mdash;</div>
+        </td>
+        <td colspan="2" style="padding:10px 12px;vertical-align:top;">
+          <div>NVB (2): ${ddMon(flight.departureTime)}</div>
+          <div>NVA (3): ${addDaysMon(flight.departureTime, 120)}</div>
+          <div>Duration: ${durationHM(flight.departureTime, flight.arrivalTime)}</div>
+        </td>
+      </tr>`
     : '';
 
   const body = `
-    <div class="card">
-      <div class="navy pad row">
-        <span class="brand">✈ SkyBook · E-ticket / Itinerary receipt</span>
-        <span class="mono" style="font-size:12px;opacity:.8">${booking.bookingReference}</span>
+    <div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:13px;">
+      <!-- Header -->
+      <div style="position:relative;height:96px;overflow:hidden;background:linear-gradient(115deg,#3f0f24 0%,#6d1f43 45%,#9c3a66 100%);">
+        <svg viewBox="0 0 900 96" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;">
+          <path d="M0,58 C230,86 470,20 900,52 L900,96 L0,96 Z" fill="#ffffff" opacity="0.10"/>
+          <path d="M0,70 C260,40 540,92 900,44 L900,96 L0,96 Z" fill="#ffffff" opacity="0.07"/>
+        </svg>
+        <div style="position:absolute;left:22px;top:26px;color:#fff;font-style:italic;font-weight:700;font-size:19px;">Going places together</div>
+        <div style="position:absolute;right:22px;top:22px;display:flex;align-items:center;gap:12px;color:#fff;">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.15);font-size:9px;font-weight:700;line-height:1.1;text-align:center;">SKY<br>ALLIANCE</span>
+          <span style="font-size:26px;font-weight:800;letter-spacing:1px;">SkyBook &#9992;</span>
+        </div>
       </div>
-      <div class="pad">
-        <div class="row">
-          <div>
-            <div class="label">Booking reference</div>
-            <div class="mono big" style="letter-spacing:3px">${booking.bookingReference}</div>
-          </div>
-          <div style="text-align:right">
-            <div class="label">Status</div>
-            <div class="val">${booking.bookingStatus}</div>
-            <div class="muted" style="font-size:12px">Booked ${dayAndMonth(booking.bookingDate)}</div>
-          </div>
-        </div>
 
-        ${flightBlock}
+      <!-- Passenger + barcode block -->
+      <table style="width:100%;border-collapse:collapse;margin-top:18px;">
+        <tr>
+          <td style="vertical-align:top;padding:0 16px;">
+            <div style="margin-bottom:8px;"><b>Passenger:</b> ${paxLines}</div>
+            <div style="margin-bottom:8px;"><b>Booking ref:</b> ${booking.bookingReference}</div>
+            <div><b>Ticket number:</b> ${ticketNo}</div>
+          </td>
+          <td style="vertical-align:top;padding:0 16px;width:48%;">
+            <div style="height:52px;">${bars(booking.bookingReference.repeat(8))}</div>
+            <div style="margin-top:6px;"><b>Itinerary Printing Office:</b></div>
+            <div>SKYBOOK DIGITAL, DIGITAL OFFICE</div>
+            <div><b>Date:</b> ${ddMon(booking.bookingDate)}</div>
+          </td>
+        </tr>
+      </table>
 
-        <div class="hr"></div>
-        <div class="label">Passengers</div>
-        <table>
-          <thead><tr><th>Name</th><th>Cabin &amp; fare</th><th>Seat</th><th style="text-align:right">Fare</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-        <div class="total"><span>Total paid</span><span>${money(booking.totalFare, currency)}</span></div>
+      <!-- ETR band -->
+      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:18px;letter-spacing:.5px;padding:11px 16px;margin-top:16px;">ELECTRONIC TICKET RECEIPT</div>
 
-        ${contact}
+      <!-- Itinerary -->
+      <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;">
+        <thead>
+          <tr style="background:#d9d9d9;color:#333;text-align:left;font-size:12px;">
+            <th style="padding:7px 12px;font-weight:700;">From</th>
+            <th style="padding:7px 12px;font-weight:700;">To</th>
+            <th style="padding:7px 12px;font-weight:700;">Flight</th>
+            <th style="padding:7px 12px;font-weight:700;">Departure</th>
+            <th style="padding:7px 12px;font-weight:700;">Arrival</th>
+            <th style="padding:7px 12px;font-weight:700;">Last check-in</th>
+          </tr>
+        </thead>
+        <tbody>${segment}</tbody>
+      </table>
+      <div style="border-top:2px solid #333;margin-top:0;"></div>
 
-        <div class="hr"></div>
-        <div class="label">Fare rules (summary)</div>
-        <div class="muted" style="margin-top:4px;font-size:12px;line-height:1.5">
-          Saver — cancellable, fee applies, partial refund. Flexi — more generous refund.
-          Premium — fully flexible. A captured payment is refunded to the original method on cancellation.
-          Carry a valid passport; check in online 24 hours before departure.
-        </div>
-
-        ${bars(booking.bookingReference.repeat(6))}
-        <p class="mono muted" style="margin-top:6px;font-size:10px;text-align:center">
-          ${booking.bookingReference} · This is an itinerary receipt, not a boarding pass.
-        </p>
+      <!-- Footnotes -->
+      <div style="font-size:11px;color:#333;margin-top:12px;padding:0 4px;line-height:1.5;">
+        <b>(1)</b> OK = Confirmed &nbsp; <b>(2)</b> NVB = Not valid before &nbsp; <b>(3)</b> NVA = Not valid after &nbsp;
+        <b>(4)</b> Each passenger can check in a specific amount of baggage at no extra cost as indicated in the column baggage.
+        For more information on baggage rules and restrictions, please visit
+        <span style="color:#1d4ed8;text-decoration:underline;">skybook.example/baggage</span>.
+      </div>
+      <div style="font-size:11px;color:#666;margin-top:10px;padding:0 4px;">
+        Total paid: <b>${money(booking.totalFare, _currency)}</b> &nbsp;·&nbsp; Status: ${booking.bookingStatus}
+        ${booking.contact ? ' &nbsp;·&nbsp; Contact: ' + booking.contact.contactEmail : ''}
       </div>
     </div>`;
   open(`E-ticket ${booking.bookingReference}`, body);
