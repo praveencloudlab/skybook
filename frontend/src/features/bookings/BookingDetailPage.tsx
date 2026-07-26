@@ -332,6 +332,7 @@ export function BookingDetailPage({
                 pass={passes[record.id]}
                 busy={busyId === record.id}
                 onCheckIn={() => handleCheckIn(record)}
+                flightArrivalTime={flight?.arrivalTime}
               />
             ))
           )}
@@ -346,11 +347,13 @@ function CheckInRow({
   pass,
   busy,
   onCheckIn,
+  flightArrivalTime,
 }: {
   record: CheckIn;
   pass?: BoardingPass;
   busy: boolean;
   onCheckIn: () => void;
+  flightArrivalTime?: string;
 }) {
   // Gate on the SERVER's status, never on a locally recomputed window. The times
   // below only EXPLAIN a NOT_OPEN, never decide it.
@@ -404,7 +407,7 @@ function CheckInRow({
 
       {pass ? (
         <div className="border-t border-slate-100 p-4">
-          <BoardingPassCard pass={pass} record={record} />
+          <BoardingPassCard pass={pass} record={record} arrivalTime={flightArrivalTime} />
         </div>
       ) : null}
     </div>

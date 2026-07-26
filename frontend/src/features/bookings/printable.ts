@@ -1,5 +1,5 @@
 import type { Booking } from '../../api/bookings';
-import type { Flight } from '../../api/flights';
+import { AIRPORTS, type Flight } from '../../api/flights';
 import type { BoardingPass, CheckIn } from '../../api/checkin';
 import { TRAVEL_CLASS_LABELS, FARE_TYPE_LABELS } from '../../api/quotes';
 import { dayAndMonth, duration, money, time } from '../../lib/format';
@@ -18,7 +18,7 @@ import { dayAndMonth, duration, money, time } from '../../lib/format';
 const CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #0f172a; padding: 32px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .doc { max-width: 640px; margin: 0 auto; }
+  .doc { max-width: 720px; margin: 0 auto; }
   .navy { background: #0d1633; color: #fff; }
   .pad { padding: 20px 24px; }
   .row { display: flex; justify-content: space-between; align-items: center; }
@@ -62,9 +62,6 @@ function bars(token: string): string {
   );
 }
 
-const cell = (label: string, value: string, cls = 'val') =>
-  `<div><div class="label">${label}</div><div class="${cls}">${value}</div></div>`;
-
 /** When online check-in opens: 24h before departure, in the flight's own clock. */
 function checkInOpensText(flight: Flight): string {
   const base = new Date(`${flight.departureTime.slice(0, 16)}:00Z`);
@@ -76,49 +73,88 @@ function checkInOpensText(flight: Flight): string {
   return `${dayAndMonth(iso)} at ${time(iso)}`;
 }
 
-export function printBoardingPass(pass: BoardingPass, record?: CheckIn): void {
+function cityFor(code: string): string {
+  return AIRPORTS.find((a) => a.code === code)?.city ?? code;
+}
+
+const bpField = (label: string, value: string, big = false) =>
+  `<td style="vertical-align:top;padding-right:10px;">
+     <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.5);">${label}</div>
+     <div style="font-weight:${big ? 700 : 600};font-size:${big ? 17 : 13}px;">${value}</div>
+   </td>`;
+
+const stubRow = (label: string, value: string) =>
+  `<div style="margin-bottom:7px;">
+     <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#94a3b8;">${label}</div>
+     <div style="font-weight:600;color:#1e293b;">${value}</div>
+   </div>`;
+
+export function printBoardingPass(pass: BoardingPass, record?: CheckIn, arrivalTime?: string): void {
   const boarding = pass.boardingTime
     ? new Date(pass.boardingTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : '—';
   const cabin = record
     ? record.travelClass.split('_').map((w) => w[0] + w.slice(1).toLowerCase()).join(' ')
     : '';
+  const from = record?.originAirportCode ?? '—';
+  const to = record?.destinationAirportCode ?? '—';
 
-  const routeBlock = record
-    ? `<div class="hr"></div>
-       <div class="row" style="align-items:flex-start">
-         <div><div class="big">${time(record.departureTime)}</div><div class="muted">${record.originAirportCode}</div></div>
-         <div style="text-align:center;flex:1;padding:0 12px">
-           <div class="muted">${dayAndMonth(record.departureTime)}</div>
-           <div style="border-top:2px dashed #cbd5e1;margin:8px 0"></div>
-           <div class="muted" style="font-size:11px">Direct</div>
-         </div>
-         <div style="text-align:right"><div class="muted" style="font-size:20px;font-weight:700;color:#0f172a">${record.destinationAirportCode}</div></div>
-       </div>`
-    : '';
-
+  // A real ticket: main coupon (FROM -> plane -> TO + details) and a perforated
+  // tear-off stub carrying the barcode.
   const body = `
-    <div class="card">
-      <div class="navy pad row">
-        <span class="brand">✈ SkyBook · Boarding pass</span>
-        <span class="mono" style="font-size:12px;opacity:.8">${pass.boardingPassNumber}</span>
-      </div>
-      <div class="pad">
-        ${routeBlock}
-        <div class="hr"></div>
-        <div class="grid">
-          ${cell('Passenger', pass.passengerName)}
-          ${cell('Flight', pass.flightNumber)}
-          ${record ? cell('Class', cabin) : ''}
-          ${record ? cell('Booking ref', record.bookingReference) : ''}
-          ${cell('Seat', pass.seatNumber, 'big')}
-          ${cell('Gate', pass.gate ?? '—', 'big')}
-          ${cell('Group', pass.boardingGroup ?? '—', 'big')}
-          ${cell('Boarding', boarding, 'big')}
-        </div>
-        ${pass.barcodeToken ? bars(pass.barcodeToken) + `<p class="mono muted" style="margin-top:6px;font-size:10px">${pass.barcodeToken}</p>` : ''}
-      </div>
-    </div>`;
+    <table style="width:100%;border-collapse:separate;border-spacing:0;font-family:'Segoe UI',system-ui,sans-serif;">
+      <tr>
+        <td style="width:70%;background:#0d1633;color:#fff;padding:22px;vertical-align:top;border-radius:14px 0 0 14px;">
+          <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;opacity:.8;font-weight:700;">&#9992; SkyBook &middot; Boarding pass</div>
+          <table style="width:100%;margin-top:16px;">
+            <tr>
+              <td style="vertical-align:bottom;">
+                <div style="font-size:10px;opacity:.5;text-transform:uppercase;letter-spacing:1px;">From</div>
+                <div style="font-size:38px;font-weight:800;line-height:1;">${from}</div>
+                <div style="font-size:12px;opacity:.75;margin-top:3px;">${cityFor(from)}</div>
+                ${record ? `<div style="font-size:11px;opacity:.55;">${dayAndMonth(record.departureTime)} &middot; ${time(record.departureTime)}</div>` : ''}
+              </td>
+              <td style="width:34%;padding:0 10px;vertical-align:bottom;padding-bottom:10px;">
+                <table style="width:100%;border-collapse:collapse;"><tr>
+                  <td style="border-bottom:1px dashed rgba(255,255,255,.35);font-size:0;line-height:0;">&nbsp;</td>
+                  <td style="padding:0 5px;color:rgba(255,255,255,.9);font-size:20px;white-space:nowrap;">&#9992;</td>
+                  <td style="border-bottom:1px dashed rgba(255,255,255,.35);font-size:0;line-height:0;">&nbsp;</td>
+                </tr></table>
+              </td>
+              <td style="text-align:right;vertical-align:bottom;">
+                <div style="font-size:10px;opacity:.5;text-transform:uppercase;letter-spacing:1px;">To</div>
+                <div style="font-size:38px;font-weight:800;line-height:1;">${to}</div>
+                <div style="font-size:12px;opacity:.75;margin-top:3px;">${cityFor(to)}</div>
+                ${arrivalTime ? `<div style="font-size:11px;opacity:.55;">${dayAndMonth(arrivalTime)} &middot; ${time(arrivalTime)}</div>` : ''}
+              </td>
+            </tr>
+          </table>
+          <table style="width:100%;margin-top:18px;border-top:1px dashed rgba(255,255,255,.18);padding-top:14px;">
+            <tr>
+              ${bpField('Passenger', pass.passengerName)}
+              ${bpField('Flight', pass.flightNumber)}
+              ${cabin ? bpField('Class', cabin) : ''}
+              ${bpField('Seat', pass.seatNumber, true)}
+              ${bpField('Gate', pass.gate ?? '—', true)}
+              ${bpField('Group', pass.boardingGroup ?? '—', true)}
+              ${bpField('Boarding', boarding, true)}
+              ${bpField('Terminal', '—')}
+            </tr>
+          </table>
+        </td>
+        <td style="width:30%;background:#eef3ff;padding:18px;vertical-align:top;border-left:2px dashed #c7d5f5;border-radius:0 14px 14px 0;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#2547eb;">Boarding pass</div>
+          <div style="font-size:17px;font-weight:800;margin-top:8px;color:#0f172a;">${from} &rarr; ${to}</div>
+          <div style="margin-top:12px;">
+            ${stubRow('Passenger', pass.passengerName)}
+            ${stubRow('Flight', pass.flightNumber)}
+            ${stubRow('Seat', pass.seatNumber)}
+            ${stubRow('Gate', pass.gate ?? '—')}
+          </div>
+          ${pass.barcodeToken ? `<div style="margin-top:14px;">${bars(pass.barcodeToken)}<div style="font-family:monospace;font-size:9px;color:#64748b;margin-top:5px;">${pass.boardingPassNumber}</div></div>` : ''}
+        </td>
+      </tr>
+    </table>`;
   open(`Boarding pass ${pass.boardingPassNumber}`, body);
 }
 
