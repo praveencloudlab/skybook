@@ -117,8 +117,16 @@ export function BookingDetailPage({
   // The flight time is airport-local; comparing to the viewer's clock is close
   // enough to stop a departed flight from offering a cancel it can't honour.
   const departed = flight ? new Date(flight.departureTime) < new Date() : false;
+  // Once ANY passenger on the booking has checked in, the whole PNR can no
+  // longer be cancelled online - cancelling would drop the checked-in passenger
+  // too, which is exactly the surprise the user hit. Real airlines block this.
+  const anyCheckedIn = (checkIns ?? []).some(
+    (record) => record.status === 'CHECKED_IN' || record.status === 'BOARDED',
+  );
   const cancellable =
-    (booking.bookingStatus === 'CONFIRMED' || booking.bookingStatus === 'CREATED') && !departed;
+    (booking.bookingStatus === 'CONFIRMED' || booking.bookingStatus === 'CREATED') &&
+    !departed &&
+    !anyCheckedIn;
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
@@ -302,6 +310,12 @@ export function BookingDetailPage({
         ) : departed ? (
           <p className="mt-4 text-sm text-slate-500">
             This flight has already departed — the booking can no longer be cancelled or changed.
+          </p>
+        ) : anyCheckedIn ? (
+          <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-inset ring-amber-200">
+            A passenger on this booking has already checked in, so it can no longer be cancelled
+            online — cancelling would drop the checked-in passenger too. To change one traveller,
+            please contact support.
           </p>
         ) : (
           <p className="mt-4 text-sm text-slate-400">
