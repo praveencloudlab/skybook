@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { bookingsApi, type Booking } from '../../api/bookings';
+import { flightsApi, type Flight } from '../../api/flights';
 import { TRAVEL_CLASS_LABELS } from '../../api/quotes';
 import { ErrorAlert } from '../../components/Alert';
 import { ApiError } from '../../lib/errors';
-import { dayAndMonth, money } from '../../lib/format';
+import { dayAndMonth, money, time } from '../../lib/format';
 import { StatusBadge } from './StatusBadge';
 
 // Seeded fares are USD; the booking doesn't carry a currency of its own.
@@ -42,6 +43,9 @@ function matchesFilter(booking: Booking, filter: TripFilter): boolean {
 
 export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void }) {
   const [bookings, setBookings] = useState<Booking[] | null>(null);
+  // Flights keyed by id - the booking only carries a flightId, but "when am I
+  // flying" is the thing people actually scan this list for, so we fetch them.
+  const [flights, setFlights] = useState<Record<number, Flight>>({});
   const [filter, setFilter] = useState<TripFilter>('all');
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -49,7 +53,18 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
     const controller = new AbortController();
     bookingsApi
       .mine(controller.signal)
-      .then(setBookings)
+      .then((list) => {
+        setBookings(list);
+        // Fetch each distinct flight (public data) so the row can show the date
+        // and departure/arrival times. A miss just leaves that row without them.
+        const ids = [...new Set(list.map((b) => b.flightId))];
+        ids.forEach((id) => {
+          flightsApi
+            .byId(id, controller.signal)
+            .then((flight) => setFlights((current) => ({ ...current, [id]: flight })))
+            .catch(() => {});
+        });
+      })
       .catch((cause) => {
         if (cause instanceof DOMException && cause.name === 'AbortError') return;
         setError(cause instanceof ApiError ? cause : null);
@@ -110,6 +125,7 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
         {bookings?.filter((b) => matchesFilter(b, filter)).map((booking) => {
           const seats = booking.passengers.map((p) => p.seatNumber).filter(Boolean) as string[];
           const cabin = booking.passengers[0]?.travelClass;
+          const flight = flights[booking.flightId];
           return (
             <button
               key={booking.id}
@@ -118,17 +134,30 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
               className="card card-hover flex w-full items-center gap-4 px-4 py-3.5 text-left"
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm font-semibold tracking-[0.12em] text-slate-900">
-                    {booking.bookingReference}
-                  </span>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {/* When you're flying, up front - the thing people scan for. */}
+                  {flight ? (
+                    <span className="tabular text-sm font-semibold text-slate-900">
+                      {flight.originAirportCode} → {flight.destinationAirportCode}
+                      <span className="ml-2 font-normal text-slate-500">
+                        {dayAndMonth(flight.departureTime)} · {time(flight.departureTime)}–{time(flight.arrivalTime)}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="font-mono text-sm font-semibold tracking-[0.12em] text-slate-900">
+                      {booking.bookingReference}
+                    </span>
+                  )}
                   <StatusBadge status={booking.bookingStatus} />
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  Booked {dayAndMonth(booking.bookingDate)} · {booking.passengers.length} passenger
-                  {booking.passengers.length === 1 ? '' : 's'}
+                  {flight ? <span className="tabular font-mono">{booking.bookingReference}</span> : null}
+                  {flight ? ' · ' : ''}
+                  {booking.passengers.length} passenger{booking.passengers.length === 1 ? '' : 's'}
                   {cabin ? ` · ${TRAVEL_CLASS_LABELS[cabin]}` : ''}
                   {seats.length ? ` · seat ${seats.join(', ')}` : ''}
+                  {' · booked '}
+                  {dayAndMonth(booking.bookingDate)}
                 </p>
               </div>
               <div className="text-right">
