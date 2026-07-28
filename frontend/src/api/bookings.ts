@@ -10,7 +10,15 @@ import type { FareType, TravelClass } from './quotes';
  * is the caller's job, via usePolledResource.
  */
 
-export type BookingStatus = 'DRAFT' | 'CREATED' | 'CONFIRMED' | 'CANCELLED' | 'COMPLETED';
+export type BookingStatus =
+  | 'DRAFT'
+  | 'CREATED'
+  | 'CONFIRMED'
+  | 'PARTIALLY_CANCELLED'
+  | 'CANCELLED'
+  | 'COMPLETED';
+
+export type PassengerType = 'ADULT' | 'CHILD' | 'INFANT';
 
 export interface PassengerDetail {
   title?: string;
@@ -57,6 +65,18 @@ export interface BookingPassenger {
   baseFare?: string | number;
   seatSurcharge?: string | number;
   fare?: string | number;
+  /** This traveller has been cancelled off the booking (booking survives). */
+  cancelled?: boolean;
+  /** ADULT / CHILD / INFANT, from DOB - drives the guardian rule. */
+  passengerType?: PassengerType;
+  checkInStatus?: string;
+}
+
+/** Result of cancelling selected passengers. */
+export interface CancelPassengersResult {
+  booking: Booking;
+  refundAmount: string | number;
+  bookingCancelled: boolean;
 }
 
 export interface Booking {
@@ -90,6 +110,24 @@ export const bookingsApi = {
 
   cancel(id: number, signal?: AbortSignal): Promise<Booking> {
     return api.patch<Booking>(`/api/bookings/${id}/cancel`, undefined, { signal });
+  },
+
+  /**
+   * Cancel selected passengers off a booking. If they cover everyone the whole
+   * booking is cancelled; otherwise it becomes PARTIALLY_CANCELLED and the rest
+   * travel on. The server enforces the guardian rule (a minor can't be left
+   * without an adult) and returns the refund for the cancelled passengers.
+   */
+  cancelPassengers(
+    id: number,
+    bookingPassengerIds: number[],
+    signal?: AbortSignal,
+  ): Promise<CancelPassengersResult> {
+    return api.post<CancelPassengersResult>(
+      `/api/bookings/${id}/passengers/cancel`,
+      { bookingPassengerIds },
+      { signal },
+    );
   },
 };
 

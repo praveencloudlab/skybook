@@ -43,7 +43,11 @@ export function BookingDetailPage({
   const [error, setError] = useState<ApiError | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [cancelling, setCancelling] = useState(false);
-  const [confirmCancel, setConfirmCancel] = useState(false);
+  // Passenger-level cancellation (business rules 4-13): a set of the
+  // BookingPassenger ids ticked for cancellation, and which confirm dialog is open.
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [confirm, setConfirm] = useState<'selected' | 'entire' | null>(null);
+  const [refundNotice, setRefundNotice] = useState<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -98,13 +102,20 @@ export function BookingDetailPage({
     }
   }
 
-  async function cancelBooking() {
+  async function runCancel(passengerIds: number[]) {
     setCancelling(true);
     setError(null);
     try {
-      const updated = await bookingsApi.cancel(booking.id);
-      setBooking(updated);
-      setConfirmCancel(false);
+      const result = await bookingsApi.cancelPassengers(booking.id, passengerIds);
+      setBooking(result.booking);
+      setSelected(new Set());
+      setConfirm(null);
+      const amount = money(result.refundAmount, CURRENCY);
+      setRefundNotice(
+        result.bookingCancelled
+          ? `Booking cancelled. A refund of ${amount} will be processed to your original payment method.`
+          : `${passengerIds.length} passenger${passengerIds.length === 1 ? '' : 's'} cancelled. A refund of ${amount} will be processed for them.`,
+      );
       await load();
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : null);
@@ -117,16 +128,27 @@ export function BookingDetailPage({
   // The flight time is airport-local; comparing to the viewer's clock is close
   // enough to stop a departed flight from offering a cancel it can't honour.
   const departed = flight ? new Date(flight.departureTime) < new Date() : false;
-  // Once ANY passenger on the booking has checked in, the whole PNR can no
-  // longer be cancelled online - cancelling would drop the checked-in passenger
-  // too, which is exactly the surprise the user hit. Real airlines block this.
-  const anyCheckedIn = (checkIns ?? []).some(
-    (record) => record.status === 'CHECKED_IN' || record.status === 'BOARDED',
-  );
-  const cancellable =
-    (booking.bookingStatus === 'CONFIRMED' || booking.bookingStatus === 'CREATED') &&
-    !departed &&
-    !anyCheckedIn;
+
+  // Passenger-level cancellation state (business rules).
+  const isMinor = (p: (typeof booking.passengers)[number]) =>
+    p.passengerType === 'CHILD' || p.passengerType === 'INFANT';
+  const checkedIn = (p: (typeof booking.passengers)[number]) =>
+    p.checkInStatus === 'CHECKED_IN' || p.checkInStatus === 'BOARDED';
+
+  const activePassengers = booking.passengers.filter((p) => !p.cancelled);
+  // A passenger can be cancelled only while active, before check-in, before departure.
+  const cancellablePassengers = activePassengers.filter((p) => !checkedIn(p) && !departed);
+  const remainingAfter = activePassengers.filter((p) => !selected.has(p.id));
+  // Guardian rule (mirrors the server): a child/infant can't be the only kind
+  // left. Invalid if some minor remains and no adult does (and someone remains).
+  const orphansMinor =
+    remainingAfter.length > 0 &&
+    remainingAfter.some(isMinor) &&
+    !remainingAfter.some((p) => !isMinor(p));
+  const selectedCount = [...selected].filter((id) => cancellablePassengers.some((p) => p.id === id)).length;
+  const canCancelSelected = selectedCount > 0 && !orphansMinor && !departed;
+  const anyCancellable = cancellablePassengers.length > 0;
+  const anyCheckedIn = activePassengers.some(checkedIn);
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
@@ -277,49 +299,135 @@ export function BookingDetailPage({
           </ul>
         </div>
 
-        {cancellable ? (
-          confirmCancel ? (
-            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
-              <p className="text-sm font-medium text-red-800">Cancel this booking?</p>
-              <p className="mt-1 text-sm text-red-700">
-                This can't be undone. Any captured payment is refunded per the fare rules above.
-              </p>
-              <div className="mt-3 flex gap-2">
-                <Button variant="secondary" onClick={() => setConfirmCancel(false)} disabled={cancelling}>
-                  Keep booking
-                </Button>
-                <button
-                  type="button"
-                  onClick={cancelBooking}
-                  disabled={cancelling}
-                  className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
-                >
-                  {cancelling ? 'Cancelling…' : 'Yes, cancel booking'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmCancel(true)}
-              className="mt-4 text-sm font-semibold text-red-600 transition hover:underline"
-            >
-              Cancel booking
-            </button>
-          )
-        ) : departed ? (
+        {refundNotice ? (
+          <div className="mt-4 rounded-xl bg-emerald-50 px-3 py-2 text-sm text-emerald-800 ring-1 ring-inset ring-emerald-200">
+            {refundNotice}
+          </div>
+        ) : null}
+
+        {departed ? (
           <p className="mt-4 text-sm text-slate-500">
             This flight has already departed — the booking can no longer be cancelled or changed.
           </p>
+        ) : booking.bookingStatus === 'CANCELLED' ? (
+          <p className="mt-4 text-sm text-slate-400">This booking is cancelled.</p>
+        ) : anyCancellable ? (
+          <div className="mt-4">
+            {/* Choose passengers to cancel (rule 12: two distinct actions). */}
+            <p className="text-sm font-medium text-slate-700">Cancel passengers</p>
+            <ul className="mt-2 space-y-1.5">
+              {activePassengers.map((p) => {
+                const locked = checkedIn(p);
+                return (
+                  <li key={p.id}>
+                    <label
+                      className={
+                        'flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm ' +
+                        (locked ? 'opacity-60' : 'cursor-pointer hover:bg-slate-50')
+                      }
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={locked}
+                        checked={selected.has(p.id)}
+                        onChange={(e) => {
+                          setRefundNotice(null);
+                          setSelected((prev) => {
+                            const next = new Set(prev);
+                            if (e.target.checked) next.add(p.id);
+                            else next.delete(p.id);
+                            return next;
+                          });
+                        }}
+                        className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500/40"
+                      />
+                      <span className="flex-1 font-medium text-slate-800">
+                        {p.firstName} {p.lastName}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {p.passengerType ? p.passengerType.toLowerCase() : ''}
+                        {p.seatNumber ? ` · seat ${p.seatNumber}` : ''}
+                        {locked ? ' · checked in' : ''}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {orphansMinor ? (
+              <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 ring-1 ring-inset ring-amber-200">
+                A child or infant can't travel without an adult. Keep an adult on the booking, or use
+                “Cancel entire booking”.
+              </p>
+            ) : null}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                onClick={() => setConfirm('selected')}
+                disabled={!canCancelSelected || cancelling}
+              >
+                Cancel selected passenger{selectedCount === 1 ? '' : 's'}
+                {selectedCount > 0 ? ` (${selectedCount})` : ''}
+              </Button>
+              <button
+                type="button"
+                onClick={() => setConfirm('entire')}
+                disabled={cancelling}
+                className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+              >
+                Cancel entire booking
+              </button>
+            </div>
+
+            {/* Confirmation (rule 13). */}
+            {confirm ? (
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
+                <p className="text-sm font-medium text-red-800">
+                  {confirm === 'entire'
+                    ? 'Cancel the entire booking for all passengers?'
+                    : `Cancel ${selectedCount} passenger${selectedCount === 1 ? '' : 's'}?`}
+                </p>
+                <p className="mt-1 text-sm text-red-700">
+                  This can't be undone. A refund is calculated for the cancelled passenger
+                  {confirm === 'entire' || selectedCount !== 1 ? 's' : ''} per the fare rules above.
+                  {confirm === 'selected' ? ' The remaining passengers keep their seats and services.' : ''}
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <Button variant="secondary" onClick={() => setConfirm(null)} disabled={cancelling}>
+                    Keep
+                  </Button>
+                  <button
+                    type="button"
+                    disabled={cancelling}
+                    onClick={() =>
+                      runCancel(
+                        confirm === 'entire'
+                          ? cancellablePassengers.map((p) => p.id)
+                          : [...selected].filter((id) => cancellablePassengers.some((p) => p.id === id)),
+                      )
+                    }
+                    className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+                  >
+                    {cancelling
+                      ? 'Cancelling…'
+                      : confirm === 'entire'
+                        ? 'Yes, cancel booking'
+                        : 'Yes, cancel selected'}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
         ) : anyCheckedIn ? (
           <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-inset ring-amber-200">
-            A passenger on this booking has already checked in, so it can no longer be cancelled
-            online — cancelling would drop the checked-in passenger too. To change one traveller,
-            please contact support.
+            Every remaining passenger has already checked in, so this booking can no longer be
+            cancelled online. To change a traveller, please contact support.
           </p>
         ) : (
           <p className="mt-4 text-sm text-slate-400">
-            This booking is {booking.bookingStatus.toLowerCase()} and can no longer be changed.
+            This booking is {booking.bookingStatus.toLowerCase().replace(/_/g, ' ')} and can no longer
+            be changed.
           </p>
         )}
       </section>

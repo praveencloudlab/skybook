@@ -12,6 +12,7 @@ const STYLES: Record<BookingStatus, string> = {
   CREATED: 'bg-amber-50 text-amber-800 ring-amber-200',
   DRAFT: 'bg-slate-50 text-slate-600 ring-slate-200',
   COMPLETED: 'bg-brand-50 text-brand-700 ring-brand-200',
+  PARTIALLY_CANCELLED: 'bg-orange-50 text-orange-700 ring-orange-200',
   CANCELLED: 'bg-slate-100 text-slate-500 ring-slate-200',
 };
 
@@ -21,7 +22,7 @@ export function StatusBadge({ status, className = '' }: { status: BookingStatus;
       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium capitalize ring-1 ring-inset ${STYLES[status]} ${className}`}
     >
       <span className="h-1.5 w-1.5 rounded-full bg-current opacity-70" aria-hidden="true" />
-      {status.toLowerCase()}
+      {status.toLowerCase().replace(/_/g, ' ')}
     </span>
   );
 }
