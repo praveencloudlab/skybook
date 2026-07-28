@@ -276,15 +276,19 @@ function BookingJourney() {
   // every back-navigation.
   const [step, setStep] = useState<Step>('search');
   const [flight, setFlight] = useState<Flight | null>(null);
+  const [paxCount, setPaxCount] = useState(1);
   const [choice, setChoice] = useState<FareChoice | null>(null);
-  const [seat, setSeat] = useState<AircraftSeat | null>(null);
+  // One chosen seat per traveller, in passenger order; shorter than paxCount
+  // means the rest are auto-assigned free at check-in.
+  const [seats, setSeats] = useState<AircraftSeat[]>([]);
   const [result, setResult] = useState<{ booking: Booking; payment: Payment } | null>(null);
 
   function restart() {
     setStep('search');
     setFlight(null);
+    setPaxCount(1);
     setChoice(null);
-    setSeat(null);
+    setSeats([]);
     setResult(null);
   }
 
@@ -310,7 +314,8 @@ function BookingJourney() {
         fare={choice.fare}
         baseFare={choice.baseFare}
         currency={choice.currency}
-        seat={seat}
+        seats={seats}
+        paxCount={paxCount}
         onBack={() => setStep('seat')}
         onBooked={(booking, payment) => {
           setResult({ booking, payment });
@@ -328,9 +333,10 @@ function BookingJourney() {
         fare={choice.fare}
         baseFare={choice.baseFare}
         currency={choice.currency}
+        paxCount={paxCount}
         onBack={() => setStep('fares')}
         onContinue={(chosen) => {
-          setSeat(chosen);
+          setSeats(chosen);
           setStep('checkout');
         }}
       />
@@ -352,8 +358,10 @@ function BookingJourney() {
 
   return (
     <SearchPage
-      onSelectFlight={(chosen) => {
+      onSelectFlight={(chosen, travellers) => {
         setFlight(chosen);
+        setPaxCount(travellers);
+        setSeats([]);
         setStep('fares');
       }}
     />

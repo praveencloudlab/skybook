@@ -49,7 +49,8 @@ export function CheckoutPage({
   fare,
   baseFare,
   currency,
-  seat,
+  seats,
+  paxCount: initialPaxCount,
   onBack,
   onBooked,
 }: {
@@ -58,26 +59,38 @@ export function CheckoutPage({
   fare: FareType;
   baseFare: number;
   currency: string;
-  seat: AircraftSeat | null;
+  /** Chosen seats in passenger order - may be shorter than the party. */
+  seats: AircraftSeat[];
+  /** How many travellers were declared at search - sizes the forms below. */
+  paxCount: number;
   onBack: () => void;
   onBooked: (booking: Booking, payment: Payment) => void;
 }) {
   const { subject } = useSession();
 
-  // A real booking can carry several passengers - the API models a list. Start
-  // with one; the traveller adds more below.
-  const [passengers, setPassengers] = useState<PassengerDraft[]>(() => [emptyPassenger()]);
+  // One form per declared traveller, ready to fill - the count was asked up
+  // front, so nobody has to discover an "+ Add passenger" link to bring the
+  // rest of their family along. Adding/removing later is still possible.
+  const [passengers, setPassengers] = useState<PassengerDraft[]>(() =>
+    Array.from({ length: Math.max(1, initialPaxCount) }, emptyPassenger),
+  );
   const [contactEmail, setContactEmail] = useState(subject ?? '');
   const [method, setMethod] = useState<PaymentMethod>('CARD');
   const [agreedTerms, setAgreedTerms] = useState(false);
-  const [paxErrors, setPaxErrors] = useState<Record<string, string>[]>([{}]);
+  const [paxErrors, setPaxErrors] = useState<Record<string, string>[]>(() =>
+    Array.from({ length: Math.max(1, initialPaxCount) }, () => ({})),
+  );
   const [formErrors, setFormErrors] = useState<{ contactEmail?: string; terms?: string }>({});
   const [error, setError] = useState<ApiError | null>(null);
   const [stage, setStage] = useState<'form' | 'booking' | 'awaitingPayment' | 'paying'>('form');
 
-  const surcharge = seat ? Number(seat.listedSurcharge) || 0 : 0;
+  const seatFor = (index: number): AircraftSeat | null => seats[index] ?? null;
   const paxCount = passengers.length;
-  const total = baseFare * paxCount + surcharge;
+  const surchargeTotal = passengers.reduce(
+    (sum, _p, i) => sum + (Number(seatFor(i)?.listedSurcharge) || 0),
+    0,
+  );
+  const total = baseFare * paxCount + surchargeTotal;
 
   function updatePassenger(index: number, draft: PassengerDraft) {
     setPassengers((list) => list.map((p, i) => (i === index ? draft : p)));
@@ -113,10 +126,10 @@ export function CheckoutPage({
       setStage('booking');
       const booking = await bookingsApi.create({
         flightId: flight.id,
-        // The chosen seat goes to passenger 1; the rest get a free seat assigned
-        // at check-in (a single seat was selected upstream).
+        // Every passenger carries their own chosen seat (picked on the map in
+        // passenger order); anyone without one gets a free seat at check-in.
         passengers: passengers.map((p, i) =>
-          toPassengerDetail(p, cabin, fare, i === 0 ? (seat?.seatNumber ?? null) : null),
+          toPassengerDetail(p, cabin, fare, seatFor(i)?.seatNumber ?? null),
         ),
         contact: {
           contactName: `${passengers[0].firstName} ${passengers[0].lastName}`.trim(),
@@ -156,7 +169,9 @@ export function CheckoutPage({
         </h1>
         <p className="mt-1 text-sm text-slate-500">
           {TRAVEL_CLASS_LABELS[cabin]} · {FARE_TYPE_LABELS[fare]}
-          {seat ? ` · seat ${seat.seatNumber}` : ' · seat assigned at check-in'}
+          {seats.length > 0
+            ? ` · seat${seats.length === 1 ? '' : 's'} ${seats.map((s) => s.seatNumber).join(', ')}`
+            : ' · seats assigned at check-in'}
         </p>
 
       <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-6">
@@ -176,35 +191,37 @@ export function CheckoutPage({
             </button>
           </div>
 
-          {passengers.map((p, i) => (
-            <div key={i} className="card space-y-3 p-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-800">Passenger {i + 1}</h3>
-                {i > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => removePassenger(i)}
-                    className="text-xs font-medium text-red-600 transition hover:underline"
-                  >
-                    Remove
-                  </button>
-                ) : null}
+          {passengers.map((p, i) => {
+            const pSeat = seatFor(i);
+            return (
+              <div key={i} className="card space-y-3 p-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+                    Passenger {i + 1}
+                    <span className="tabular rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                      {pSeat ? `Seat ${pSeat.seatNumber}` : 'Seat at check-in'}
+                    </span>
+                  </h3>
+                  {i > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => removePassenger(i)}
+                      className="text-xs font-medium text-red-600 transition hover:underline"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+                <BookForPicker
+                  onSelect={(draft, email) => {
+                    updatePassenger(i, draft);
+                    if (i === 0 && email) setContactEmail(email);
+                  }}
+                />
+                <PassengerForm draft={p} errors={paxErrors[i] ?? {}} onChange={(d) => updatePassenger(i, d)} />
               </div>
-              <BookForPicker
-                onSelect={(draft, email) => {
-                  updatePassenger(i, draft);
-                  if (i === 0 && email) setContactEmail(email);
-                }}
-              />
-              <PassengerForm draft={p} errors={paxErrors[i] ?? {}} onChange={(d) => updatePassenger(i, d)} />
-              {i === 0 && seat ? (
-                <p className="text-xs text-slate-500">
-                  Seat {seat.seatNumber} is assigned to passenger 1. Additional passengers get a free
-                  seat at check-in.
-                </p>
-              ) : null}
-            </div>
-          ))}
+            );
+          })}
         </section>
 
         <section className="space-y-3">
@@ -250,14 +267,21 @@ export function CheckoutPage({
             </dt>
             <dd className="tabular text-slate-900">{money(baseFare * paxCount, currency)}</dd>
           </div>
-          <div className="flex justify-between border-t border-slate-100 px-4 py-2">
-            <dt className="text-slate-600">
-              Seat {seat ? seat.seatNumber : '(assigned for you)'}
-            </dt>
-            <dd className="tabular text-slate-900">
-              {surcharge > 0 ? money(surcharge, currency) : 'Free'}
-            </dd>
-          </div>
+          {passengers.map((_p, i) => {
+            const pSeat = seatFor(i);
+            const charge = pSeat ? Number(pSeat.listedSurcharge) || 0 : 0;
+            return (
+              <div key={i} className="flex justify-between border-t border-slate-100 px-4 py-2">
+                <dt className="text-slate-600">
+                  {paxCount > 1 ? `Passenger ${i + 1} · ` : ''}Seat{' '}
+                  {pSeat ? pSeat.seatNumber : '(assigned for you)'}
+                </dt>
+                <dd className="tabular text-slate-900">
+                  {charge > 0 ? money(charge, currency) : 'Free'}
+                </dd>
+              </div>
+            );
+          })}
           <div className="flex justify-between border-t border-slate-200 px-4 py-2 font-medium">
             <dt className="text-slate-900">
               Total{paxCount > 1 ? ` · ${paxCount} passengers` : ''}

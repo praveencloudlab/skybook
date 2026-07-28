@@ -29,7 +29,11 @@ function knownCode(code: string | null, fallback: string): string {
   return code && AIRPORTS.some((airport) => airport.code === code) ? code : fallback;
 }
 
-export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Flight) => void }) {
+export function SearchPage({
+  onSelectFlight,
+}: {
+  onSelectFlight?: (flight: Flight, travellers: number) => void;
+}) {
   // Deep links from the landing page (its hero search and destination cards)
   // arrive as ?from=&to=&date= and prefill + auto-run the search below.
   const [params] = useSearchParams();
@@ -38,6 +42,9 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
   // Tomorrow, not today: same-day departures may already have left, and an
   // empty first result is a poor first impression of a working system.
   const [date, setDate] = useState(() => params.get('date') || addDaysIso(todayIso(), 1));
+  // How many travel - asked up front like every airline site, so the rest of
+  // the journey (seat picks, passenger forms, totals) is sized correctly.
+  const [travellers, setTravellers] = useState(1);
 
   const [results, setResults] = useState<Flight[] | null>(null);
   const [searched, setSearched] = useState<SearchCriteria | null>(null);
@@ -137,7 +144,7 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
         {/* Search bar, lifted onto the band. */}
         <form
           onSubmit={handleSubmit}
-          className="card relative -mt-14 grid items-end gap-3 p-4 shadow-[var(--shadow-lift)] md:grid-cols-[1fr_auto_1fr_auto_auto]"
+          className="card relative -mt-14 grid items-end gap-3 p-4 shadow-[var(--shadow-lift)] md:grid-cols-[1fr_auto_1fr_auto_auto_auto]"
         >
           <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
 
@@ -168,6 +175,23 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
             />
           </label>
 
+          <label className="text-sm">
+            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              Travellers
+            </span>
+            <select
+              value={travellers}
+              onChange={(event) => setTravellers(Number(event.target.value))}
+              className="tabular w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+            >
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <option key={n} value={n}>
+                  {n} {n === 1 ? 'traveller' : 'travellers'}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <button
             type="submit"
             disabled={sameAirport || busy}
@@ -184,7 +208,7 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
           </button>
 
           {sameAirport ? (
-            <p className="text-sm text-red-600 md:col-span-5">
+            <p className="text-sm text-red-600 md:col-span-6">
               Origin and destination must be different.
             </p>
           ) : null}
@@ -274,7 +298,7 @@ export function SearchPage({ onSelectFlight }: { onSelectFlight?: (flight: Fligh
                     <FlightCard
                       key={flight.id}
                       flight={flight}
-                      onSelect={onSelectFlight ? () => onSelectFlight(flight) : undefined}
+                      onSelect={onSelectFlight ? () => onSelectFlight(flight, travellers) : undefined}
                     />
                   ))
                 )}

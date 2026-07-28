@@ -16,15 +16,21 @@ export function SeatMap({
   map,
   cabin,
   currency,
+  paxCount,
   selected,
-  onSelect,
+  onToggle,
+  onClear,
 }: {
   map: FlightSeatMap;
   /** Only this cabin is selectable - a fare buys a cabin. */
   cabin: TravelClass;
   currency: string;
-  selected: string | null;
-  onSelect: (seat: AircraftSeat | null) => void;
+  /** How many travellers - the selection capacity, one seat each. */
+  paxCount: number;
+  /** Chosen seats in passenger order (index 0 = passenger 1). */
+  selected: AircraftSeat[];
+  onToggle: (seat: AircraftSeat) => void;
+  onClear: () => void;
 }) {
   const cabinSeats = map.aircraft.seats.filter((seat) => seat.seatType === cabin);
   const rows = toRows(cabinSeats);
@@ -96,8 +102,9 @@ export function SeatMap({
                             seat={seat}
                             currency={currency}
                             taken={map.taken.has(seat.seatNumber)}
-                            selected={selected === seat.seatNumber}
-                            onSelect={onSelect}
+                            passengerIndex={selected.findIndex((s) => s.seatNumber === seat.seatNumber)}
+                            multi={paxCount > 1}
+                            onSelect={onToggle}
                           />
                         </div>
                       );
@@ -125,14 +132,27 @@ export function SeatMap({
         </div>
       </div>
 
-      <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-        <span className="text-slate-700">
-          {selected ? (
-            <>
-              Seat <span className="font-medium text-slate-900">{selected}</span> selected
-            </>
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+        <span className="flex flex-wrap items-center gap-1.5 text-slate-700">
+          {selected.length === 0 ? (
+            paxCount > 1 ? 'No seats chosen' : 'No seat chosen'
           ) : (
-            'No seat chosen'
+            <>
+              {selected.map((seat, i) => (
+                <span
+                  key={seat.seatNumber}
+                  className="tabular inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-slate-800 ring-1 ring-inset ring-slate-200"
+                >
+                  {paxCount > 1 ? <span className="text-brand-600">P{i + 1}</span> : null}
+                  {seat.seatNumber}
+                </span>
+              ))}
+              {selected.length < paxCount ? (
+                <span className="text-xs text-slate-500">
+                  {paxCount - selected.length} more assigned free at check-in
+                </span>
+              ) : null}
+            </>
           )}
         </span>
         {/*
@@ -142,10 +162,10 @@ export function SeatMap({
         */}
         <button
           type="button"
-          onClick={() => onSelect(null)}
+          onClick={onClear}
           className="text-sm font-medium text-brand-700 hover:underline"
         >
-          Skip — assign me a seat (free)
+          Skip — assign {paxCount > 1 ? 'our seats' : 'me a seat'} (free)
         </button>
       </div>
     </div>
@@ -156,24 +176,30 @@ function Seat({
   seat,
   currency,
   taken,
-  selected,
+  passengerIndex,
+  multi,
   onSelect,
 }: {
   seat: AircraftSeat;
   currency: string;
   taken: boolean;
-  selected: boolean;
+  /** Which traveller holds this seat (0-based), or -1 when unselected. */
+  passengerIndex: number;
+  /** Whether the party has more than one traveller (shows P1/P2 badges). */
+  multi: boolean;
   onSelect: (seat: AircraftSeat) => void;
 }) {
   // Blocked/inactive are the AIRCRAFT's own condition; taken is this flight's.
   // Both make a seat unpickable, but for different reasons.
   const unavailable = taken || seat.status !== 'ACTIVE';
+  const selected = passengerIndex >= 0;
   const surcharge = Number(seat.listedSurcharge) || 0;
 
   const label = [
     `Seat ${seat.seatNumber}`,
     seat.position.toLowerCase(),
     seat.exitRow ? 'exit row' : null,
+    selected ? `passenger ${passengerIndex + 1}` : null,
     unavailable ? 'unavailable' : surcharge > 0 ? `plus ${money(surcharge, currency)}` : 'no extra charge',
   ]
     .filter(Boolean)
@@ -200,6 +226,11 @@ function Seat({
               : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100 ring-1 ring-inset ring-emerald-200')
       }
     >
+      {selected && multi ? (
+        <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-1 text-[8px] font-bold leading-3 text-white ring-2 ring-white">
+          P{passengerIndex + 1}
+        </span>
+      ) : null}
       {seat.seatNumber.replace(/^\d+/, '')}
       {seat.exitRow && !unavailable ? (
         <span

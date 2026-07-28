@@ -71,10 +71,10 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* The primary surface: crisp, hairline-bordered, gently lifted. rounded-xl
-   (12px) rather than 2xl reads sharper and more considered. */
+/* The primary surface: crisp, hairline-bordered, gently lifted. rounded-2xl
+   with a soft ring-style border reads contemporary without going bubbly. */
 .card {
-  @apply rounded-xl border border-slate-200 bg-white;
+  @apply rounded-2xl border border-slate-200/90 bg-white;
   box-shadow: var(--shadow-card);
 }
 
@@ -82,7 +82,7 @@ body {
   @apply transition duration-200 ease-out;
 }
 .card-hover:hover {
-  @apply -translate-y-0.5 border-slate-300;
+  @apply -translate-y-0.5 border-brand-200;
   box-shadow: var(--shadow-lift);
 }
 

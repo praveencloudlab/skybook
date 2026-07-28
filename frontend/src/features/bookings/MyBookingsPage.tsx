@@ -131,15 +131,24 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
               key={booking.id}
               type="button"
               onClick={() => onOpen(booking)}
-              className="card card-hover flex w-full items-center gap-4 px-4 py-3.5 text-left"
+              className="group flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-white px-5 py-4 text-left ring-1 ring-slate-200 transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-lift)] hover:ring-brand-200"
             >
+              {/* Route monogram - the trip's visual anchor. */}
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-sm">
+                <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white" aria-hidden="true">
+                  <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
+                </svg>
+              </span>
+
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   {/* When you're flying, up front - the thing people scan for. */}
                   {flight ? (
-                    <span className="tabular text-sm font-semibold text-slate-900">
-                      {flight.originAirportCode} → {flight.destinationAirportCode}
-                      <span className="ml-2 font-normal text-slate-500">
+                    <span className="tabular text-[15px] font-bold tracking-tight text-slate-900">
+                      {flight.originAirportCode}
+                      <span className="mx-1 text-brand-600">→</span>
+                      {flight.destinationAirportCode}
+                      <span className="ml-2 text-sm font-medium text-slate-500">
                         {dayAndMonth(flight.departureTime)} · {time(flight.departureTime)}–{time(flight.arrivalTime)}
                       </span>
                     </span>
@@ -150,19 +159,29 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
                   )}
                   <StatusBadge status={booking.bookingStatus} />
                 </div>
-                <p className="mt-1 text-xs text-slate-500">
-                  {flight ? <span className="tabular font-mono">{booking.bookingReference}</span> : null}
-                  {flight ? ' · ' : ''}
-                  {booking.passengers.length} passenger{booking.passengers.length === 1 ? '' : 's'}
-                  {cabin ? ` · ${TRAVEL_CLASS_LABELS[cabin]}` : ''}
-                  {seats.length ? ` · seat ${seats.join(', ')}` : ''}
-                  {' · booked '}
-                  {dayAndMonth(booking.bookingDate)}
+                <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+                  {flight ? (
+                    <span className="tabular rounded-md bg-slate-100 px-1.5 py-0.5 font-mono font-semibold text-slate-600">
+                      {booking.bookingReference}
+                    </span>
+                  ) : null}
+                  <span>
+                    {booking.passengers.length} passenger{booking.passengers.length === 1 ? '' : 's'}
+                    {cabin ? ` · ${TRAVEL_CLASS_LABELS[cabin]}` : ''}
+                    {seats.length ? ` · seat ${seats.join(', ')}` : ''}
+                    {' · booked '}
+                    {dayAndMonth(booking.bookingDate)}
+                  </span>
                 </p>
               </div>
-              <div className="text-right">
-                <p className="tabular text-sm font-semibold text-slate-900">{money(booking.totalFare, CURRENCY)}</p>
-                <p className="mt-0.5 text-xs text-brand-700">View →</p>
+
+              <div className="flex shrink-0 items-center gap-3">
+                <p className="tabular text-[15px] font-bold text-slate-900">{money(booking.totalFare, CURRENCY)}</p>
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-slate-50 text-slate-400 ring-1 ring-inset ring-slate-200 transition group-hover:bg-brand-50 group-hover:text-brand-600 group-hover:ring-brand-200">
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden="true">
+                    <path d="M9 6l6 6-6 6-1.4-1.4L12.2 12 7.6 7.4z" />
+                  </svg>
+                </span>
               </div>
             </button>
           );

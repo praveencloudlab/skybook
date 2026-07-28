@@ -41,8 +41,10 @@ describe('SeatMap', () => {
         map={map([seat({ seatNumber: '10A', status: 'ACTIVE' })], ['10A'])}
         cabin="ECONOMY"
         currency="USD"
-        selected={null}
-        onSelect={vi.fn()}
+        paxCount={1}
+        selected={[]}
+        onToggle={vi.fn()}
+        onClear={vi.fn()}
       />,
     );
 
@@ -55,8 +57,10 @@ describe('SeatMap', () => {
         map={map([seat({ seatNumber: '10B', status: 'BLOCKED' })])}
         cabin="ECONOMY"
         currency="USD"
-        selected={null}
-        onSelect={vi.fn()}
+        paxCount={1}
+        selected={[]}
+        onToggle={vi.fn()}
+        onClear={vi.fn()}
       />,
     );
 
@@ -72,8 +76,10 @@ describe('SeatMap', () => {
         ])}
         cabin="ECONOMY"
         currency="USD"
-        selected={null}
-        onSelect={vi.fn()}
+        paxCount={1}
+        selected={[]}
+        onToggle={vi.fn()}
+        onClear={vi.fn()}
       />,
     );
 
@@ -89,8 +95,10 @@ describe('SeatMap', () => {
         map={map([seat({ seatNumber: '12F', listedSurcharge: 15, position: 'AISLE' })])}
         cabin="ECONOMY"
         currency="USD"
-        selected={null}
-        onSelect={vi.fn()}
+        paxCount={1}
+        selected={[]}
+        onToggle={vi.fn()}
+        onClear={vi.fn()}
       />,
     );
 
@@ -107,8 +115,10 @@ describe('SeatMap', () => {
         map={map([seat({ seatNumber: '20C', listedSurcharge: 0 })])}
         cabin="ECONOMY"
         currency="USD"
-        selected={null}
-        onSelect={vi.fn()}
+        paxCount={1}
+        selected={[]}
+        onToggle={vi.fn()}
+        onClear={vi.fn()}
       />,
     );
 
@@ -118,14 +128,16 @@ describe('SeatMap', () => {
   });
 
   it('offers skipping as a free, equally prominent choice', () => {
-    const onSelect = vi.fn();
+    const onClear = vi.fn();
     render(
       <SeatMap
         map={map([seat({ seatNumber: '20C' })])}
         cabin="ECONOMY"
         currency="USD"
-        selected={null}
-        onSelect={onSelect}
+        paxCount={1}
+        selected={[]}
+        onToggle={vi.fn()}
+        onClear={onClear}
       />,
     );
 
@@ -134,7 +146,26 @@ describe('SeatMap', () => {
     const skip = screen.getByRole('button', { name: /Skip/ });
     expect(skip.textContent).toContain('free');
     skip.click();
-    expect(onSelect).toHaveBeenCalledWith(null);
+    expect(onClear).toHaveBeenCalled();
+  });
+
+  it('badges each chosen seat with its passenger when a party travels', () => {
+    render(
+      <SeatMap
+        map={map([seat({ seatNumber: '10A' }), seat({ seatNumber: '10B', position: 'MIDDLE' })])}
+        cabin="ECONOMY"
+        currency="USD"
+        paxCount={2}
+        selected={[seat({ seatNumber: '10B', position: 'MIDDLE' })]}
+        onToggle={vi.fn()}
+        onClear={vi.fn()}
+      />,
+    );
+
+    // The map must say WHOSE seat 10B is - two travellers picking from one map
+    // otherwise cannot tell their selections apart.
+    expect(screen.getByLabelText(/Seat 10B/).getAttribute('aria-label')).toContain('passenger 1');
+    expect(screen.getByText(/1 more assigned free at check-in/)).toBeDefined();
   });
 
   it('explains an absent cabin instead of rendering an empty map', () => {
@@ -143,8 +174,10 @@ describe('SeatMap', () => {
         map={map([seat({ seatNumber: '30A', seatType: 'ECONOMY' })])}
         cabin="FIRST"
         currency="USD"
-        selected={null}
-        onSelect={vi.fn()}
+        paxCount={1}
+        selected={[]}
+        onToggle={vi.fn()}
+        onClear={vi.fn()}
       />,
     );
 

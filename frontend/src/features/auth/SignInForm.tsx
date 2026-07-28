@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { authApi } from '../../api/auth';
 import { Button } from '../../components/Button';
-import { ErrorAlert } from '../../components/Alert';
+import { Alert, ErrorAlert } from '../../components/Alert';
 import { Field } from '../../components/Field';
 import { ApiError } from '../../lib/errors';
 
@@ -43,8 +43,16 @@ export function SignInForm({ onSignedIn }: { onSignedIn: () => void }) {
         The server returns an identical 401 for an unknown email and a wrong
         password, on purpose - telling them apart would let anyone enumerate who
         has an account. The UI must not undo that by guessing which it was.
+
+        A 401 HERE means the credentials were wrong - the generic mapping's
+        "session expired" wording is for 401s on authenticated calls, and on a
+        login form it reads as a bug.
       */}
-      <ErrorAlert error={error} />
+      {error?.kind === 'unauthenticated' ? (
+        <Alert>Incorrect email or password. Please try again.</Alert>
+      ) : (
+        <ErrorAlert error={error} />
+      )}
 
       <Field
         label="Email"
