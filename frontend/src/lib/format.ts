@@ -33,6 +33,22 @@ export function dayAndMonth(isoLocal: string): string {
   });
 }
 
+/** A full readable date, e.g. "29 Jul 2026" - for documents like the boarding pass. */
+export function dayMonthYear(isoLocal: string): string {
+  const [datePart] = isoLocal.split('T');
+  const [year, month, day] = datePart.split('-').map(Number);
+  if (!year || !month || !day) {
+    return '—';
+  }
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
 /** Whole days between two local dates - i.e. "arrives +1". */
 export function dayOffset(fromIso: string, toIso: string): number {
   const from = Date.parse(`${fromIso.split('T')[0]}T00:00:00Z`);

@@ -53,13 +53,19 @@ export interface BoardingPass {
   boardingPassNumber: string;
   checkInId: number;
   passengerName: string;
+  /** PNR, denormalised onto the pass so it prints without a booking-service call. */
+  bookingReference: string;
   flightNumber: string;
+  originAirportCode?: string;
+  destinationAirportCode?: string;
   seatNumber: string;
   gate?: string | null;
   boardingGroup?: string | null;
   boardingTime?: string | null;
-  /** Signed token, rendered as the scannable code. */
-  barcodeToken?: string;
+  /** When checkin-service issued this pass - shown as the issue date/time. */
+  issuedAt?: string | null;
+  /** Signed value encoded into the scannable QR. The API field is `token`. */
+  token?: string;
 }
 
 export const checkinApi = {
