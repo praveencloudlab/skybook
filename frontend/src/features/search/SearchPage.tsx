@@ -147,7 +147,10 @@ export function SearchPage({
         {/* Search bar, lifted onto the band. */}
         <form
           onSubmit={handleSubmit}
-          className="glass-card relative -mt-14 grid items-end gap-3 p-5 md:grid-cols-[1fr_auto_1fr_auto_auto_auto]"
+          // z-20 matters: backdrop-blur makes this card its own stacking
+          // context, and without a z-index the results section (later in the
+          // DOM) paints OVER the travellers popover that opens from here.
+          className="glass-card relative z-20 -mt-14 grid items-end gap-3 p-5 md:grid-cols-[1fr_auto_1fr_auto_auto_auto]"
         >
           <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
 

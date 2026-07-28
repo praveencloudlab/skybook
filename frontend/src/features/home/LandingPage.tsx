@@ -125,7 +125,7 @@ export function LandingPage() {
           {/* Embedded search */}
           <form
             onSubmit={search}
-            className="glass-card mt-10 grid items-end gap-3 p-5 md:grid-cols-[1fr_1fr_auto_auto]"
+            className="glass-card relative z-20 mt-10 grid items-end gap-3 p-5 md:grid-cols-[1fr_1fr_auto_auto]"
           >
             <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
             <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} />
