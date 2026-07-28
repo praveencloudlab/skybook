@@ -26,8 +26,13 @@ export function BoardingPassCard({
 }) {
   const from = record?.originAirportCode ?? '—';
   const to = record?.destinationAirportCode ?? '—';
+  // Be at the boarding gate 30 minutes before boarding starts.
   const boardBefore = pass.boardingTime
-    ? new Date(pass.boardingTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
+    ? new Date(new Date(pass.boardingTime).getTime() - 30 * 60_000).toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
     : '—';
   const mapBg: React.CSSProperties = {
     backgroundImage: 'radial-gradient(rgb(15 23 42 / 0.06) 1.4px, transparent 1.4px)',
