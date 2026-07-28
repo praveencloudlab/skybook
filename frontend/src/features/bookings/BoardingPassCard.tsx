@@ -36,9 +36,25 @@ export function BoardingPassCard({
 
   return (
     <div className="overflow-x-auto">
-      <div className="flex min-w-[760px] items-stretch gap-2.5">
+      {/* Download lives ABOVE the ticket - not stamped onto the pass itself. */}
+      <div className="mb-2 flex min-w-[760px] justify-end">
+        <button
+          type="button"
+          onClick={() => printBoardingPass(pass, record, _arrivalTime)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-red-300 hover:text-red-600"
+          title="Download / print boarding pass"
+        >
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current" aria-hidden="true">
+            <path d="M5 20h14v-2H5v2zM12 2v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L12 12.17V2z" />
+          </svg>
+          Download boarding pass
+        </button>
+      </div>
+
+      {/* One ticket: main coupon + tear-off stub joined by a dashed cut line. */}
+      <div className="flex min-w-[760px] items-stretch overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-lift)] ring-1 ring-slate-200">
         {/* ---------------- Main coupon ---------------- */}
-        <div className="relative flex-1 overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-lift)] ring-1 ring-slate-200">
+        <div className="relative flex-1">
           <div className="pointer-events-none absolute inset-0" style={mapBg} />
 
           {/* Red header */}
@@ -88,25 +104,13 @@ export function BoardingPassCard({
               </div>
             </div>
 
-            {/* Barcode + download */}
-            <div className="flex flex-col items-center justify-center gap-2">
+            {/* Barcode */}
+            <div className="flex flex-col items-center justify-center">
               <div className="flex h-[104px] items-stretch gap-px" role="img" aria-label="Boarding pass barcode">
                 {(pass.barcodeToken ? [...pass.barcodeToken.slice(0, 34)] : []).map((c, i) => (
                   <span key={i} className="bg-slate-900" style={{ width: `${1 + (c.charCodeAt(0) % 3)}px` }} />
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={() => printBoardingPass(pass, record, _arrivalTime)}
-                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold text-white"
-                style={{ background: RED }}
-                title="Download / print boarding pass"
-              >
-                <svg viewBox="0 0 24 24" className="h-3 w-3 fill-current" aria-hidden="true">
-                  <path d="M5 20h14v-2H5v2zM12 2v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L12 12.17V2z" />
-                </svg>
-                Download
-              </button>
             </div>
           </div>
 
@@ -119,8 +123,12 @@ export function BoardingPassCard({
           </div>
         </div>
 
-        {/* ---------------- Tear-off stub ---------------- */}
-        <div className="relative w-56 shrink-0 overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-lift)] ring-1 ring-slate-200">
+        {/* ---------------- Perforated tear-off stub ---------------- */}
+        {/* Notch punches at the top and bottom of the seam make the dashed
+            border read as a real tear-off perforation, not just a divider. */}
+        <div className="relative w-56 shrink-0 border-l-2 border-dashed border-slate-300 bg-white">
+          <span className="absolute -left-[7px] -top-[7px] h-3.5 w-3.5 rounded-full bg-white ring-1 ring-slate-200" />
+          <span className="absolute -bottom-[7px] -left-[7px] h-3.5 w-3.5 rounded-full bg-white ring-1 ring-slate-200" />
           <div className="pointer-events-none absolute inset-0" style={mapBg} />
 
           <div className="relative flex items-center justify-center gap-2 px-4 py-3 text-white" style={{ background: RED }}>
