@@ -52,7 +52,7 @@ export function BoardingPassCard({
   return (
     <div className="overflow-x-auto">
       {/* Download lives ABOVE the ticket - not stamped onto the pass itself. */}
-      <div className="mb-2 flex min-w-[820px] justify-end">
+      <div className="mb-2 flex min-w-[640px] justify-end">
         <button
           type="button"
           onClick={() => printBoardingPass(pass, record, _arrivalTime)}
@@ -67,7 +67,9 @@ export function BoardingPassCard({
       </div>
 
       {/* One ticket: main coupon + tear-off stub joined by a dashed cut line. */}
-      <div className="flex min-w-[820px] items-stretch overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-lift)] ring-1 ring-slate-200">
+      {/* min-w is a floor for tiny windows only - at the page's normal width the
+          pass fits without horizontal scrolling. */}
+      <div className="flex min-w-[640px] items-stretch overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-lift)] ring-1 ring-slate-200">
         {/* ---------------- Main coupon ---------------- */}
         <div className="relative flex-1">
           <div className="pointer-events-none absolute inset-0" style={mapBg} />

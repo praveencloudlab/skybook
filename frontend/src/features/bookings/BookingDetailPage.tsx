@@ -43,8 +43,10 @@ export function BookingDetailPage({
   const [error, setError] = useState<ApiError | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [cancelling, setCancelling] = useState(false);
-  // Passenger-level cancellation (business rules 4-13): a set of the
-  // BookingPassenger ids ticked for cancellation, and which confirm dialog is open.
+  // Passenger-level cancellation (business rules 4-13): the checklist and its
+  // actions stay hidden until the user explicitly opens them - a detail page
+  // should read as an itinerary, not open on a cancellation form.
+  const [managing, setManaging] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirm, setConfirm] = useState<'selected' | 'entire' | null>(null);
   const [refundNotice, setRefundNotice] = useState<string | null>(null);
@@ -110,6 +112,7 @@ export function BookingDetailPage({
       setBooking(result.booking);
       setSelected(new Set());
       setConfirm(null);
+      setManaging(false);
       const amount = money(result.refundAmount, CURRENCY);
       setRefundNotice(
         result.bookingCancelled
@@ -167,7 +170,7 @@ export function BookingDetailPage({
   );
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
+    <main className="mx-auto max-w-4xl px-6 py-8">
       <button
         type="button"
         onClick={onBack}
@@ -327,6 +330,19 @@ export function BookingDetailPage({
           </p>
         ) : booking.bookingStatus === 'CANCELLED' ? (
           <p className="mt-4 text-sm text-slate-400">This booking is cancelled.</p>
+        ) : anyCancellable && !managing ? (
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => {
+                setManaging(true);
+                setRefundNotice(null);
+              }}
+              className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+            >
+              Cancel booking…
+            </button>
+          </div>
         ) : anyCancellable ? (
           <div className="mt-4">
             {/* Choose passengers to cancel (rule 12: two distinct actions). */}
@@ -393,6 +409,18 @@ export function BookingDetailPage({
                 className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
               >
                 Cancel entire booking
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setManaging(false);
+                  setSelected(new Set());
+                  setConfirm(null);
+                }}
+                disabled={cancelling}
+                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-60"
+              >
+                Keep booking
               </button>
             </div>
 
