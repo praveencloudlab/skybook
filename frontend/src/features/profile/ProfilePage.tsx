@@ -34,7 +34,7 @@ export function ProfilePage() {
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Your profile</h1>
+      <h1 className="display text-3xl text-slate-900">Your profile</h1>
       <p className="mt-1 text-sm text-slate-500">
         Details you keep on file — reused to fill in bookings so you don't retype them.
       </p>

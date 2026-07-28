@@ -47,15 +47,20 @@ export function ConfirmationPage({
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
-      <div className="card p-6">
-        <p className="text-sm font-medium text-emerald-700">Payment received</p>
+      <div className="card rise-in p-8 shadow-[var(--shadow-lift)]">
+        <span className="grid h-14 w-14 place-items-center rounded-full bg-emerald-50 ring-8 ring-emerald-50/60">
+          <svg viewBox="0 0 24 24" className="h-7 w-7 fill-emerald-600" aria-hidden="true">
+            <path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" />
+          </svg>
+        </span>
+        <p className="mt-4 text-sm font-semibold text-emerald-700">Payment received</p>
 
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+        <h1 className="display mt-1 text-3xl text-slate-900">
           Your booking reference
         </h1>
 
         {/* The PNR, large and copyable. It is the one thing worth remembering. */}
-        <p className="mt-3 font-mono text-3xl font-semibold tracking-[0.2em] text-brand-700">
+        <p className="tabular mt-4 inline-block rounded-2xl bg-brand-50 px-5 py-3 font-mono text-3xl font-bold tracking-[0.2em] text-brand-700 ring-1 ring-inset ring-brand-100">
           {booking.bookingReference}
         </p>
 

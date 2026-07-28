@@ -89,10 +89,10 @@ export function SeatSelectionPage({
       <TripSummaryBar flight={flight} step="seat" onBack={onBack} backLabel="Back to fares" />
 
       <main className="mx-auto max-w-3xl px-6 py-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+        <h1 className="display text-3xl text-slate-900">
           {paxCount === 1 ? 'Choose your seat' : 'Choose your seats'}
         </h1>
-        <p className="mt-1 text-sm text-slate-600">
+        <p className="mt-2 text-sm text-slate-600">
           {TRAVEL_CLASS_LABELS[cabin]} · {FARE_TYPE_LABELS[fare]}
           {paxCount > 1 ? ` · ${paxCount} travellers` : ''}
         </p>

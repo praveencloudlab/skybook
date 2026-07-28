@@ -129,11 +129,11 @@ export function SearchPage({
           <circle cx="900" cy="72" r="3.5" fill="white" fillOpacity="0.6" />
         </svg>
 
-        <div className="relative mx-auto max-w-6xl px-6 pt-12 pb-24">
-          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+        <div className="relative mx-auto max-w-6xl px-6 pt-14 pb-26">
+          <h1 className="display text-4xl text-white sm:text-5xl">
             Search flights
           </h1>
-          <p className="mt-2 max-w-md text-sm text-white/60">
+          <p className="mt-3 max-w-md text-sm text-white/60">
             A year of real schedules across 30 routes. Compare fares, pick your seat from the actual
             cabin — no account needed to look.
           </p>
@@ -144,7 +144,7 @@ export function SearchPage({
         {/* Search bar, lifted onto the band. */}
         <form
           onSubmit={handleSubmit}
-          className="card relative -mt-14 grid items-end gap-3 p-4 shadow-[var(--shadow-lift)] md:grid-cols-[1fr_auto_1fr_auto_auto_auto]"
+          className="relative -mt-14 grid items-end gap-3 rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[var(--shadow-float)] md:grid-cols-[1fr_auto_1fr_auto_auto_auto]"
         >
           <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
 
@@ -195,7 +195,7 @@ export function SearchPage({
           <button
             type="submit"
             disabled={sameAirport || busy}
-            className="inline-flex h-[42px] items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 text-sm font-semibold text-white shadow-[var(--shadow-btn)] transition-all hover:bg-brand-500 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-brand-300 disabled:shadow-none disabled:hover:translate-y-0"
+            className="inline-flex h-[44px] items-center justify-center gap-2 rounded-full bg-brand-600 px-7 text-sm font-semibold text-white shadow-[var(--shadow-btn)] transition-all hover:bg-brand-500 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-brand-300 disabled:shadow-none disabled:hover:translate-y-0"
           >
             {busy ? (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />

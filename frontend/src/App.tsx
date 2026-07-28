@@ -89,16 +89,16 @@ function Header() {
 
   return (
     <header className="glass sticky top-0 z-20 text-white">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
         <Link to="/" className="group flex items-center gap-2.5">
           {/* A mark, not just a wordmark - it is what makes the header read as
               an airline rather than an admin console. */}
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 transition group-hover:bg-brand-500">
-            <svg viewBox="0 0 24 24" className="h-4 w-4 fill-white" aria-hidden="true">
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-sm transition group-hover:from-brand-400 group-hover:to-brand-600">
+            <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 fill-white" aria-hidden="true">
               <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
             </svg>
           </span>
-          <span className="text-base font-semibold tracking-tight">SkyBook</span>
+          <span className="display text-lg text-white">SkyBook</span>
         </Link>
 
         <nav className="flex items-center gap-1 text-sm sm:gap-2">

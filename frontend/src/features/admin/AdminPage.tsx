@@ -36,7 +36,7 @@ export function AdminPage() {
             <path d="M12 2 4 6v6c0 5 3.4 8.5 8 10 4.6-1.5 8-5 8-10V6l-8-4z" />
           </svg>
         </span>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Admin console</h1>
+        <h1 className="display text-3xl text-slate-900">Admin console</h1>
       </div>
       <p className="mt-1 text-sm text-slate-500">Operations back-office — flights, bookings and fleet.</p>
 

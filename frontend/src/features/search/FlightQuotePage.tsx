@@ -61,8 +61,8 @@ export function FlightQuotePage({
 
       <main className="mx-auto max-w-5xl px-6 py-8">
         <div className="max-w-xl">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Choose your fare</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="display text-3xl text-slate-900">Choose your fare</h1>
+          <p className="mt-2 text-sm text-slate-500">
             Pick a cabin and fare. Every fare is the base price per passenger — you'll choose a seat
             next, and letting us assign one is free.
           </p>

@@ -74,8 +74,8 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">My trips</h1>
-      <p className="mt-1 text-sm text-slate-500">Your bookings, newest first. Tap one to see the itinerary and check in.</p>
+      <h1 className="display text-3xl text-slate-900">My trips</h1>
+      <p className="mt-2 text-sm text-slate-500">Your bookings, newest first. Tap one to see the itinerary and check in.</p>
 
       {/* Status tabs (Module 11). Only shown once there's something to filter. */}
       {bookings && bookings.length > 0 ? (

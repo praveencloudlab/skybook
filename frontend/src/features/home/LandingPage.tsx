@@ -111,10 +111,12 @@ export function LandingPage() {
             <span className="h-1.5 w-1.5 rounded-full bg-accent-500" />
             Real schedules · live fares · scannable boarding passes
           </span>
-          <h1 className="mt-5 max-w-2xl text-4xl font-semibold leading-[1.1] tracking-tight text-white sm:text-5xl">
-            Where would you like to fly?
+          <h1 className="display mt-6 max-w-2xl text-5xl leading-[1.05] text-white sm:text-6xl">
+            Where would you
+            <br />
+            like to fly?
           </h1>
-          <p className="mt-4 max-w-lg text-base text-white/60">
+          <p className="mt-5 max-w-lg text-lg text-white/60">
             Search a year of departures across 30 routes, pick your seat from the actual cabin, and
             carry a boarding pass you can scan. No account needed to look.
           </p>
@@ -122,7 +124,7 @@ export function LandingPage() {
           {/* Embedded search */}
           <form
             onSubmit={search}
-            className="mt-8 grid items-end gap-3 rounded-2xl border border-white/10 bg-white p-4 shadow-[var(--shadow-lift)] md:grid-cols-[1fr_1fr_auto_auto]"
+            className="mt-10 grid items-end gap-3 rounded-3xl border border-white/10 bg-white p-5 shadow-[var(--shadow-float)] md:grid-cols-[1fr_1fr_auto_auto]"
           >
             <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
             <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} />
@@ -141,7 +143,7 @@ export function LandingPage() {
             <button
               type="submit"
               disabled={sameAirport}
-              className="inline-flex h-[42px] items-center justify-center gap-2 rounded-xl bg-brand-600 px-6 text-sm font-semibold text-white shadow-[var(--shadow-btn)] transition-all hover:bg-brand-700 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-slate-300 disabled:hover:translate-y-0"
+              className="inline-flex h-[44px] items-center justify-center gap-2 rounded-full bg-brand-600 px-7 text-sm font-semibold text-white shadow-[var(--shadow-btn)] transition-all hover:bg-brand-500 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-slate-300 disabled:hover:translate-y-0"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
                 <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14z" />
@@ -167,21 +169,21 @@ export function LandingPage() {
       <section className="mx-auto max-w-6xl px-6 py-14">
         <div className="flex items-end justify-between">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-slate-900">Popular destinations</h2>
-            <p className="mt-1 text-sm text-slate-500">Departing London Heathrow — tap to see live fares.</p>
+            <h2 className="display text-3xl text-slate-900">Popular destinations</h2>
+            <p className="mt-1.5 text-sm text-slate-500">Departing London Heathrow — tap to see live fares.</p>
           </div>
-          <Link to="/search" className="hidden text-sm font-medium text-brand-700 hover:underline sm:block">
+          <Link to="/search" className="hidden text-sm font-semibold text-brand-700 hover:underline sm:block">
             All routes →
           </Link>
         </div>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {DESTINATIONS.map((dest) => (
             <Link
               key={dest.to}
               to={`/search?from=LHR&to=${dest.to}`}
-              className="card-hover group relative block overflow-hidden rounded-xl"
+              className="group relative block overflow-hidden rounded-3xl bg-white ring-1 ring-slate-200 transition duration-200 ease-out hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]"
             >
-              <div className={`relative h-40 bg-gradient-to-br ${dest.tint}`}>
+              <div className={`relative h-44 bg-gradient-to-br ${dest.tint} transition-transform duration-500 group-hover:scale-[1.02]`}>
                 <div className="grid-texture absolute inset-0 opacity-60" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
                 <svg className="absolute right-4 top-4 h-6 w-6 fill-white/80" viewBox="0 0 24 24" aria-hidden="true">
@@ -208,14 +210,14 @@ export function LandingPage() {
       {/* Why SkyBook */}
       <section className="border-y border-slate-200 bg-white">
         <div className="mx-auto max-w-6xl px-6 py-14">
-          <h2 className="text-xl font-semibold tracking-tight text-slate-900">Built like the real thing</h2>
-          <p className="mt-1 max-w-xl text-sm text-slate-500">
+          <h2 className="display text-3xl text-slate-900">Built like the real thing</h2>
+          <p className="mt-1.5 max-w-xl text-sm text-slate-500">
             Not a mockup — a full booking platform behind the scenes, all the way to the gate.
           </p>
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
+          <div className="mt-9 grid gap-6 md:grid-cols-3">
             {FEATURES.map((feature) => (
-              <div key={feature.title} className="card p-6">
-                <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand-50 text-brand-700">
+              <div key={feature.title} className="card card-hover p-7">
+                <span className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-brand-50 to-brand-100 text-brand-700">
                   <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6">
                     <path d={feature.icon} strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
@@ -230,16 +232,16 @@ export function LandingPage() {
 
       {/* CTA */}
       <section className="mx-auto max-w-6xl px-6 py-16">
-        <div className="relative overflow-hidden rounded-2xl bg-brand-900 px-8 py-12 text-center">
+        <div className="relative overflow-hidden rounded-3xl bg-brand-900 px-8 py-14 text-center shadow-[var(--shadow-float)]">
           <div className="grid-texture absolute inset-0" />
           <div className="relative">
-            <h2 className="text-2xl font-semibold tracking-tight text-white">Ready when you are.</h2>
-            <p className="mx-auto mt-2 max-w-md text-sm text-white/60">
+            <h2 className="display text-3xl text-white sm:text-4xl">Ready when you are.</h2>
+            <p className="mx-auto mt-3 max-w-md text-sm text-white/60">
               Find a flight in seconds. Create an account only when you're ready to book.
             </p>
             <Link
               to="/search"
-              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-semibold text-brand-900 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50"
+              className="mt-7 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3 text-sm font-semibold text-brand-900 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50"
             >
               Search flights →
             </Link>

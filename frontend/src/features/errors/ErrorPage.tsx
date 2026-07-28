@@ -75,7 +75,7 @@ export function ErrorPage({
         </div>
       </div>
 
-      <h1 className="mt-8 text-2xl font-semibold tracking-tight text-slate-900">{title ?? preset.title}</h1>
+      <h1 className="display mt-8 text-3xl text-slate-900">{title ?? preset.title}</h1>
       <p className="mt-2 max-w-md text-sm text-slate-600">{message ?? preset.message}</p>
 
       <div className="mt-8 flex flex-wrap items-center justify-center gap-3">

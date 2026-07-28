@@ -21,8 +21,8 @@ export function AuthLayout({
     <div className="grid min-h-[calc(100vh-3.5rem)] lg:grid-cols-2">
       <div className="flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{title}</h1>
-          <p className="mt-1.5 text-sm text-slate-600">{subtitle}</p>
+          <h1 className="display text-3xl text-slate-900">{title}</h1>
+          <p className="mt-2 text-sm text-slate-600">{subtitle}</p>
           <div className="mt-8">{children}</div>
         </div>
       </div>
@@ -58,7 +58,7 @@ export function AuthLayout({
         </svg>
 
         <div className="relative flex h-full flex-col justify-end p-12 text-white">
-          <p className="text-3xl leading-tight font-semibold tracking-tight">
+          <p className="display text-4xl leading-tight">
             Thirty routes.
             <br />
             A year of departures.

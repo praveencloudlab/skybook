@@ -164,10 +164,10 @@ export function CheckoutPage({
       <TripSummaryBar flight={flight} step="review" onBack={onBack} backLabel="Back to seats" />
 
       <main className="mx-auto max-w-3xl px-6 py-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+        <h1 className="display text-3xl text-slate-900">
           Review &amp; payment
         </h1>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-2 text-sm text-slate-500">
           {TRAVEL_CLASS_LABELS[cabin]} · {FARE_TYPE_LABELS[fare]}
           {seats.length > 0
             ? ` · seat${seats.length === 1 ? '' : 's'} ${seats.map((s) => s.seatNumber).join(', ')}`
