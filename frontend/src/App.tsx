@@ -30,7 +30,8 @@ import { ConfirmationPage } from './features/booking/ConfirmationPage';
 import { MyBookingsPage } from './features/bookings/MyBookingsPage';
 import { BookingDetailPage } from './features/bookings/BookingDetailPage';
 import type { AircraftSeat } from './api/seats';
-import type { Booking } from './api/bookings';
+import type { Booking, PassengerType } from './api/bookings';
+import { ONE_ADULT, totalTravellers, type Travellers } from './components/TravellersPicker';
 import type { Payment } from './api/payments';
 import type { FareType, TravelClass } from './api/quotes';
 import type { Flight } from './api/flights';
@@ -276,17 +277,26 @@ function BookingJourney() {
   // every back-navigation.
   const [step, setStep] = useState<Step>('search');
   const [flight, setFlight] = useState<Flight | null>(null);
-  const [paxCount, setPaxCount] = useState(1);
+  const [travellers, setTravellers] = useState<Travellers>(ONE_ADULT);
   const [choice, setChoice] = useState<FareChoice | null>(null);
-  // One chosen seat per traveller, in passenger order; shorter than paxCount
+  // One chosen seat per traveller, in passenger order; shorter than the party
   // means the rest are auto-assigned free at check-in.
   const [seats, setSeats] = useState<AircraftSeat[]>([]);
   const [result, setResult] = useState<{ booking: Booking; payment: Payment } | null>(null);
 
+  const paxCount = totalTravellers(travellers);
+  // Adults first, then children, then infants - the order checkout renders
+  // its forms in, so each one is labelled and DOB-bounded for the right type.
+  const paxTypes: PassengerType[] = [
+    ...Array.from({ length: travellers.adults }, () => 'ADULT' as const),
+    ...Array.from({ length: travellers.children }, () => 'CHILD' as const),
+    ...Array.from({ length: travellers.infants }, () => 'INFANT' as const),
+  ];
+
   function restart() {
     setStep('search');
     setFlight(null);
-    setPaxCount(1);
+    setTravellers(ONE_ADULT);
     setChoice(null);
     setSeats([]);
     setResult(null);
@@ -315,7 +325,7 @@ function BookingJourney() {
         baseFare={choice.baseFare}
         currency={choice.currency}
         seats={seats}
-        paxCount={paxCount}
+        paxTypes={paxTypes}
         onBack={() => setStep('seat')}
         onBooked={(booking, payment) => {
           setResult({ booking, payment });
@@ -358,9 +368,9 @@ function BookingJourney() {
 
   return (
     <SearchPage
-      onSelectFlight={(chosen, travellers) => {
+      onSelectFlight={(chosen, party) => {
         setFlight(chosen);
-        setPaxCount(travellers);
+        setTravellers(party);
         setSeats([]);
         setStep('fares');
       }}

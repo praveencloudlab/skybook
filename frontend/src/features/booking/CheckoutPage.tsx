@@ -7,7 +7,7 @@ import {
   type FareType,
   type TravelClass,
 } from '../../api/quotes';
-import { bookingsApi, type Booking } from '../../api/bookings';
+import { bookingsApi, type Booking, type PassengerType } from '../../api/bookings';
 import { paymentsApi, PAYMENT_METHOD_LABELS, type Payment, type PaymentMethod } from '../../api/payments';
 import { Alert, ErrorAlert } from '../../components/Alert';
 import { Button } from '../../components/Button';
@@ -50,7 +50,7 @@ export function CheckoutPage({
   baseFare,
   currency,
   seats,
-  paxCount: initialPaxCount,
+  paxTypes,
   onBack,
   onBooked,
 }: {
@@ -61,24 +61,26 @@ export function CheckoutPage({
   currency: string;
   /** Chosen seats in passenger order - may be shorter than the party. */
   seats: AircraftSeat[];
-  /** How many travellers were declared at search - sizes the forms below. */
-  paxCount: number;
+  /** Who was declared at search (adults first, then children, then infants). */
+  paxTypes: PassengerType[];
   onBack: () => void;
   onBooked: (booking: Booking, payment: Payment) => void;
 }) {
   const { subject } = useSession();
+  const declaredTypes = paxTypes.length > 0 ? paxTypes : (['ADULT'] as PassengerType[]);
 
-  // One form per declared traveller, ready to fill - the count was asked up
-  // front, so nobody has to discover an "+ Add passenger" link to bring the
-  // rest of their family along. Adding/removing later is still possible.
+  // One form per declared traveller, ready to fill and labelled for who it is
+  // (adult / child / infant) - the party was asked up front, so nobody has to
+  // discover an "+ Add passenger" link. Extra passengers added here are adults.
   const [passengers, setPassengers] = useState<PassengerDraft[]>(() =>
-    Array.from({ length: Math.max(1, initialPaxCount) }, emptyPassenger),
+    declaredTypes.map(() => emptyPassenger()),
   );
+  const [types, setTypes] = useState<PassengerType[]>(declaredTypes);
   const [contactEmail, setContactEmail] = useState(subject ?? '');
   const [method, setMethod] = useState<PaymentMethod>('CARD');
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [paxErrors, setPaxErrors] = useState<Record<string, string>[]>(() =>
-    Array.from({ length: Math.max(1, initialPaxCount) }, () => ({})),
+    declaredTypes.map(() => ({})),
   );
   const [formErrors, setFormErrors] = useState<{ contactEmail?: string; terms?: string }>({});
   const [error, setError] = useState<ApiError | null>(null);
@@ -97,10 +99,12 @@ export function CheckoutPage({
   }
   function addPassenger() {
     setPassengers((list) => [...list, emptyPassenger()]);
+    setTypes((list) => [...list, 'ADULT']);
     setPaxErrors((list) => [...list, {}]);
   }
   function removePassenger(index: number) {
     setPassengers((list) => (list.length > 1 ? list.filter((_, i) => i !== index) : list));
+    setTypes((list) => (list.length > 1 ? list.filter((_, i) => i !== index) : list));
     setPaxErrors((list) => (list.length > 1 ? list.filter((_, i) => i !== index) : list));
   }
 
@@ -108,7 +112,7 @@ export function CheckoutPage({
     event.preventDefault();
     setError(null);
 
-    const perPax = passengers.map((p) => validatePassenger(p));
+    const perPax = passengers.map((p, i) => validatePassenger(p, types[i]));
     const fErr: { contactEmail?: string; terms?: string } = {};
     if (!contactEmail.trim()) {
       fErr.contactEmail = 'A contact email is required';
@@ -193,11 +197,24 @@ export function CheckoutPage({
 
           {passengers.map((p, i) => {
             const pSeat = seatFor(i);
+            const type = types[i] ?? 'ADULT';
             return (
               <div key={i} className="card space-y-3 p-4">
                 <div className="flex items-center justify-between">
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-800">
                     Passenger {i + 1}
+                    <span
+                      className={
+                        'rounded-full px-2 py-0.5 text-[11px] font-semibold ' +
+                        (type === 'ADULT'
+                          ? 'bg-slate-100 text-slate-600'
+                          : type === 'CHILD'
+                            ? 'bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200'
+                            : 'bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200')
+                      }
+                    >
+                      {type === 'ADULT' ? 'Adult' : type === 'CHILD' ? 'Child' : 'Infant'}
+                    </span>
                     <span className="tabular rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
                       {pSeat ? `Seat ${pSeat.seatNumber}` : 'Seat at check-in'}
                     </span>
@@ -218,7 +235,12 @@ export function CheckoutPage({
                     if (i === 0 && email) setContactEmail(email);
                   }}
                 />
-                <PassengerForm draft={p} errors={paxErrors[i] ?? {}} onChange={(d) => updatePassenger(i, d)} />
+                <PassengerForm
+                  draft={p}
+                  category={type}
+                  errors={paxErrors[i] ?? {}}
+                  onChange={(d) => updatePassenger(i, d)}
+                />
               </div>
             );
           })}

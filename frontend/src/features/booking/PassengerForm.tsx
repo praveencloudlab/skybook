@@ -1,6 +1,30 @@
-import { NATIONALITIES, type PassengerDetail } from '../../api/bookings';
+import { NATIONALITIES, type PassengerDetail, type PassengerType } from '../../api/bookings';
 import type { FareType, TravelClass } from '../../api/quotes';
 import { Field } from '../../components/Field';
+
+/** ISO date exactly n years before today - the age-band boundaries. */
+function yearsAgoIso(years: number): string {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() - years);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Date-of-birth bounds per declared traveller type. The server derives the
+ * category from the DOB (PassengerCategory: under 2 infant, under 12 child),
+ * so the form constrains the input to the band the traveller was declared as -
+ * catching "adult with a 2019 birthday" here, not as a surprise later.
+ */
+function dobBounds(category: PassengerType): { min: string; max: string; hint: string } {
+  switch (category) {
+    case 'INFANT':
+      return { min: yearsAgoIso(2), max: new Date().toISOString().slice(0, 10), hint: 'Under 2 years old' };
+    case 'CHILD':
+      return { min: yearsAgoIso(12), max: yearsAgoIso(2), hint: '2 to 11 years old' };
+    default:
+      return { min: '1900-01-01', max: yearsAgoIso(12), hint: '12 years or older' };
+  }
+}
 
 /**
  * Passenger details (FRONTEND_MODULE.md §5 screen 5).
@@ -57,11 +81,26 @@ export function toPassengerDetail(
 }
 
 /** Missing/invalid fields, keyed by field name - empty when the draft is valid. */
-export function validatePassenger(draft: PassengerDraft): Record<string, string> {
+export function validatePassenger(
+  draft: PassengerDraft,
+  category: PassengerType = 'ADULT',
+): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!draft.firstName.trim()) errors.firstName = 'First name is required';
   if (!draft.lastName.trim()) errors.lastName = 'Last name is required';
-  if (!draft.dob) errors.dob = 'Date of birth is required';
+  if (!draft.dob) {
+    errors.dob = 'Date of birth is required';
+  } else {
+    const { min, max } = dobBounds(category);
+    if (draft.dob < min || draft.dob > max) {
+      errors.dob =
+        category === 'ADULT'
+          ? 'An adult must be 12 or older'
+          : category === 'CHILD'
+            ? 'A child is 2 to 11 years old'
+            : 'An infant is under 2 years old';
+    }
+  }
   if (!draft.passportNumber.trim()) errors.passportNumber = 'Passport number is required';
   if (!draft.passportExpiry) {
     errors.passportExpiry = 'Passport expiry is required';
@@ -74,14 +113,18 @@ export function validatePassenger(draft: PassengerDraft): Record<string, string>
 
 export function PassengerForm({
   draft,
+  category = 'ADULT',
   errors,
   onChange,
 }: {
   draft: PassengerDraft;
+  /** Declared traveller type - bounds the date-of-birth band. */
+  category?: PassengerType;
   errors: Record<string, string>;
   onChange: (draft: PassengerDraft) => void;
 }) {
   const set = (patch: Partial<PassengerDraft>) => onChange({ ...draft, ...patch });
+  const dob = dobBounds(category);
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
@@ -124,10 +167,12 @@ export function PassengerForm({
         value={draft.dob}
         onChange={(e) => set({ dob: e.target.value })}
         error={errors.dob}
-        // Nobody on this aircraft was born in 1723; a sane bound stops a typo
-        // becoming a server-side validation error.
-        min="1900-01-01"
-        max={new Date().toISOString().slice(0, 10)}
+        hint={dob.hint}
+        // Bounded to the declared traveller type's age band - the server
+        // derives adult/child/infant from this date, so a mismatch here would
+        // only surface as a confusing failure later.
+        min={dob.min}
+        max={dob.max}
       />
 
       <div className="space-y-1.5">

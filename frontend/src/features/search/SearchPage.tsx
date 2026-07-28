@@ -10,6 +10,7 @@ import {
 import { ErrorAlert } from '../../components/Alert';
 import { AirportField } from '../../components/AirportField';
 import { FlightCard } from '../../components/FlightCard';
+import { ONE_ADULT, TravellersPicker, type Travellers } from '../../components/TravellersPicker';
 import { ApiError } from '../../lib/errors';
 import { addDaysIso, dayAndMonth, todayIso } from '../../lib/format';
 import { SearchFilters } from './SearchFilters';
@@ -32,7 +33,7 @@ function knownCode(code: string | null, fallback: string): string {
 export function SearchPage({
   onSelectFlight,
 }: {
-  onSelectFlight?: (flight: Flight, travellers: number) => void;
+  onSelectFlight?: (flight: Flight, travellers: Travellers) => void;
 }) {
   // Deep links from the landing page (its hero search and destination cards)
   // arrive as ?from=&to=&date= and prefill + auto-run the search below.
@@ -42,9 +43,10 @@ export function SearchPage({
   // Tomorrow, not today: same-day departures may already have left, and an
   // empty first result is a poor first impression of a working system.
   const [date, setDate] = useState(() => params.get('date') || addDaysIso(todayIso(), 1));
-  // How many travel - asked up front like every airline site, so the rest of
-  // the journey (seat picks, passenger forms, totals) is sized correctly.
-  const [travellers, setTravellers] = useState(1);
+  // Who travels - adults/children/infants, asked up front like every airline
+  // site, so the rest of the journey (seat picks, passenger forms, date-of-
+  // birth bounds, totals) is sized and typed correctly.
+  const [travellers, setTravellers] = useState<Travellers>(ONE_ADULT);
 
   const [results, setResults] = useState<Flight[] | null>(null);
   const [searched, setSearched] = useState<SearchCriteria | null>(null);
@@ -176,22 +178,7 @@ export function SearchPage({
             />
           </label>
 
-          <label className="text-sm">
-            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Travellers
-            </span>
-            <select
-              value={travellers}
-              onChange={(event) => setTravellers(Number(event.target.value))}
-              className="tabular w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
-            >
-              {[1, 2, 3, 4, 5, 6].map((n) => (
-                <option key={n} value={n}>
-                  {n} {n === 1 ? 'traveller' : 'travellers'}
-                </option>
-              ))}
-            </select>
-          </label>
+          <TravellersPicker value={travellers} onChange={setTravellers} />
 
           <button
             type="submit"
