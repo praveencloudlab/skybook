@@ -1,5 +1,6 @@
 package com.skybook.praveen.bookingservice.config;
 
+import com.skybook.praveen.common.event.CheckInEvent;
 import com.skybook.praveen.common.event.PaymentEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -103,6 +104,40 @@ public class KafkaConsumerConfig {
         ConcurrentKafkaListenerContainerFactory<String, PaymentEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(paymentEventConsumerFactory());
+        factory.setCommonErrorHandler(kafkaErrorHandler);
+        return factory;
+    }
+
+    // CheckInEvent mirror (CheckInEventConsumer): same group, same DLT-backed
+    // error handling - only the payload type differs.
+
+    @Bean
+    public ConsumerFactory<String, CheckInEvent> checkInEventConsumerFactory() {
+
+        JsonDeserializer<CheckInEvent> json = new JsonDeserializer<>(CheckInEvent.class);
+        json.addTrustedPackages("com.skybook.praveen.common.event");
+
+        ErrorHandlingDeserializer<CheckInEvent> value = new ErrorHandlingDeserializer<>(json);
+
+        Map<String, Object> config = new HashMap<>();
+
+        config.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        config.put(ConsumerConfig.GROUP_ID_CONFIG, "booking-service");
+        config.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+
+        return new DefaultKafkaConsumerFactory<>(
+                config,
+                new StringDeserializer(),
+                value
+        );
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, CheckInEvent> checkInEventContainerFactory(
+            DefaultErrorHandler kafkaErrorHandler) {
+        ConcurrentKafkaListenerContainerFactory<String, CheckInEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(checkInEventConsumerFactory());
         factory.setCommonErrorHandler(kafkaErrorHandler);
         return factory;
     }

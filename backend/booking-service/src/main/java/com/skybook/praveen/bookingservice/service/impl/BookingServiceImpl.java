@@ -460,6 +460,41 @@ public class BookingServiceImpl implements BookingService {
         return BookingMapper.toResponse(bookingRepository.save(booking));
     }
 
+    @Override
+    @Transactional
+    public void applyCheckInStatus(Long bookingId, Long bookingPassengerId, CheckInStatus target) {
+
+        Booking booking = findBookingOrThrow(bookingId);
+        BookingPassenger passenger = findBookingPassengerOrThrow(booking, bookingPassengerId);
+        CheckInStatus from = passenger.getCheckInStatus();
+
+        // Replays and duplicate deliveries are normal for a read-model - a
+        // no-op, not an error.
+        if (from == target) {
+            return;
+        }
+
+        // checkin-service never announces the window opening, so its terminal
+        // facts arrive while the mirror still says NOT_OPEN - step through
+        // OPEN exactly like checkInPassenger does, keeping history coherent.
+        if (passenger.getCheckInStatus() == CheckInStatus.NOT_OPEN
+                && (target == CheckInStatus.CHECKED_IN || target == CheckInStatus.NO_SHOW)) {
+            bookingStateMachine.transitionCheckInStatus(passenger, CheckInStatus.OPEN, "checkin-service");
+        }
+
+        // An out-of-order or late event (e.g. CHECKED_IN arriving after this
+        // passenger was cancelled and CLOSED) must not poison the topic - the
+        // mirror simply keeps its more advanced state.
+        if (!bookingStateMachine.canTransitionCheckIn(passenger.getCheckInStatus(), target)) {
+            log.warn("Ignoring check-in mirror {} -> {} for passenger {} on booking {} (not a legal transition)",
+                    passenger.getCheckInStatus(), target, bookingPassengerId, booking.getBookingReference());
+            return;
+        }
+
+        bookingStateMachine.transitionCheckInStatus(passenger, target, "checkin-service");
+        bookingRepository.save(booking);
+    }
+
     /**
      * Finalization must cover EVERY passenger exactly once with complete
      * pricing (review follow-up on §5.1): a malformed internal call must not

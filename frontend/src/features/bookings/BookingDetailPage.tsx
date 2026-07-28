@@ -135,8 +135,19 @@ export function BookingDetailPage({
   // Passenger-level cancellation state (business rules).
   const isMinor = (p: (typeof booking.passengers)[number]) =>
     p.passengerType === 'CHILD' || p.passengerType === 'INFANT';
+  // Checked-in must consult checkin-service's records TOO: the booking's own
+  // checkInStatus is an async Kafka read-model, and right after a check-in it
+  // can still say NOT_OPEN - which briefly offered a passenger with a freshly
+  // issued boarding pass for cancellation. The records on this page are fresh.
+  const checkedInRecordIds = new Set(
+    (checkIns ?? [])
+      .filter((r) => r.status === 'CHECKED_IN' || r.status === 'BOARDED')
+      .map((r) => r.bookingPassengerId),
+  );
   const checkedIn = (p: (typeof booking.passengers)[number]) =>
-    p.checkInStatus === 'CHECKED_IN' || p.checkInStatus === 'BOARDED';
+    p.checkInStatus === 'CHECKED_IN' ||
+    p.checkInStatus === 'BOARDED' ||
+    checkedInRecordIds.has(p.id);
 
   const activePassengers = booking.passengers.filter((p) => !p.cancelled);
   // A passenger can be cancelled only while active, before check-in, before departure.
@@ -409,6 +420,13 @@ export function BookingDetailPage({
               </p>
             ) : null}
 
+            {anyCheckedIn ? (
+              <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-inset ring-slate-200">
+                Passengers who have already checked in can no longer be cancelled online — contact
+                support to change their travel.
+              </p>
+            ) : null}
+
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
                 onClick={() => setConfirm('selected')}
@@ -417,14 +435,19 @@ export function BookingDetailPage({
                 Cancel selected passenger{selectedCount === 1 ? '' : 's'}
                 {selectedCount > 0 ? ` (${selectedCount})` : ''}
               </Button>
-              <button
-                type="button"
-                onClick={() => setConfirm('entire')}
-                disabled={cancelling}
-                className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
-              >
-                Cancel entire booking
-              </button>
+              {/* Whole-booking cancel disappears once anyone holds a boarding
+                  pass - "entire" would silently exclude them, which is worse
+                  than not offering it (a checked-in traveller needs support). */}
+              {!anyCheckedIn ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirm('entire')}
+                  disabled={cancelling}
+                  className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+                >
+                  Cancel entire booking
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {

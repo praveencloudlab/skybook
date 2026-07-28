@@ -84,4 +84,14 @@ public interface BookingService {
     BookingResponse checkInPassenger(Long bookingId, Long bookingPassengerId);
 
     BookingResponse boardPassenger(Long bookingId, Long bookingPassengerId);
+
+    /**
+     * Mirror checkin-service's authoritative per-passenger state onto the
+     * {@code BookingPassenger.checkInStatus} read-model (consumed from
+     * CheckInEvent). This is what arms the "a checked-in passenger cannot be
+     * cancelled online" guard in {@link #cancelPassengers} - without it the
+     * read-model stays NOT_OPEN forever and the guard never fires.
+     */
+    void applyCheckInStatus(Long bookingId, Long bookingPassengerId,
+                            com.skybook.praveen.bookingservice.enums.CheckInStatus target);
 }
