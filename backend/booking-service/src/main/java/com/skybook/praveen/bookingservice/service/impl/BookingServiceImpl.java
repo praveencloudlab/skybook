@@ -11,6 +11,8 @@ import com.skybook.praveen.bookingservice.dto.request.PassengerBookingDetail;
 import com.skybook.praveen.bookingservice.dto.response.BookingResponse;
 import com.skybook.praveen.bookingservice.entity.Booking;
 import com.skybook.praveen.bookingservice.entity.BookingContact;
+import com.skybook.praveen.bookingservice.domain.PassengerCategory;
+import com.skybook.praveen.bookingservice.dto.response.CancelPassengersResponse;
 import com.skybook.praveen.bookingservice.entity.BookingPassenger;
 import com.skybook.praveen.bookingservice.entity.BookingPayment;
 import com.skybook.praveen.bookingservice.entity.Passenger;
@@ -31,6 +33,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -331,6 +334,87 @@ public class BookingServiceImpl implements BookingService {
         }
 
         return BookingMapper.toResponse(bookingRepository.save(booking));
+    }
+
+    @Override
+    @Transactional
+    public CancelPassengersResponse cancelPassengers(Long bookingId, List<Long> bookingPassengerIds) {
+        Booking booking = findBookingOrThrow(bookingId);
+
+        List<BookingPassenger> active = booking.getPassengers().stream()
+                .filter(bp -> !bp.isCancelled())
+                .toList();
+        Set<Long> ids = new HashSet<>(bookingPassengerIds);
+
+        List<BookingPassenger> toCancel = active.stream()
+                .filter(bp -> ids.contains(bp.getId()))
+                .toList();
+        if (toCancel.isEmpty()) {
+            throw new IllegalStateException("None of the selected passengers are on this booking, or they are already cancelled.");
+        }
+        // A checked-in / boarded traveller cannot be cancelled online.
+        for (BookingPassenger bp : toCancel) {
+            if (bp.getCheckInStatus() == CheckInStatus.CHECKED_IN || bp.getCheckInStatus() == CheckInStatus.BOARDED) {
+                throw new IllegalStateException(bp.getPassenger().getFirstName()
+                        + " has already checked in and can no longer be cancelled online.");
+            }
+        }
+
+        List<BookingPassenger> remaining = active.stream()
+                .filter(bp -> !ids.contains(bp.getId()))
+                .toList();
+
+        // Guardian rule: a child/infant cannot remain on the booking without an
+        // adult - so cancelling every adult must cancel the whole booking.
+        if (!remaining.isEmpty()) {
+            boolean minorRemains = remaining.stream()
+                    .anyMatch(bp -> PassengerCategory.of(bp.getPassenger().getDob(), LocalDate.now()).isMinor());
+            boolean adultRemains = remaining.stream()
+                    .anyMatch(bp -> !PassengerCategory.of(bp.getPassenger().getDob(), LocalDate.now()).isMinor());
+            if (minorRemains && !adultRemains) {
+                throw new IllegalStateException(
+                        "A child or infant can't remain on the booking without an adult. "
+                                + "Cancel an accompanying adult too, or cancel the whole booking.");
+            }
+        }
+
+        BigDecimal refundAmount = toCancel.stream()
+                .map(BookingPassenger::getFare)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        for (BookingPassenger bp : toCancel) {
+            bp.setCancelled(true);
+            bp.setCheckInStatus(CheckInStatus.CLOSED);
+        }
+
+        boolean bookingCancelled = remaining.isEmpty();
+        if (bookingCancelled) {
+            // The last active passengers went - the booking itself is now
+            // cancelled and (if paid) fully refunded, exactly like a whole cancel.
+            bookingStateMachine.transitionBookingStatus(booking, BookingStatus.CANCELLED,
+                    "all passengers cancelled", "system");
+            if (booking.getPayment() != null && booking.getPayment().getPaymentStatus() == PaymentStatus.PAID) {
+                bookingValidator.validateRefundAllowed(booking);
+                bookingStateMachine.transitionPaymentStatus(booking.getPayment(), PaymentStatus.REFUNDED, "system");
+            }
+        } else {
+            // Booking lives on (rule 9): status is DERIVED as PARTIALLY_CANCELLED,
+            // its value is now the sum of the remaining fares, and refunds are
+            // calculated only for the cancelled passengers. The remaining
+            // passengers' check-in is untouched (rule 7) - only the whole-cancel
+            // path cascades check-in closure.
+            if (booking.getBookingStatus() != BookingStatus.PARTIALLY_CANCELLED) {
+                bookingStateMachine.transitionBookingStatus(booking, BookingStatus.PARTIALLY_CANCELLED,
+                        "passenger(s) cancelled", "system");
+            }
+            BigDecimal remainingTotal = remaining.stream()
+                    .map(BookingPassenger::getFare)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            booking.setTotalFare(remainingTotal);
+        }
+
+        Booking saved = bookingRepository.save(booking);
+        return new CancelPassengersResponse(BookingMapper.toResponse(saved), refundAmount, bookingCancelled);
     }
 
     @Override

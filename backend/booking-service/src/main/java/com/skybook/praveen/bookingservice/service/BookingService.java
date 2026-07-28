@@ -4,6 +4,7 @@ import com.skybook.praveen.bookingservice.domain.SeatAssignmentResult;
 import com.skybook.praveen.bookingservice.dto.request.BookingSearchRequest;
 import com.skybook.praveen.bookingservice.dto.request.CreateBookingRequest;
 import com.skybook.praveen.bookingservice.dto.response.BookingResponse;
+import com.skybook.praveen.bookingservice.dto.response.CancelPassengersResponse;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -67,6 +68,15 @@ public interface BookingService {
     PaymentConfirmation confirmBookingFromPayment(Long bookingId, String paymentReference);
 
     BookingResponse cancelBooking(Long id, String reason);
+
+    /**
+     * Cancel specific passengers off a booking. The booking survives with its
+     * remaining passengers; only when the last one is cancelled does the booking
+     * itself become CANCELLED. Enforces the guardian rule (a minor cannot remain
+     * without an adult). Returns the updated booking, the refund calculated for
+     * the cancelled passengers, and whether the booking was emptied.
+     */
+    CancelPassengersResponse cancelPassengers(Long bookingId, java.util.List<Long> bookingPassengerIds);
 
     BookingResponse completeBooking(Long id);
 

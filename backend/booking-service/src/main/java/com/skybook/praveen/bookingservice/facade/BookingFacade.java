@@ -11,6 +11,7 @@ import com.skybook.praveen.bookingservice.dto.request.CreateBookingRequest;
 import com.skybook.praveen.bookingservice.dto.request.PassengerBookingDetail;
 import com.skybook.praveen.bookingservice.dto.response.BookingPassengerResponse;
 import com.skybook.praveen.bookingservice.dto.response.BookingResponse;
+import com.skybook.praveen.bookingservice.dto.response.CancelPassengersResponse;
 import com.skybook.praveen.bookingservice.dto.response.QuoteResponse;
 import com.skybook.praveen.bookingservice.enums.FareType;
 import com.skybook.praveen.bookingservice.enums.SeatAssignmentMode;
@@ -147,6 +148,35 @@ public class BookingFacade {
         bookingEventProducer.publishBookingCancelled(booking, flightOrNull(booking.flightId()));
 
         return booking;
+    }
+
+    /**
+     * Cancel selected passengers (business rules 4-11). The service applies the
+     * guardian rule and derives the booking status (PARTIALLY_CANCELLED, or
+     * CANCELLED when the last passenger goes); this releases inventory ONLY for
+     * the cancelled passengers (rule 6) and notifies on a full cancel.
+     */
+    public CancelPassengersResponse cancelPassengers(Long bookingId, java.util.List<Long> bookingPassengerIds) {
+
+        CancelPassengersResponse result = bookingService.cancelPassengers(bookingId, bookingPassengerIds);
+        BookingResponse booking = result.booking();
+
+        // Release seats only for cancelled passengers - remaining passengers keep
+        // theirs (rules 6, 7). Quiet + idempotent, so re-running is harmless.
+        for (BookingPassengerResponse passenger : booking.passengers()) {
+            if (passenger.cancelled() && passenger.seatNumber() != null && !passenger.seatNumber().isBlank()) {
+                inventoryServiceClient.releaseHoldQuietly(booking.flightId(),
+                        passenger.seatNumber(), booking.id(), "passenger cancelled");
+                inventoryServiceClient.cancelReservationQuietly(booking.flightId(),
+                        passenger.seatNumber(), booking.id(), "passenger cancelled");
+            }
+        }
+
+        if (result.bookingCancelled()) {
+            bookingEventProducer.publishBookingCancelled(booking, flightOrNull(booking.flightId()));
+        }
+
+        return result;
     }
 
     /**

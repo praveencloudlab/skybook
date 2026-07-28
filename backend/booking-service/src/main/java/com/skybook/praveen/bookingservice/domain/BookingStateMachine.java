@@ -41,8 +41,15 @@ public class BookingStateMachine {
         // reachable ONLY from CREATED - a crash-orphaned draft (no seat, no
         // payment) is structurally unconfirmable, not just by convention.
         BOOKING_TRANSITIONS.put(BookingStatus.DRAFT, EnumSet.of(BookingStatus.CREATED, BookingStatus.CANCELLED));
-        BOOKING_TRANSITIONS.put(BookingStatus.CREATED, EnumSet.of(BookingStatus.CONFIRMED, BookingStatus.CANCELLED));
-        BOOKING_TRANSITIONS.put(BookingStatus.CONFIRMED, EnumSet.of(BookingStatus.CANCELLED, BookingStatus.COMPLETED));
+        BOOKING_TRANSITIONS.put(BookingStatus.CREATED,
+                EnumSet.of(BookingStatus.CONFIRMED, BookingStatus.PARTIALLY_CANCELLED, BookingStatus.CANCELLED));
+        BOOKING_TRANSITIONS.put(BookingStatus.CONFIRMED,
+                EnumSet.of(BookingStatus.PARTIALLY_CANCELLED, BookingStatus.CANCELLED, BookingStatus.COMPLETED));
+        // Partial cancellation is derived from passenger states (rule 11): from it
+        // a booking can lose its last passenger (-> CANCELLED), fly its remaining
+        // passengers (-> COMPLETED), or keep shedding passengers (self-loop).
+        BOOKING_TRANSITIONS.put(BookingStatus.PARTIALLY_CANCELLED, EnumSet.of(
+                BookingStatus.PARTIALLY_CANCELLED, BookingStatus.CANCELLED, BookingStatus.COMPLETED));
         BOOKING_TRANSITIONS.put(BookingStatus.CANCELLED, EnumSet.noneOf(BookingStatus.class));
         BOOKING_TRANSITIONS.put(BookingStatus.COMPLETED, EnumSet.noneOf(BookingStatus.class));
 

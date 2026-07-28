@@ -19,6 +19,13 @@ public enum BookingStatus {
 
     CONFIRMED,
 
+    /**
+     * At least one passenger cancelled, at least one still active (passenger-
+     * cancellation business rules 9-11). Derived from passenger states, never set
+     * by hand; the booking stays valid and its remaining passengers travel.
+     */
+    PARTIALLY_CANCELLED,
+
     CANCELLED,
 
     COMPLETED

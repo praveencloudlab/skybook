@@ -2,9 +2,11 @@ package com.skybook.praveen.bookingservice.controller;
 
 import com.skybook.praveen.bookingservice.dto.request.BookingSearchRequest;
 import com.skybook.praveen.bookingservice.dto.request.CancelBookingRequest;
+import com.skybook.praveen.bookingservice.dto.request.CancelPassengersRequest;
 import com.skybook.praveen.bookingservice.dto.request.CreateBookingRequest;
 import com.skybook.praveen.bookingservice.dto.request.QuoteRequest;
 import com.skybook.praveen.bookingservice.dto.response.BookingResponse;
+import com.skybook.praveen.bookingservice.dto.response.CancelPassengersResponse;
 import com.skybook.praveen.bookingservice.dto.response.QuoteResponse;
 import com.skybook.praveen.bookingservice.enums.BookingStatus;
 import com.skybook.praveen.bookingservice.enums.PaymentStatus;
@@ -138,6 +140,21 @@ public class BookingController {
         accessGuard.requireOwnerOfBooking(id);
         String reason = request != null ? request.reason() : null;
         return bookingFacade.cancelBooking(id, reason);
+    }
+
+    @Operation(
+            summary = "Cancel Passengers",
+            description = "Cancel one or more selected passengers off a booking. The booking survives "
+                    + "for the remaining passengers (status -> PARTIALLY_CANCELLED); only when the last "
+                    + "passenger is cancelled does the booking become CANCELLED. A child/infant cannot be "
+                    + "left without an adult. Seats are released and refunds calculated only for the "
+                    + "cancelled passengers.")
+    @PostMapping("/{id}/passengers/cancel")
+    public CancelPassengersResponse cancelPassengers(
+            @PathVariable Long id,
+            @Valid @RequestBody CancelPassengersRequest request) {
+        accessGuard.requireOwnerOfBooking(id);
+        return bookingFacade.cancelPassengers(id, request.bookingPassengerIds());
     }
 
     @Operation(summary = "Complete Booking", description = "Marks the booking as COMPLETED once the flight has flown.")

@@ -40,7 +40,15 @@ public record BookingPassengerResponse(
 
         BigDecimal fare,
 
-        CheckInStatus checkInStatus
+        CheckInStatus checkInStatus,
+
+        // Passenger-level cancellation (business rules): true once this traveller
+        // is cancelled off the booking. The booking survives until all are.
+        boolean cancelled,
+
+        // ADULT / CHILD / INFANT, derived from date of birth - drives the
+        // guardian rule (a minor can't remain without an adult).
+        String passengerType
 
 ) {
 }

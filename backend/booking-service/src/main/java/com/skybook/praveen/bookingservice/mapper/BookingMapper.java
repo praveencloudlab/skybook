@@ -51,7 +51,11 @@ public final class BookingMapper {
                 bookingPassenger.getChargedSeatAssignmentMode(),
                 bookingPassenger.getCurrency(),
                 bookingPassenger.getFare(),
-                bookingPassenger.getCheckInStatus()
+                bookingPassenger.getCheckInStatus(),
+                bookingPassenger.isCancelled(),
+                com.skybook.praveen.bookingservice.domain.PassengerCategory
+                        .of(bookingPassenger.getPassenger().getDob(), java.time.LocalDate.now())
+                        .name()
         );
     }
 

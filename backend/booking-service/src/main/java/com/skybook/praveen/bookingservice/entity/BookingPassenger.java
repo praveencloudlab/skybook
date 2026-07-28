@@ -108,6 +108,12 @@ public class BookingPassenger extends Auditable {
     @Column(nullable = false, length = 20)
     private CheckInStatus checkInStatus;
 
+    // Passenger-level cancellation: this traveller is off the booking, but the
+    // booking itself survives (unless every passenger is cancelled). Their seat
+    // is released and their fare is refunded; the rest keep everything.
+    @Column(nullable = false)
+    private boolean cancelled = false;
+
     @PrePersist
     public void prePersist() {
         if (checkInStatus == null) {

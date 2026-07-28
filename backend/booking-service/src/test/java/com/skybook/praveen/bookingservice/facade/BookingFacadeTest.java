@@ -76,7 +76,7 @@ class BookingFacadeTest {
                 TravelClass.ECONOMY, FareType.FLEXI, seat,
                 new BigDecimal("100.00"), BigDecimal.ZERO,
                 com.skybook.praveen.bookingservice.enums.SeatAssignmentMode.MANUAL, "USD",
-                new BigDecimal("100.00"), CheckInStatus.NOT_OPEN);
+                new BigDecimal("100.00"), CheckInStatus.NOT_OPEN, false, "ADULT");
     }
 
     private BookingResponse booking(BookingStatus status, String... seats) {
