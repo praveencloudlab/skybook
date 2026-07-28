@@ -18,7 +18,7 @@ import { printBoardingPass } from './printable';
  */
 const RED = '#e11b22';
 const BLUE = '#cfe0f5';
-const TBA = 'To Be Announced';
+const TBA = 'TBA';
 const DASH = '—';
 
 export function BoardingPassCard({
@@ -36,9 +36,23 @@ export function BoardingPassCard({
   const cabin = cabinLabel(record?.travelClass);
   const departDate = record?.departureTime ? dayMonthYear(record.departureTime) : DASH;
   const departTime = record?.departureTime ? time(record.departureTime) : DASH;
-  const boardTime = pass.boardingTime ? time(pass.boardingTime) : DASH;
-  // Gate-arrival advisory: 30 minutes before boarding starts, not boarding itself.
-  const gateBy = pass.boardingTime ? timeShift(pass.boardingTime, -30) : DASH;
+  // Boarding must read EARLIER than departure. checkin-service currently stamps
+  // boardingTime with the departure clock, so unless the server sends a
+  // genuinely earlier time, boarding is derived as departure - 40 minutes (and
+  // the gate advisory 30 minutes before that).
+  const serverBoard = pass.boardingTime ? time(pass.boardingTime) : null;
+  const boardTime =
+    serverBoard && departTime !== DASH && serverBoard < departTime
+      ? serverBoard
+      : record?.departureTime
+        ? timeShift(record.departureTime, -40)
+        : serverBoard ?? DASH;
+  const gateBy =
+    serverBoard && departTime !== DASH && serverBoard < departTime
+      ? timeShift(pass.boardingTime as string, -30)
+      : record?.departureTime
+        ? timeShift(record.departureTime, -70)
+        : DASH;
   const gate = pass.gate ?? TBA;
   const group = pass.boardingGroup ?? DASH;
   const issued = pass.issuedAt ? `${dayMonthYear(pass.issuedAt)} ${time(pass.issuedAt)}` : DASH;
@@ -110,16 +124,10 @@ export function BoardingPassCard({
             <Field label="DEPARTS" value={departTime} />
             <Field label="BOARDING" value={boardTime} accent />
 
-            <Field label="GATE" value={gate} small={gate === TBA} />
-            <Field label="TERMINAL" value={TBA} small />
+            <Field label="GATE" value={gate} />
             <Field label="SEAT" value={pass.seatNumber} mono />
             <Field label="CABIN" value={cabin} />
-
             <Field label="BOARDING GROUP" value={group} />
-            <Field label="SEQUENCE" value={DASH} mono />
-            <div className="col-span-2">
-              <FieldInner label="TICKET NUMBER" value={DASH} mono />
-            </div>
           </div>
 
           {/* Security notice + issue stamp */}
@@ -147,20 +155,19 @@ export function BoardingPassCard({
           <div className="relative space-y-3 p-4">
             <div>
               <div className="text-[9px] font-bold tracking-wide text-slate-400">PASSENGER</div>
-              <div className="text-base font-extrabold text-slate-900">{pass.passengerName.toUpperCase()}</div>
+              <div className="text-lg font-extrabold text-slate-900">{pass.passengerName.toUpperCase()}</div>
             </div>
 
             <div className="flex items-center justify-between">
               <StubField label="FLIGHT" value={pass.flightNumber} mono />
-              <span className="tabular flex items-center gap-1 text-xl font-extrabold text-slate-900">
+              <span className="tabular flex items-center gap-1 text-2xl font-extrabold text-slate-900">
                 {fromCode} <span style={{ color: RED }}>→</span> {toCode}
               </span>
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <StubField label="SEAT" value={pass.seatNumber} mono />
               <StubField label="GRP" value={group} />
-              <StubField label="SEQ" value={DASH} mono />
               <StubField label="BOARD" value={boardTime} accent />
             </div>
 

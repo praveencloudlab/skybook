@@ -86,7 +86,7 @@ function cityFor(code: string): string {
 export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrivalTime?: string): void {
   const RED = '#e11b22';
   const BLUE = '#cfe0f5';
-  const TBA = 'To Be Announced';
+  const TBA = 'TBA';
   const DASH = '&mdash;';
 
   const fromCode = pass.originAirportCode ?? record?.originAirportCode ?? '—';
@@ -97,9 +97,23 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
     : DASH;
   const departDate = record ? dayMonthYear(record.departureTime) : DASH;
   const departTime = record ? time(record.departureTime) : DASH;
-  const boardTime = pass.boardingTime ? time(pass.boardingTime) : DASH;
-  // Gate-arrival advisory: 30 minutes before boarding starts, not boarding itself.
-  const gateBy = pass.boardingTime ? timeShift(pass.boardingTime, -30) : DASH;
+  // Boarding must read EARLIER than departure. checkin-service currently stamps
+  // boardingTime with the departure clock, so unless the server sends a
+  // genuinely earlier time, boarding is derived as departure - 40 minutes (and
+  // the gate advisory 30 minutes before that).
+  const serverBoard = pass.boardingTime ? time(pass.boardingTime) : null;
+  const boardTime =
+    serverBoard && record && serverBoard < departTime
+      ? serverBoard
+      : record
+        ? timeShift(record.departureTime, -40)
+        : serverBoard ?? DASH;
+  const gateBy =
+    serverBoard && record && serverBoard < departTime
+      ? timeShift(pass.boardingTime as string, -30)
+      : record
+        ? timeShift(record.departureTime, -70)
+        : DASH;
   const gate = pass.gate ?? TBA;
   const group = pass.boardingGroup ?? DASH;
   const issued = pass.issuedAt ? `${dayMonthYear(pass.issuedAt)} ${time(pass.issuedAt)}` : DASH;
@@ -126,8 +140,15 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
   // sit flush with a dashed cut line between them, and the whole document is
   // self-contained (the QR is inline SVG, no external request) so it prints and
   // works offline.
+  //
+  // The .bp override matters: the shared print stylesheet gives every table a
+  // margin-top and every td padding + a bottom border (meant for the e-ticket's
+  // itinerary table). On the pass those leaked in as a white gap above the red
+  // header and stray divider lines - all layout paddings here are inline, so
+  // the defaults are zeroed.
   const body = `
-    <div style="border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;background:#fff;font-family:'Segoe UI',system-ui,sans-serif;">
+    <style>.bp table{margin:0;}.bp td,.bp th{padding:0;border-bottom:none;}</style>
+    <div class="bp" style="border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;background:#fff;font-family:'Segoe UI',system-ui,sans-serif;">
       <table style="width:100%;border-collapse:collapse;">
         <tr>
           <!-- Main coupon -->
@@ -171,9 +192,7 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
                   <table style="width:100%;border-collapse:collapse;">
                     <tr>${fld('FLIGHT', pass.flightNumber, { mono: true })}${fld('DATE', departDate)}${fld('DEPARTS', departTime)}${fld('BOARDING', boardTime, { accent: true })}</tr>
                     <tr><td colspan="4" style="height:14px;"></td></tr>
-                    <tr>${fld('GATE', gate)}${fld('TERMINAL', TBA)}${fld('SEAT', pass.seatNumber, { mono: true })}${fld('CABIN', cabin)}</tr>
-                    <tr><td colspan="4" style="height:14px;"></td></tr>
-                    <tr>${fld('BOARDING GROUP', group)}${fld('SEQUENCE', DASH, { mono: true })}${fld('TICKET NUMBER', DASH, { mono: true, span: 2 })}</tr>
+                    <tr>${fld('GATE', gate)}${fld('SEAT', pass.seatNumber, { mono: true })}${fld('CABIN', cabin)}${fld('BOARDING GROUP', group)}</tr>
                   </table>
                 </td>
               </tr>
@@ -198,17 +217,16 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
             </div>
             <div style="padding:16px 18px;">
               <div style="font-size:9px;font-weight:700;color:#94a3b8;">PASSENGER</div>
-              <div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:12px;">${pass.passengerName.toUpperCase()}</div>
+              <div style="font-size:18px;font-weight:800;color:#0f172a;margin-bottom:12px;">${pass.passengerName.toUpperCase()}</div>
 
               <table style="width:100%;border-collapse:collapse;margin-bottom:12px;"><tr>
                 ${stubFld('FLIGHT', pass.flightNumber, { mono: true })}
-                <td style="text-align:right;font-family:'Courier New',monospace;font-size:18px;font-weight:800;color:#0f172a;">${fromCode}<span style="color:${RED};">&rarr;</span>${toCode}</td>
+                <td style="text-align:right;font-family:'Courier New',monospace;font-size:22px;font-weight:800;color:#0f172a;">${fromCode}<span style="color:${RED};">&rarr;</span>${toCode}</td>
               </tr></table>
 
               <table style="width:100%;border-collapse:collapse;margin-bottom:14px;"><tr>
                 ${stubFld('SEAT', pass.seatNumber, { mono: true })}
                 ${stubFld('GRP', group)}
-                ${stubFld('SEQ', DASH, { mono: true })}
                 ${stubFld('BOARD', boardTime, { accent: true })}
               </tr></table>
 
