@@ -68,7 +68,8 @@ class BookingFacadeTest {
         // Real FareCalculator - pure/deterministic, already unit-tested.
         facade = new BookingFacade(flightServiceClient, inventoryServiceClient,
                 bookingService, bookingEventProducer,
-                new com.skybook.praveen.bookingservice.domain.FareCalculator());
+                new com.skybook.praveen.bookingservice.domain.FareCalculator(
+                        java.time.Clock.fixed(java.time.Instant.parse("2030-06-04T09:00:00Z"), java.time.ZoneOffset.UTC)));
     }
 
     private BookingPassengerResponse passenger(long id, String seat) {
@@ -107,7 +108,7 @@ class BookingFacadeTest {
 
     private final FlightDetails flight = new FlightDetails(
             10L, "AI131", "LHR", "DEL",
-            LocalDateTime.now().plusDays(7), LocalDateTime.now().plusDays(7).plusHours(9),
+            LocalDateTime.of(2030, 7, 16, 10, 0), LocalDateTime.of(2030, 7, 16, 19, 0),
             FlightBookingStatus.SCHEDULED);
 
     private void stubFlightOk() {
@@ -353,7 +354,7 @@ class BookingFacadeTest {
         void cancelledFlightIsNotQuotable() {
             when(flightServiceClient.getFlight(10L)).thenReturn(new FlightDetails(
                     10L, "AI131", "LHR", "DEL",
-                    LocalDateTime.now().plusDays(7), LocalDateTime.now().plusDays(7).plusHours(9),
+                    LocalDateTime.of(2030, 7, 16, 10, 0), LocalDateTime.of(2030, 7, 16, 19, 0),
                     FlightBookingStatus.CANCELLED));
 
             assertThatThrownBy(() -> facade.quoteFares(10L))

@@ -18,4 +18,20 @@ public interface FlightServiceFeignClient {
 
     @GetMapping("/api/flights/{id}")
     FlightDetails getFlight(@PathVariable("id") Long id);
+
+    /**
+     * Route availability for the fare calendar - public data on both ends.
+     * The ISO annotation matters: without it Feign renders LocalDate with the
+     * JVM locale (28/07/2026) and flight-service's ISO parser answers 400.
+     */
+    @GetMapping("/api/flights/calendar")
+    java.util.List<RouteCalendarDay> getRouteCalendar(
+            @org.springframework.web.bind.annotation.RequestParam("originAirportCode") String originAirportCode,
+            @org.springframework.web.bind.annotation.RequestParam("destinationAirportCode") String destinationAirportCode,
+            @org.springframework.web.bind.annotation.RequestParam("startDate")
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate startDate,
+            @org.springframework.web.bind.annotation.RequestParam("endDate")
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate endDate);
 }

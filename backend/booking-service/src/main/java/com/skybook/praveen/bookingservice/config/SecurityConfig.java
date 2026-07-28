@@ -52,6 +52,9 @@ public class SecurityConfig {
                         // and creates nothing; the booking it might lead to still
                         // needs a principal below.
                         .requestMatchers(HttpMethod.POST, "/api/bookings/quote").permitAll()
+                        // The fare calendar is the same public shopping data,
+                        // date-by-date - it reads nothing owned.
+                        .requestMatchers(HttpMethod.GET, "/api/bookings/fare-calendar").permitAll()
 
                         // Back-office - ADMIN. list-all + search + confirm + complete.
                         .requestMatchers(HttpMethod.GET, "/api/bookings").hasRole("ADMIN")

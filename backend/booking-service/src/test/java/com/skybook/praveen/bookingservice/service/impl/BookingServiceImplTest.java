@@ -72,7 +72,12 @@ class BookingServiceImplTest {
     private final PnrGenerator pnrGenerator = new PnrGenerator();
     private final BookingStateMachine bookingStateMachine = new BookingStateMachine();
     private final BookingValidator bookingValidator = new BookingValidator();
-    private final FareCalculator fareCalculator = new FareCalculator();
+    // Pinned clock: pricing is now demand-shaped (days to departure, weekend),
+    // so a floating now() would make expected totals depend on the run date.
+    // Tuesday 2030-06-04; NEUTRAL_DEPARTURE sits in the 1.00 baseline band.
+    private static final java.time.LocalDateTime NEUTRAL_DEPARTURE = java.time.LocalDateTime.of(2030, 7, 16, 10, 0);
+    private final FareCalculator fareCalculator = new FareCalculator(
+            java.time.Clock.fixed(java.time.Instant.parse("2030-06-04T09:00:00Z"), java.time.ZoneOffset.UTC));
 
     private BookingServiceImpl bookingService;
 
@@ -124,7 +129,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com");
+            BookingResponse response = bookingService.createDraftBooking(request, NEUTRAL_DEPARTURE, "owner@test.com");
 
             assertThat(response.bookingReference()).matches("^SB[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$");
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.DRAFT);
@@ -153,7 +158,7 @@ class BookingServiceImplTest {
                     passengerDetail("12B", TravelClass.BUSINESS, FareType.SAVER)   // 350 * 0.85 = 297.50
             ));
 
-            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com");
+            BookingResponse response = bookingService.createDraftBooking(request, NEUTRAL_DEPARTURE, "owner@test.com");
 
             assertThat(response.passengers()).hasSize(2);
             assertThat(response.totalFare()).isEqualByComparingTo("397.50");
@@ -171,7 +176,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail(null, TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com");
+            BookingResponse response = bookingService.createDraftBooking(request, NEUTRAL_DEPARTURE, "owner@test.com");
 
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.DRAFT);
             assertThat(response.passengers().get(0).seatNumber()).isNull();
@@ -205,7 +210,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            assertThatThrownBy(() -> bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com"))
+            assertThatThrownBy(() -> bookingService.createDraftBooking(request, NEUTRAL_DEPARTURE, "owner@test.com"))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("unique PNR");
         }
@@ -226,7 +231,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = serviceWithMockedPnr.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com");
+            BookingResponse response = serviceWithMockedPnr.createDraftBooking(request, NEUTRAL_DEPARTURE, "owner@test.com");
 
             assertThat(response.bookingReference()).isEqualTo("SBBBBB");
         }

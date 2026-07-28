@@ -104,7 +104,8 @@ public class BookingServiceImpl implements BookingService {
             // mode from the inventory hold results. The MANUAL placeholder mode
             // exists only because the column is NOT NULL - it is meaningless
             // until finalize overwrites it.
-            BigDecimal baseFare = fareCalculator.calculateFare(detail.travelClass(), detail.fareType());
+            BigDecimal baseFare = fareCalculator.calculateFare(
+                    detail.travelClass(), detail.fareType(), flightDepartureTime);
 
             BookingPassenger bookingPassenger = BookingPassenger.builder()
                     .booking(booking)

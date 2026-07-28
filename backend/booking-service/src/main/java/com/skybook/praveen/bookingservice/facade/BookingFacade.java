@@ -12,6 +12,7 @@ import com.skybook.praveen.bookingservice.dto.request.PassengerBookingDetail;
 import com.skybook.praveen.bookingservice.dto.response.BookingPassengerResponse;
 import com.skybook.praveen.bookingservice.dto.response.BookingResponse;
 import com.skybook.praveen.bookingservice.dto.response.CancelPassengersResponse;
+import com.skybook.praveen.bookingservice.dto.response.FareCalendarDayResponse;
 import com.skybook.praveen.bookingservice.dto.response.QuoteResponse;
 import com.skybook.praveen.bookingservice.enums.FareType;
 import com.skybook.praveen.bookingservice.enums.SeatAssignmentMode;
@@ -196,22 +197,48 @@ public class BookingFacade {
 
         List<QuoteResponse.CabinQuote> cabins = inventoryServiceClient.getCabins(flightId)
                 .map(available -> available.stream()
-                        .map(cabin -> cabinQuote(cabin.travelClass(), cabin.availableSeats()))
+                        .map(cabin -> cabinQuote(cabin.travelClass(), cabin.availableSeats(), flight.departureTime()))
                         .toList())
                 .orElseGet(() -> Arrays.stream(TravelClass.values())
-                        .map(travelClass -> cabinQuote(travelClass, null))
+                        .map(travelClass -> cabinQuote(travelClass, null, flight.departureTime()))
                         .toList());
 
         return new QuoteResponse(flightId, QUOTE_CURRENCY, cabins);
     }
 
-    private QuoteResponse.CabinQuote cabinQuote(TravelClass travelClass, Integer availableSeats) {
+    private QuoteResponse.CabinQuote cabinQuote(TravelClass travelClass, Integer availableSeats,
+                                                java.time.LocalDateTime departureTime) {
         Map<FareType, BigDecimal> baseFares = new EnumMap<>(FareType.class);
         for (FareType fareType : FareType.values()) {
-            baseFares.put(fareType, fareCalculator.calculateFare(travelClass, fareType));
+            baseFares.put(fareType, fareCalculator.calculateFare(travelClass, fareType, departureTime));
         }
         BigDecimal fromFare = baseFares.values().stream().min(BigDecimal::compareTo).orElseThrow();
         return new QuoteResponse.CabinQuote(travelClass, availableSeats, baseFares, fromFare);
+    }
+
+    /**
+     * Per-date lowest fares for a route (the fare calendar): flight-service
+     * says WHICH days have bookable departures, FareCalculator says what the
+     * chosen cabin's cheapest fare costs on each - the same deterministic
+     * formula every quote and booking uses, so the calendar can never disagree
+     * with checkout. Public shopping data, like /quote.
+     */
+    public List<FareCalendarDayResponse> fareCalendar(String originAirportCode,
+                                                      String destinationAirportCode,
+                                                      java.time.LocalDate startDate,
+                                                      java.time.LocalDate endDate,
+                                                      TravelClass travelClass) {
+        return flightServiceClient.getRouteCalendar(originAirportCode, destinationAirportCode, startDate, endDate)
+                .stream()
+                .map(day -> {
+                    BigDecimal cheapest = Arrays.stream(FareType.values())
+                            .map(fareType -> fareCalculator.calculateFare(
+                                    travelClass, fareType, day.date().atStartOfDay()))
+                            .min(BigDecimal::compareTo)
+                            .orElseThrow();
+                    return new FareCalendarDayResponse(day.date(), day.flights(), cheapest, QUOTE_CURRENCY);
+                })
+                .toList();
     }
 
     /**

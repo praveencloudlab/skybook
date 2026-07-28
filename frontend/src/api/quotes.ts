@@ -64,8 +64,39 @@ export interface Quote {
   cabins: CabinQuote[];
 }
 
+/** One day of the fare calendar: bookable departures + the cabin's cheapest fare. */
+export interface FareCalendarDay {
+  date: string; // yyyy-MM-dd
+  flights: number;
+  minFare: string | number;
+  currency: string;
+}
+
 export const quotesApi = {
   forFlight(flightId: number, signal?: AbortSignal): Promise<Quote> {
     return api.post<Quote>('/api/bookings/quote', { flightId }, { signal });
+  },
+
+  /**
+   * Per-date lowest fares for a route and cabin - the SAME pricing formula
+   * every quote and checkout uses, so the calendar never disagrees with what
+   * a booking actually costs.
+   */
+  fareCalendar(
+    origin: string,
+    destination: string,
+    startDate: string,
+    endDate: string,
+    travelClass: TravelClass,
+    signal?: AbortSignal,
+  ): Promise<FareCalendarDay[]> {
+    const query = new URLSearchParams({
+      originAirportCode: origin,
+      destinationAirportCode: destination,
+      startDate,
+      endDate,
+      travelClass,
+    });
+    return api.get<FareCalendarDay[]>(`/api/bookings/fare-calendar?${query}`, { signal });
   },
 };

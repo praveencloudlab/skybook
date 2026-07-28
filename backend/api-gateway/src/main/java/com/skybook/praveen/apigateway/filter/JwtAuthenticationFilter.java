@@ -70,6 +70,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // token and is rejected downstream.
             new PathPatternParser().parse("/api/flights/**"),
             new PathPatternParser().parse("/api/bookings/quote"),
+            new PathPatternParser().parse("/api/bookings/fare-calendar"),
             // Actuator moved to the internal management port (§7); /livez + /readyz
             // are the k8s probe paths re-exposed on this main port.
             new PathPatternParser().parse("/actuator/**"),

@@ -58,4 +58,25 @@ public class FlightServiceClient {
             throw new FlightServiceUnavailableException(flightId, unreachable);
         }
     }
+
+    /** Route availability for the fare calendar - same translation contract as {@link #getFlight}. */
+    public java.util.List<RouteCalendarDay> getRouteCalendar(
+            String originAirportCode, String destinationAirportCode,
+            java.time.LocalDate startDate, java.time.LocalDate endDate) {
+
+        try {
+            return resilientFlightClient.getRouteCalendar(
+                    originAirportCode, destinationAirportCode, startDate, endDate);
+
+        } catch (CallNotPermittedException | BulkheadFullException fastFail) {
+            log.warn("flight-service calendar call rejected without attempt ({}) for {}->{}",
+                    fastFail.getClass().getSimpleName(), originAirportCode, destinationAirportCode);
+            throw new FlightServiceUnavailableException(null, fastFail);
+
+        } catch (FeignException unreachable) {
+            log.error("Could not reach flight-service for {}->{} calendar",
+                    originAirportCode, destinationAirportCode, unreachable);
+            throw new FlightServiceUnavailableException(null, unreachable);
+        }
+    }
 }

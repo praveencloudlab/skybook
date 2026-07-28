@@ -60,6 +60,26 @@ public class BookingController {
     }
 
     @Operation(
+            summary = "Fare calendar",
+            description = "Per-date lowest fares for a route and cabin over a capped range - powers the "
+                    + "date-picker fare calendar. Public shopping data, like /quote."
+    )
+    @GetMapping("/fare-calendar")
+    public List<com.skybook.praveen.bookingservice.dto.response.FareCalendarDayResponse> fareCalendar(
+            @org.springframework.web.bind.annotation.RequestParam String originAirportCode,
+            @org.springframework.web.bind.annotation.RequestParam String destinationAirportCode,
+            @org.springframework.web.bind.annotation.RequestParam
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate startDate,
+            @org.springframework.web.bind.annotation.RequestParam
+            @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE)
+            java.time.LocalDate endDate,
+            @org.springframework.web.bind.annotation.RequestParam
+            com.skybook.praveen.bookingservice.enums.TravelClass travelClass) {
+        return bookingFacade.fareCalendar(originAirportCode, destinationAirportCode, startDate, endDate, travelClass);
+    }
+
+    @Operation(
             summary = "My Bookings",
             description = "Every booking belonging to the authenticated caller, newest first. "
                     + "This is the passenger-facing counterpart to the ADMIN-only list-all."

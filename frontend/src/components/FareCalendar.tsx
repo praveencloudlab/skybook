@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { flightsApi } from '../api/flights';
 import { quotesApi, type TravelClass } from '../api/quotes';
 import { addDaysIso, todayIso } from '../lib/format';
 
@@ -35,8 +34,9 @@ export function FareCalendar({
   const [open, setOpen] = useState(false);
   // First visible month, as an offset from the current month.
   const [offset, setOffset] = useState(() => monthDiff(new Date(), new Date(`${value}T00:00:00`)));
+  // date -> that day's own cheapest fare (demand-shaped: near dates pricier,
+  // far dates discounted, Fri/Sun a touch more).
   const [days, setDays] = useState<Map<string, number>>(new Map());
-  const [minFare, setMinFare] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -68,7 +68,8 @@ export function FareCalendar({
     return [0, 1, 2].map((i) => new Date(base.getFullYear(), base.getMonth() + offset + i, 1));
   }, [offset]);
 
-  // Availability for the visible window - one call covers all three months.
+  // Per-date fares for the visible window - one call covers all three months,
+  // priced by the same formula checkout uses, for the chosen cabin.
   useEffect(() => {
     if (!open || origin === destination) {
       return;
@@ -77,40 +78,13 @@ export function FareCalendar({
     const start = iso(months[0]);
     const end = iso(new Date(months[2].getFullYear(), months[2].getMonth() + 1, 0));
     setLoading(true);
-    flightsApi
-      .calendar(origin, destination, start, end, controller.signal)
-      .then((list) => setDays(new Map(list.map((d) => [d.date, d.flights]))))
+    quotesApi
+      .fareCalendar(origin, destination, start, end, cabin, controller.signal)
+      .then((list) => setDays(new Map(list.map((d) => [d.date, Number(d.minFare)]))))
       .catch(() => {})
       .finally(() => setLoading(false));
     return () => controller.abort();
-  }, [open, origin, destination, months]);
-
-  // One live quote prices the whole calendar (deterministic per cabin): find
-  // the first bookable date, quote its first flight, take the cabin's lowest.
-  useEffect(() => {
-    if (!open || days.size === 0) {
-      return;
-    }
-    const controller = new AbortController();
-    const firstDate = [...days.keys()].sort()[0];
-    flightsApi
-      .search({ origin, destination, date: firstDate }, controller.signal)
-      .then((flights) => (flights[0] ? quotesApi.forFlight(flights[0].id, controller.signal) : null))
-      .then((quote) => {
-        if (!quote) {
-          return;
-        }
-        const cabinQuote = quote.cabins.find((c) => c.travelClass === cabin);
-        if (!cabinQuote) {
-          setMinFare(null);
-          return;
-        }
-        const fares = Object.values(cabinQuote.baseFares).map(Number).filter((n) => n > 0);
-        setMinFare(fares.length ? Math.min(...fares) : null);
-      })
-      .catch(() => setMinFare(null));
-    return () => controller.abort();
-  }, [open, days, origin, destination, cabin]);
+  }, [open, origin, destination, cabin, months]);
 
   const today = todayIso();
   const minDate = addDaysIso(today, 1);
@@ -164,7 +138,6 @@ export function FareCalendar({
                   key={iso(month)}
                   month={month}
                   days={days}
-                  minFare={minFare}
                   minDate={minDate}
                   value={value}
                   onChange={onChange}
@@ -208,15 +181,14 @@ export function FareCalendar({
 function MonthGrid({
   month,
   days,
-  minFare,
   minDate,
   value,
   onChange,
   className = '',
 }: {
   month: Date;
+  /** date -> that day's cheapest fare. */
   days: Map<string, number>;
-  minFare: number | null;
   minDate: string;
   value: string;
   onChange: (date: string) => void;
@@ -248,7 +220,8 @@ function MonthGrid({
           if (!cell) {
             return <div key={`gap-${index}`} />;
           }
-          const bookable = cell.date >= minDate && days.has(cell.date);
+          const fare = days.get(cell.date);
+          const bookable = cell.date >= minDate && fare !== undefined;
           const selected = cell.date === value;
           return (
             <button
@@ -267,9 +240,9 @@ function MonthGrid({
               }
             >
               <span className="tabular leading-tight">{cell.day}</span>
-              {bookable && minFare !== null ? (
+              {bookable && fare !== undefined ? (
                 <span className="tabular text-[10px] font-medium leading-tight text-slate-500">
-                  {Math.round(minFare).toLocaleString()}
+                  {Math.round(fare).toLocaleString()}
                 </span>
               ) : null}
             </button>
