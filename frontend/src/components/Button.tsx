@@ -14,17 +14,16 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANTS = {
-  // Azure-to-violet gradient with a coloured glow - the CTA carries light.
+  // The metasearch CTA: one flat, saturated action blue that simply darkens
+  // on hover. No gradient, no glow, no lift - the colour is the emphasis.
   primary:
-    'bg-gradient-to-r from-brand-600 via-indigo-600 to-violet-600 text-white shadow-[var(--shadow-btn)] hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 focus-visible:ring-brand-500/50 disabled:from-brand-300 disabled:via-brand-300 disabled:to-brand-300 disabled:shadow-none disabled:hover:translate-y-0 disabled:hover:brightness-100',
+    'bg-brand-600 text-white shadow-[var(--shadow-btn)] hover:bg-brand-700 active:bg-brand-800 focus-visible:ring-brand-500/50 disabled:bg-brand-300 disabled:shadow-none',
   secondary:
-    'border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 hover:-translate-y-0.5 active:translate-y-0 focus-visible:ring-slate-400/40 disabled:text-slate-400 disabled:hover:translate-y-0',
+    'border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-400 focus-visible:ring-slate-400/40 disabled:text-slate-400',
   ghost:
     'text-brand-700 hover:bg-brand-50 focus-visible:ring-brand-500/30 disabled:text-slate-400',
 } as const;
 
-// Pills, not rounded rectangles - the single strongest "current-era" cue a
-// control can carry, and generous horizontal padding to let them breathe.
 const SIZES = {
   md: 'px-5 py-2.5 text-sm',
   lg: 'px-7 py-3 text-base',
@@ -46,7 +45,7 @@ export function Button({
       aria-busy={busy || undefined}
       disabled={disabled || busy}
       className={
-        'inline-flex items-center justify-center gap-2 rounded-full font-semibold ' +
+        'inline-flex items-center justify-center gap-2 rounded-xl font-bold ' +
         'transition-all duration-150 outline-none focus-visible:ring-2 disabled:cursor-not-allowed ' +
         SIZES[size] +
         ' ' +

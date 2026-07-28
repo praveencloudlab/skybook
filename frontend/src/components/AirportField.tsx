@@ -18,13 +18,15 @@ interface AirportFieldProps {
   /** The other end of the trip - hidden so the same airport can't be both. */
   exclude?: string;
   placeholder?: string;
+  /** 'dark' when the field sits on a navy band - the caption reads in white. */
+  tone?: 'light' | 'dark';
 }
 
 function airportFor(code: string): { code: string; city: string } | undefined {
   return AIRPORTS.find((airport) => airport.code === code);
 }
 
-export function AirportField({ label, value, onChange, exclude, placeholder }: AirportFieldProps) {
+export function AirportField({ label, value, onChange, exclude, placeholder, tone = 'light' }: AirportFieldProps) {
   const inputId = useId();
   const listId = useId();
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -93,7 +95,10 @@ export function AirportField({ label, value, onChange, exclude, placeholder }: A
     <div ref={wrapRef} className="relative">
       <label
         htmlFor={inputId}
-        className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500"
+        className={
+          'mb-1 block text-[11px] font-semibold uppercase tracking-wide ' +
+          (tone === 'dark' ? 'text-white/80' : 'text-slate-500')
+        }
       >
         {label}
       </label>

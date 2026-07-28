@@ -134,7 +134,7 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
               className="group flex w-full items-center gap-4 overflow-hidden rounded-2xl bg-white px-5 py-4 text-left ring-1 ring-slate-200 transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[var(--shadow-lift)] hover:ring-brand-200"
             >
               {/* Route monogram - the trip's visual anchor. */}
-              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-sm">
+              <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand-600">
                 <svg viewBox="0 0 24 24" className="h-5 w-5 fill-white" aria-hidden="true">
                   <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
                 </svg>

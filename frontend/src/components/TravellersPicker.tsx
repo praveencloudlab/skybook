@@ -41,9 +41,12 @@ const MAX_PARTY = 9;
 export function TravellersPicker({
   value,
   onChange,
+  tone = 'light',
 }: {
   value: Travellers;
   onChange: (value: Travellers) => void;
+  /** 'dark' when the control sits on a navy band - the caption reads in white. */
+  tone?: 'light' | 'dark';
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -96,7 +99,12 @@ export function TravellersPicker({
 
   return (
     <div ref={rootRef} className="relative text-sm">
-      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+      <span
+        className={
+          'mb-1 block text-[11px] font-semibold uppercase tracking-wide ' +
+          (tone === 'dark' ? 'text-white/80' : 'text-slate-500')
+        }
+      >
         Travellers
       </span>
       <button

@@ -70,7 +70,7 @@ function Stat({ value, suffix, label }: { value: number; suffix?: string; label:
   const shown = useCountUp(value);
   return (
     <div>
-      <div className="tabular display bg-gradient-to-r from-white to-sky-200 bg-clip-text text-3xl text-transparent sm:text-4xl">
+      <div className="tabular display text-3xl text-white sm:text-4xl">
         {shown.toLocaleString()}
         {suffix}
       </div>
@@ -122,15 +122,16 @@ export function LandingPage() {
             carry a boarding pass you can scan. No account needed to look.
           </p>
 
-          {/* Embedded search */}
+          {/* Embedded search - white field tiles directly on the navy, the
+              metasearch signature. */}
           <form
             onSubmit={search}
-            className="glass-card relative z-20 mt-10 grid items-end gap-3 p-5 md:grid-cols-[1fr_1fr_auto_auto]"
+            className="relative z-20 mt-9 grid items-end gap-2 md:grid-cols-[1fr_1fr_auto_auto]"
           >
-            <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
-            <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} />
+            <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} tone="dark" />
+            <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} tone="dark" />
             <label className="text-sm">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-white/80">
                 Depart
               </span>
               <input
@@ -138,13 +139,13 @@ export function LandingPage() {
                 value={date}
                 min={todayIso()}
                 onChange={(event) => setDate(event.target.value)}
-                className="tabular w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
+                className="tabular w-full rounded-xl border border-transparent bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-brand-400 focus:ring-4 focus:ring-brand-400/25"
               />
             </label>
             <button
               type="submit"
               disabled={sameAirport}
-              className="inline-flex h-[44px] items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-600 via-indigo-600 to-violet-600 px-7 text-sm font-semibold text-white shadow-[var(--shadow-btn)] transition-all hover:brightness-110 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:from-slate-300 disabled:via-slate-300 disabled:to-slate-300 disabled:hover:translate-y-0"
+              className="inline-flex h-[44px] items-center justify-center gap-2 rounded-xl bg-brand-600 px-7 text-sm font-bold text-white transition-colors hover:bg-brand-500 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-brand-800 disabled:text-white/50"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
                 <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14z" />
@@ -152,7 +153,7 @@ export function LandingPage() {
               Search
             </button>
             {sameAirport ? (
-              <p className="text-sm text-red-600 md:col-span-4">Origin and destination must be different.</p>
+              <p className="text-sm font-medium text-red-300 md:col-span-4">Origin and destination must be different.</p>
             ) : null}
           </form>
 
@@ -245,7 +246,7 @@ export function LandingPage() {
             </p>
             <Link
               to="/search"
-              className="mt-7 inline-flex items-center gap-2 rounded-full bg-white px-7 py-3 text-sm font-semibold text-brand-900 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-50"
+              className="mt-7 inline-flex items-center gap-2 rounded-xl bg-brand-600 px-7 py-3 text-sm font-bold text-white transition-colors hover:bg-brand-500"
             >
               Search flights →
             </Link>

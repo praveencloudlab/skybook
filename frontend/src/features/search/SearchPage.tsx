@@ -132,78 +132,78 @@ export function SearchPage({
           <circle cx="900" cy="72" r="3.5" fill="white" fillOpacity="0.6" />
         </svg>
 
-        <div className="relative mx-auto max-w-6xl px-6 pt-14 pb-26">
+        <div className="relative mx-auto max-w-6xl px-6 pb-10 pt-12">
           <h1 className="display text-4xl text-white sm:text-5xl">
-            Search <span className="gradient-text">flights</span>
+            Search flights
           </h1>
-          <p className="mt-3 max-w-md text-sm text-white/60">
+          <p className="mt-3 max-w-md text-sm text-white/70">
             A year of real schedules across 30 routes. Compare fares, pick your seat from the actual
             cabin — no account needed to look.
           </p>
+
+          {/* The metasearch signature: white field tiles sitting DIRECTLY on
+              the navy band, captions in white, one bold action-blue button.
+              z-20 so the travellers popover stacks above the results below. */}
+          <form
+            onSubmit={handleSubmit}
+            className="relative z-20 mt-7 grid items-end gap-2 md:grid-cols-[1fr_auto_1fr_auto_auto_auto]"
+          >
+            <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} tone="dark" />
+
+            {/* Swap - the little control between the two airport fields. */}
+            <button
+              type="button"
+              onClick={swap}
+              aria-label="Swap origin and destination"
+              className="mb-0.5 hidden h-10 w-10 shrink-0 place-items-center self-end rounded-full border border-white/25 bg-white/10 text-white/80 transition hover:bg-white/20 hover:text-white md:grid"
+            >
+              <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                <path d="M7 7h11l-3-3 1.4-1.4L21.8 8 16.4 13.4 15 12l3-3H7V7zm10 10H6l3 3-1.4 1.4L2.2 16 7.6 10.6 9 12l-3 3h11v2z" />
+              </svg>
+            </button>
+
+            <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} tone="dark" />
+
+            <label className="text-sm">
+              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-white/80">
+                Depart
+              </span>
+              <input
+                type="date"
+                value={date}
+                min={todayIso()}
+                onChange={(event) => setDate(event.target.value)}
+                className="tabular w-full rounded-xl border border-transparent bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-brand-400 focus:ring-4 focus:ring-brand-400/25"
+              />
+            </label>
+
+            <TravellersPicker value={travellers} onChange={setTravellers} tone="dark" />
+
+            <button
+              type="submit"
+              disabled={sameAirport || busy}
+              className="inline-flex h-[44px] items-center justify-center gap-2 rounded-xl bg-brand-600 px-7 text-sm font-bold text-white transition-colors hover:bg-brand-500 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-brand-800 disabled:text-white/50"
+            >
+              {busy ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
+              ) : (
+                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                  <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14z" />
+                </svg>
+              )}
+              Search
+            </button>
+
+            {sameAirport ? (
+              <p className="text-sm font-medium text-red-300 md:col-span-6">
+                Origin and destination must be different.
+              </p>
+            ) : null}
+          </form>
         </div>
       </div>
 
-      <main className="mx-auto max-w-6xl px-6 pb-12">
-        {/* Search bar, lifted onto the band. */}
-        <form
-          onSubmit={handleSubmit}
-          // z-20 matters: backdrop-blur makes this card its own stacking
-          // context, and without a z-index the results section (later in the
-          // DOM) paints OVER the travellers popover that opens from here.
-          className="glass-card relative z-20 -mt-14 grid items-end gap-3 p-5 md:grid-cols-[1fr_auto_1fr_auto_auto_auto]"
-        >
-          <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
-
-          {/* Swap - the little control the screenshot has between the two fields. */}
-          <button
-            type="button"
-            onClick={swap}
-            aria-label="Swap origin and destination"
-            className="mb-0.5 hidden h-10 w-10 shrink-0 place-items-center self-end rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-brand-300 hover:text-brand-600 md:grid"
-          >
-            <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
-              <path d="M7 7h11l-3-3 1.4-1.4L21.8 8 16.4 13.4 15 12l3-3H7V7zm10 10H6l3 3-1.4 1.4L2.2 16 7.6 10.6 9 12l-3 3h11v2z" />
-            </svg>
-          </button>
-
-          <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} />
-
-          <label className="text-sm">
-            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              Depart
-            </span>
-            <input
-              type="date"
-              value={date}
-              min={todayIso()}
-              onChange={(event) => setDate(event.target.value)}
-              className="tabular w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
-            />
-          </label>
-
-          <TravellersPicker value={travellers} onChange={setTravellers} />
-
-          <button
-            type="submit"
-            disabled={sameAirport || busy}
-            className="inline-flex h-[44px] items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-600 via-indigo-600 to-violet-600 px-7 text-sm font-semibold text-white shadow-[var(--shadow-btn)] transition-all hover:brightness-110 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:from-brand-300 disabled:via-brand-300 disabled:to-brand-300 disabled:shadow-none disabled:hover:translate-y-0"
-          >
-            {busy ? (
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
-            ) : (
-              <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
-                <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14z" />
-              </svg>
-            )}
-            Search
-          </button>
-
-          {sameAirport ? (
-            <p className="text-sm text-red-600 md:col-span-6">
-              Origin and destination must be different.
-            </p>
-          ) : null}
-        </form>
+      <main className="mx-auto max-w-6xl px-6 pb-12 pt-6">
 
         {/* Before any search: curated routes that always return data (§10.4). */}
         {results === null && !busy ? (
