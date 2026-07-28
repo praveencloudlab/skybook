@@ -16,10 +16,13 @@ import { FareTable } from './FareTable';
  */
 export function FlightQuotePage({
   flight,
+  preferredCabin,
   onBack,
   onChoose,
 }: {
   flight: Flight;
+  /** The cabin chosen in the search widget - emphasised in the fare grid. */
+  preferredCabin?: TravelClass;
   onBack: () => void;
   // Carries the PRICE, not just the labels: the seat screen shows a running
   // total, and re-deriving the fare there would mean a second quote call that
@@ -81,6 +84,7 @@ export function FlightQuotePage({
           ) : quote ? (
             <FareTable
               quote={quote}
+              highlightCabin={preferredCabin}
               onSelect={
                 onChoose
                   ? (cabin, fare) => {

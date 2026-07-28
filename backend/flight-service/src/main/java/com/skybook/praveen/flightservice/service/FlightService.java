@@ -52,6 +52,19 @@ public interface FlightService {
             LocalDate endDate
     );
 
+    /**
+     * A route's availability calendar: bookable-departure counts per day over
+     * [startDate, endDate], for the fare-calendar date picker. Days without
+     * flights are absent. The range is capped server-side (§ the calendar shows
+     * three months at a time) so a caller cannot request years of schedule.
+     */
+    List<com.skybook.praveen.flightservice.dto.response.RouteCalendarDayResponse> getRouteCalendar(
+            String originAirportCode,
+            String destinationAirportCode,
+            LocalDate startDate,
+            LocalDate endDate
+    );
+
     // =====================================================
     // Flight Operations
     // =====================================================

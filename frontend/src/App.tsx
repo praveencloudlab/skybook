@@ -278,6 +278,9 @@ function BookingJourney() {
   const [step, setStep] = useState<Step>('search');
   const [flight, setFlight] = useState<Flight | null>(null);
   const [travellers, setTravellers] = useState<Travellers>(ONE_ADULT);
+  // The cabin chosen in the search widget - preselects (never hides) a cabin
+  // on the fare step.
+  const [preferredCabin, setPreferredCabin] = useState<TravelClass>('ECONOMY');
   const [choice, setChoice] = useState<FareChoice | null>(null);
   // One chosen seat per traveller, in passenger order; shorter than the party
   // means the rest are auto-assigned free at check-in.
@@ -357,6 +360,7 @@ function BookingJourney() {
     return (
       <FlightQuotePage
         flight={flight}
+        preferredCabin={preferredCabin}
         onBack={() => setStep('search')}
         onChoose={(chosen) => {
           setChoice(chosen);
@@ -368,9 +372,10 @@ function BookingJourney() {
 
   return (
     <SearchPage
-      onSelectFlight={(chosen, party) => {
+      onSelectFlight={(chosen, party, cabin) => {
         setFlight(chosen);
         setTravellers(party);
+        setPreferredCabin(cabin);
         setSeats([]);
         setStep('fares');
       }}

@@ -96,6 +96,29 @@ public class FlightController {
     }
 
     @Operation(
+            summary = "Route availability calendar",
+            description = "Bookable-departure counts per day for a route over a capped date range - powers the fare-calendar date picker."
+    )
+    @GetMapping("/calendar")
+    public List<com.skybook.praveen.flightservice.dto.response.RouteCalendarDayResponse> getRouteCalendar(
+            @RequestParam String originAirportCode,
+            @RequestParam String destinationAirportCode,
+            @RequestParam
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate startDate,
+
+            @RequestParam
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate endDate) {
+
+        return flightService.getRouteCalendar(
+                originAirportCode,
+                destinationAirportCode,
+                startDate,
+                endDate);
+    }
+
+    @Operation(
             summary = "Get Flights By Status",
             description = "Returns all flights for the given status."
     )

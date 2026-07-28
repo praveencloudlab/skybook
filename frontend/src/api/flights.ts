@@ -33,6 +33,12 @@ export interface SearchCriteria {
   date: string; // yyyy-MM-dd
 }
 
+/** One day of a route's availability calendar - days with no flights are absent. */
+export interface RouteCalendarDay {
+  date: string; // yyyy-MM-dd
+  flights: number;
+}
+
 export const flightsApi = {
   search({ origin, destination, date }: SearchCriteria, signal?: AbortSignal): Promise<Flight[]> {
     const query = new URLSearchParams({
@@ -45,6 +51,23 @@ export const flightsApi = {
 
   byId(id: number, signal?: AbortSignal): Promise<Flight> {
     return api.get<Flight>(`/api/flights/${id}`, { signal });
+  },
+
+  /** Bookable-departure counts per day, for the fare-calendar date picker. */
+  calendar(
+    origin: string,
+    destination: string,
+    startDate: string,
+    endDate: string,
+    signal?: AbortSignal,
+  ): Promise<RouteCalendarDay[]> {
+    const query = new URLSearchParams({
+      originAirportCode: origin,
+      destinationAirportCode: destination,
+      startDate,
+      endDate,
+    });
+    return api.get<RouteCalendarDay[]>(`/api/flights/calendar?${query}`, { signal });
   },
 };
 

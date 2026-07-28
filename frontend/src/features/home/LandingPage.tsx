@@ -1,7 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AirportField } from '../../components/AirportField';
-import { addDaysIso, todayIso } from '../../lib/format';
+import { BookingWidget, type BookingSearch } from '../../components/BookingWidget';
 
 /**
  * Home / landing (FRONTEND_MODULE.md Module 2).
@@ -81,17 +80,18 @@ function Stat({ value, suffix, label }: { value: number; suffix?: string; label:
 
 export function LandingPage() {
   const navigate = useNavigate();
-  const [origin, setOrigin] = useState('LHR');
-  const [destination, setDestination] = useState('DXB');
-  const [date, setDate] = useState(addDaysIso(todayIso(), 1));
-  const sameAirport = origin === destination;
 
-  function search(event: FormEvent) {
-    event.preventDefault();
-    if (sameAirport) {
-      return;
-    }
-    navigate(`/search?from=${origin}&to=${destination}&date=${date}`);
+  function search(s: BookingSearch) {
+    const query = new URLSearchParams({
+      from: s.origin,
+      to: s.destination,
+      date: s.date,
+      adults: String(s.travellers.adults),
+      children: String(s.travellers.children),
+      infants: String(s.travellers.infants),
+      cabin: s.cabin,
+    });
+    navigate(`/search?${query}`);
   }
 
   return (
@@ -122,64 +122,11 @@ export function LandingPage() {
             carry a boarding pass you can scan. No account needed to look.
           </p>
 
-          {/* Embedded search - the premium-carrier booking widget: trip-type
-              tabs docked to a white panel of outlined field tiles with gold
-              icon discs, and the gold Search pill. */}
-          <form onSubmit={search} className="relative z-20 mt-9">
-            <div className="inline-flex items-center gap-1 rounded-t-2xl bg-white px-2 pt-2">
-              <span
-                aria-disabled="true"
-                title="Not available yet"
-                className="cursor-not-allowed rounded-full px-4 py-1.5 text-sm font-semibold text-slate-400"
-              >
-                Round trip
-              </span>
-              <span className="rounded-full bg-brand-900 px-4 py-1.5 text-sm font-semibold text-white">
-                One way
-              </span>
-              <span
-                aria-disabled="true"
-                title="Not available yet"
-                className="cursor-not-allowed rounded-full px-4 py-1.5 text-sm font-semibold text-slate-400"
-              >
-                Multi-city
-              </span>
-            </div>
-
-            <div className="rounded-b-2xl rounded-tr-2xl bg-white p-4 shadow-[var(--shadow-float)]">
-              <div className="grid items-center gap-2 md:grid-cols-[1fr_1fr_1fr_auto]">
-                <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
-                <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} />
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2 transition focus-within:border-brand-900 focus-within:ring-1 focus-within:ring-brand-900 hover:border-slate-400">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-500 text-white">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
-                      <path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V10h14zM5 8V6h14v2z" />
-                    </svg>
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-semibold text-slate-500">Travelling when?</span>
-                    <input
-                      type="date"
-                      value={date}
-                      min={todayIso()}
-                      onChange={(event) => setDate(event.target.value)}
-                      className="tabular w-full border-0 bg-transparent p-0 text-[15px] font-bold text-slate-900 outline-none"
-                    />
-                  </span>
-                </label>
-                <button
-                  type="submit"
-                  disabled={sameAirport}
-                  className="inline-flex h-[52px] items-center justify-center rounded-full bg-accent-500 px-8 text-base font-bold text-white transition-colors hover:bg-accent-600 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-accent-200"
-                >
-                  Search
-                </button>
-              </div>
-              {sameAirport ? (
-                <p className="mt-2 text-sm font-medium text-red-600">Origin and destination must be different.</p>
-              ) : null}
-            </div>
-          </form>
+          {/* Embedded search - the shared premium-carrier booking widget
+              (tabs, gold-disc tiles, Guests-and-Cabin panel, fare calendar). */}
+          <div className="mt-9">
+            <BookingWidget onSearch={search} />
+          </div>
 
           {/* Stats */}
           <div className="mt-12 grid grid-cols-2 gap-6 border-t border-white/10 pt-8 sm:grid-cols-4">

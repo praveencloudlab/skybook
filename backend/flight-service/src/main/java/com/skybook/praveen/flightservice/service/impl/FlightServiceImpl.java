@@ -3,6 +3,7 @@ package com.skybook.praveen.flightservice.service.impl;
 import com.skybook.praveen.flightservice.dto.request.CreateFlightRequest;
 import com.skybook.praveen.flightservice.dto.request.UpdateFlightRequest;
 import com.skybook.praveen.flightservice.dto.response.FlightResponse;
+import com.skybook.praveen.flightservice.dto.response.RouteCalendarDayResponse;
 import com.skybook.praveen.flightservice.entity.Flight;
 import com.skybook.praveen.flightservice.enums.FlightStatus;
 import com.skybook.praveen.flightservice.exception.FlightNotFoundException;
@@ -156,6 +157,40 @@ public class FlightServiceImpl implements FlightService {
                         end)
                 .stream()
                 .map(FlightMapper::toResponse)
+                .toList();
+    }
+
+    @Override
+    public List<RouteCalendarDayResponse> getRouteCalendar(
+            String originAirportCode,
+            String destinationAirportCode,
+            LocalDate startDate,
+            LocalDate endDate) {
+
+        if (endDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("endDate must not be before startDate");
+        }
+        // Three visible months plus paging slack; the cap keeps a single public,
+        // tokenless call from walking the whole year of schedule.
+        if (startDate.plusDays(124).isBefore(endDate)) {
+            throw new IllegalArgumentException("Calendar range must not exceed 124 days");
+        }
+
+        return flightRepository
+                .findByOriginAirportCodeAndDestinationAirportCodeAndDepartureTimeBetween(
+                        originAirportCode.toUpperCase(),
+                        destinationAirportCode.toUpperCase(),
+                        startDate.atStartOfDay(),
+                        endDate.plusDays(1).atStartOfDay().minusNanos(1))
+                .stream()
+                .filter(flight -> flight.getStatus() != FlightStatus.CANCELLED)
+                .collect(java.util.stream.Collectors.groupingBy(
+                        flight -> flight.getDepartureTime().toLocalDate(),
+                        java.util.TreeMap::new,
+                        java.util.stream.Collectors.counting()))
+                .entrySet()
+                .stream()
+                .map(entry -> new RouteCalendarDayResponse(entry.getKey(), entry.getValue().intValue()))
                 .toList();
     }
 

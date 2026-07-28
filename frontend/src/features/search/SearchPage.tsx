@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   AIRPORTS,
@@ -7,10 +7,11 @@ import {
   type Flight,
   type SearchCriteria,
 } from '../../api/flights';
+import type { TravelClass } from '../../api/quotes';
 import { ErrorAlert } from '../../components/Alert';
-import { AirportField } from '../../components/AirportField';
+import { BookingWidget, type BookingSearch } from '../../components/BookingWidget';
 import { FlightCard } from '../../components/FlightCard';
-import { ONE_ADULT, TravellersPicker, type Travellers } from '../../components/TravellersPicker';
+import type { Travellers } from '../../components/TravellersPicker';
 import { ApiError } from '../../lib/errors';
 import { addDaysIso, dayAndMonth, todayIso } from '../../lib/format';
 import { SearchFilters } from './SearchFilters';
@@ -30,23 +31,42 @@ function knownCode(code: string | null, fallback: string): string {
   return code && AIRPORTS.some((airport) => airport.code === code) ? code : fallback;
 }
 
+const CABINS: TravelClass[] = ['ECONOMY', 'PREMIUM_ECONOMY', 'BUSINESS', 'FIRST'];
+
+function knownCabin(value: string | null): TravelClass {
+  return CABINS.includes(value as TravelClass) ? (value as TravelClass) : 'ECONOMY';
+}
+
 export function SearchPage({
   onSelectFlight,
 }: {
-  onSelectFlight?: (flight: Flight, travellers: Travellers) => void;
+  onSelectFlight?: (flight: Flight, travellers: Travellers, cabin: TravelClass) => void;
 }) {
-  // Deep links from the landing page (its hero search and destination cards)
-  // arrive as ?from=&to=&date= and prefill + auto-run the search below.
+  // Deep links from the landing page (its hero widget and destination cards)
+  // arrive as ?from=&to=&date=&adults=&children=&infants=&cabin= and prefill
+  // + auto-run the search below.
   const [params] = useSearchParams();
-  const [origin, setOrigin] = useState(() => knownCode(params.get('from'), 'LHR'));
-  const [destination, setDestination] = useState(() => knownCode(params.get('to'), 'JFK'));
+  // The widget owns the form state; the page keeps what the last search RAN
+  // with, so Select hands the journey the party/cabin that produced results.
   // Tomorrow, not today: same-day departures may already have left, and an
   // empty first result is a poor first impression of a working system.
-  const [date, setDate] = useState(() => params.get('date') || addDaysIso(todayIso(), 1));
-  // Who travels - adults/children/infants, asked up front like every airline
-  // site, so the rest of the journey (seat picks, passenger forms, date-of-
-  // birth bounds, totals) is sized and typed correctly.
-  const [travellers, setTravellers] = useState<Travellers>(ONE_ADULT);
+  const [initial] = useState<BookingSearch>(() => ({
+    origin: knownCode(params.get('from'), 'LHR'),
+    destination: knownCode(params.get('to'), 'DXB'),
+    date: params.get('date') || addDaysIso(todayIso(), 1),
+    travellers: {
+      adults: Math.max(1, Number(params.get('adults')) || 1),
+      children: Math.max(0, Number(params.get('children')) || 0),
+      infants: Math.max(0, Number(params.get('infants')) || 0),
+    },
+    cabin: knownCabin(params.get('cabin')),
+  }));
+  const [widgetKey, setWidgetKey] = useState(0);
+  const [widgetInitial, setWidgetInitial] = useState<BookingSearch>(initial);
+  const [party, setParty] = useState<{ travellers: Travellers; cabin: TravelClass }>({
+    travellers: initial.travellers,
+    cabin: initial.cabin,
+  });
 
   const [results, setResults] = useState<Flight[] | null>(null);
   const [searched, setSearched] = useState<SearchCriteria | null>(null);
@@ -78,20 +98,17 @@ export function SearchPage({
     }
   }
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-    void runSearch({ origin, destination, date });
+  function handleSearch(search: BookingSearch) {
+    setParty({ travellers: search.travellers, cabin: search.cabin });
+    void runSearch({ origin: search.origin, destination: search.destination, date: search.date });
   }
 
   function pickRoute(route: { origin: string; destination: string }) {
-    setOrigin(route.origin);
-    setDestination(route.destination);
-    void runSearch({ origin: route.origin, destination: route.destination, date });
-  }
-
-  function swap() {
-    setOrigin(destination);
-    setDestination(origin);
+    // Remount the widget with the chosen route so its tiles reflect it.
+    const next = { ...widgetInitial, origin: route.origin, destination: route.destination };
+    setWidgetInitial(next);
+    setWidgetKey((k) => k + 1);
+    void runSearch({ origin: route.origin, destination: route.destination, date: next.date });
   }
 
   // Auto-run once when arriving from a landing-page deep link, so the visitor
@@ -105,13 +122,11 @@ export function SearchPage({
     const from = knownCode(params.get('from'), '');
     const to = knownCode(params.get('to'), '');
     if (from && to && from !== to) {
-      void runSearch({ origin: from, destination: to, date: params.get('date') || date });
+      void runSearch({ origin: from, destination: to, date: initial.date });
     }
     // Run only on mount; the deep link is read once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const sameAirport = origin === destination;
 
   return (
     <>
@@ -141,91 +156,11 @@ export function SearchPage({
             cabin — no account needed to look.
           </p>
 
-          {/* The premium-carrier booking widget: trip-type tabs docked to the
-              top of a white panel, outlined field tiles with gold icon discs,
-              and the gold Search pill. z-20 so the guests popover stacks
-              above the results below. */}
-          <form onSubmit={handleSubmit} className="relative z-20 mt-8">
-            {/* Tab rail: only one-way flying exists today - the other trip
-                types are shown the way the airline shows them, but disabled
-                honestly rather than pretending. */}
-            <div className="inline-flex items-center gap-1 rounded-t-2xl bg-white px-2 pt-2">
-              <span
-                aria-disabled="true"
-                title="Not available yet"
-                className="cursor-not-allowed rounded-full px-4 py-1.5 text-sm font-semibold text-slate-400"
-              >
-                Round trip
-              </span>
-              <span className="rounded-full bg-brand-900 px-4 py-1.5 text-sm font-semibold text-white">
-                One way
-              </span>
-              <span
-                aria-disabled="true"
-                title="Not available yet"
-                className="cursor-not-allowed rounded-full px-4 py-1.5 text-sm font-semibold text-slate-400"
-              >
-                Multi-city
-              </span>
-            </div>
-
-            <div className="rounded-b-2xl rounded-tr-2xl bg-white p-4 shadow-[var(--shadow-float)]">
-              <div className="grid items-center gap-2 md:grid-cols-[1fr_auto_1fr_1fr_1fr_auto]">
-                <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
-
-                <button
-                  type="button"
-                  onClick={swap}
-                  aria-label="Swap origin and destination"
-                  className="hidden h-8 w-8 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 md:grid"
-                >
-                  <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
-                    <path d="M7 7h11l-3-3 1.4-1.4L21.8 8 16.4 13.4 15 12l3-3H7V7zm10 10H6l3 3-1.4 1.4L2.2 16 7.6 10.6 9 12l-3 3h11v2z" />
-                  </svg>
-                </button>
-
-                <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} />
-
-                <TravellersPicker value={travellers} onChange={setTravellers} />
-
-                {/* Date tile, matching the others: gold disc + caption + value. */}
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2 transition focus-within:border-brand-900 focus-within:ring-1 focus-within:ring-brand-900 hover:border-slate-400">
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-500 text-white">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
-                      <path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V10h14zM5 8V6h14v2z" />
-                    </svg>
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-semibold text-slate-500">Travelling when?</span>
-                    <input
-                      type="date"
-                      value={date}
-                      min={todayIso()}
-                      onChange={(event) => setDate(event.target.value)}
-                      className="tabular w-full border-0 bg-transparent p-0 text-[15px] font-bold text-slate-900 outline-none"
-                    />
-                  </span>
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={sameAirport || busy}
-                  className="inline-flex h-[52px] items-center justify-center gap-2 rounded-full bg-accent-500 px-8 text-base font-bold text-white transition-colors hover:bg-accent-600 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-accent-200"
-                >
-                  {busy ? (
-                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
-                  ) : null}
-                  Search
-                </button>
-              </div>
-
-              {sameAirport ? (
-                <p className="mt-2 text-sm font-medium text-red-600">
-                  Origin and destination must be different.
-                </p>
-              ) : null}
-            </div>
-          </form>
+          {/* The premium-carrier booking widget: tabs, field tiles, the
+              Guests-and-Cabin panel and the three-month fare calendar. */}
+          <div className="mt-8">
+            <BookingWidget key={widgetKey} initial={widgetInitial} busy={busy} onSearch={handleSearch} />
+          </div>
         </div>
       </div>
 
@@ -315,7 +250,11 @@ export function SearchPage({
                     <FlightCard
                       key={flight.id}
                       flight={flight}
-                      onSelect={onSelectFlight ? () => onSelectFlight(flight, travellers) : undefined}
+                      onSelect={
+                        onSelectFlight
+                          ? () => onSelectFlight(flight, party.travellers, party.cabin)
+                          : undefined
+                      }
                     />
                   ))
                 )}

@@ -23,9 +23,12 @@ import { money } from '../../lib/format';
 export function FareTable({
   quote,
   onSelect,
+  highlightCabin,
 }: {
   quote: Quote;
   onSelect?: (cabin: TravelClass, fare: FareType) => void;
+  /** The cabin chosen in the search widget - emphasised, never exclusive. */
+  highlightCabin?: TravelClass;
 }) {
   // Cabins the aircraft actually sells, cheapest first. A cabin missing from the
   // response is not "sold out" - the aircraft has no such cabin - so it is
@@ -63,11 +66,22 @@ export function FareTable({
         </thead>
         <tbody>
           {cabins.map((cabin) => (
-            <tr key={cabin.travelClass} className="border-b border-slate-100 last:border-0">
+            <tr
+              key={cabin.travelClass}
+              className={
+                'border-b border-slate-100 last:border-0 ' +
+                (cabin.travelClass === highlightCabin ? 'bg-accent-50/70' : '')
+              }
+            >
               <th scope="row" className="px-4 py-3 text-left align-top">
                 <span className="font-medium text-slate-900">
                   {TRAVEL_CLASS_LABELS[cabin.travelClass]}
                 </span>
+                {cabin.travelClass === highlightCabin ? (
+                  <span className="mt-0.5 block w-fit rounded-full bg-accent-500 px-2 py-0.5 text-[10px] font-bold text-white">
+                    Your cabin
+                  </span>
+                ) : null}
                 <SeatsLeft seats={cabin.availableSeats} />
               </th>
 
