@@ -14,10 +14,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANTS = {
-  // The metasearch CTA: one flat, saturated action blue that simply darkens
-  // on hover. No gradient, no glow, no lift - the colour is the emphasis.
+  // The premium-carrier CTA: the gold pill (etihad.com's Search button
+  // measures #b08747 at 24px radius) - bold white text, darkens on hover.
   primary:
-    'bg-brand-600 text-white shadow-[var(--shadow-btn)] hover:bg-brand-700 active:bg-brand-800 focus-visible:ring-brand-500/50 disabled:bg-brand-300 disabled:shadow-none',
+    'bg-accent-500 text-white shadow-[var(--shadow-btn)] hover:bg-accent-600 active:bg-accent-700 focus-visible:ring-accent-500/50 disabled:bg-accent-200 disabled:shadow-none',
   secondary:
     'border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-400 focus-visible:ring-slate-400/40 disabled:text-slate-400',
   ghost:
@@ -25,8 +25,8 @@ const VARIANTS = {
 } as const;
 
 const SIZES = {
-  md: 'px-5 py-2.5 text-sm',
-  lg: 'px-7 py-3 text-base',
+  md: 'px-6 py-2.5 text-sm',
+  lg: 'px-8 py-3 text-base',
 } as const;
 
 export function Button({

@@ -18,7 +18,7 @@ interface AirportFieldProps {
   /** The other end of the trip - hidden so the same airport can't be both. */
   exclude?: string;
   placeholder?: string;
-  /** 'dark' when the field sits on a navy band - the caption reads in white. */
+  /** Kept for call-site compatibility; captions now live inside the tile. */
   tone?: 'light' | 'dark';
 }
 
@@ -26,7 +26,7 @@ function airportFor(code: string): { code: string; city: string } | undefined {
   return AIRPORTS.find((airport) => airport.code === code);
 }
 
-export function AirportField({ label, value, onChange, exclude, placeholder, tone = 'light' }: AirportFieldProps) {
+export function AirportField({ label, value, onChange, exclude, placeholder }: AirportFieldProps) {
   const inputId = useId();
   const listId = useId();
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -93,37 +93,47 @@ export function AirportField({ label, value, onChange, exclude, placeholder, ton
 
   return (
     <div ref={wrapRef} className="relative">
-      <label
-        htmlFor={inputId}
+      {/* The premium-carrier field tile: an outlined surface with a gold icon
+          disc, the caption inside, and the value in bold beneath it. */}
+      <div
         className={
-          'mb-1 block text-[11px] font-semibold uppercase tracking-wide ' +
-          (tone === 'dark' ? 'text-white/80' : 'text-slate-500')
+          'flex items-center gap-3 rounded-xl border bg-white px-3 py-2 transition ' +
+          (open ? 'border-brand-900 ring-1 ring-brand-900' : 'border-slate-300 hover:border-slate-400')
         }
       >
-        {label}
-      </label>
-      <input
-        id={inputId}
-        role="combobox"
-        aria-expanded={open}
-        aria-controls={listId}
-        aria-autocomplete="list"
-        aria-activedescendant={open && options[active] ? `${listId}-${options[active].code}` : undefined}
-        autoComplete="off"
-        value={display}
-        placeholder={placeholder ?? 'City or airport'}
-        onFocus={() => {
-          setOpen(true);
-          setActive(0);
-        }}
-        onChange={(event) => {
-          setQuery(event.target.value);
-          setOpen(true);
-          setActive(0);
-        }}
-        onKeyDown={onKeyDown}
-        className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 outline-none transition placeholder:font-normal placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15"
-      />
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-500 text-white">
+          <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+            <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <label htmlFor={inputId} className="block text-xs font-semibold text-slate-500">
+            {label}
+          </label>
+          <input
+            id={inputId}
+            role="combobox"
+            aria-expanded={open}
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={open && options[active] ? `${listId}-${options[active].code}` : undefined}
+            autoComplete="off"
+            value={display}
+            placeholder={placeholder ?? 'City or airport'}
+            onFocus={() => {
+              setOpen(true);
+              setActive(0);
+            }}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setOpen(true);
+              setActive(0);
+            }}
+            onKeyDown={onKeyDown}
+            className="w-full border-0 bg-transparent p-0 text-[15px] font-bold text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400"
+          />
+        </div>
+      </div>
 
       {open ? (
         <ul

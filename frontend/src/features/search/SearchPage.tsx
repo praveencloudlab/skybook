@@ -141,64 +141,90 @@ export function SearchPage({
             cabin — no account needed to look.
           </p>
 
-          {/* The metasearch signature: white field tiles sitting DIRECTLY on
-              the navy band, captions in white, one bold action-blue button.
-              z-20 so the travellers popover stacks above the results below. */}
-          <form
-            onSubmit={handleSubmit}
-            className="relative z-20 mt-7 grid items-end gap-2 md:grid-cols-[1fr_auto_1fr_auto_auto_auto]"
-          >
-            <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} tone="dark" />
-
-            {/* Swap - the little control between the two airport fields. */}
-            <button
-              type="button"
-              onClick={swap}
-              aria-label="Swap origin and destination"
-              className="mb-0.5 hidden h-10 w-10 shrink-0 place-items-center self-end rounded-full border border-white/25 bg-white/10 text-white/80 transition hover:bg-white/20 hover:text-white md:grid"
-            >
-              <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
-                <path d="M7 7h11l-3-3 1.4-1.4L21.8 8 16.4 13.4 15 12l3-3H7V7zm10 10H6l3 3-1.4 1.4L2.2 16 7.6 10.6 9 12l-3 3h11v2z" />
-              </svg>
-            </button>
-
-            <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} tone="dark" />
-
-            <label className="text-sm">
-              <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-white/80">
-                Depart
+          {/* The premium-carrier booking widget: trip-type tabs docked to the
+              top of a white panel, outlined field tiles with gold icon discs,
+              and the gold Search pill. z-20 so the guests popover stacks
+              above the results below. */}
+          <form onSubmit={handleSubmit} className="relative z-20 mt-8">
+            {/* Tab rail: only one-way flying exists today - the other trip
+                types are shown the way the airline shows them, but disabled
+                honestly rather than pretending. */}
+            <div className="inline-flex items-center gap-1 rounded-t-2xl bg-white px-2 pt-2">
+              <span
+                aria-disabled="true"
+                title="Not available yet"
+                className="cursor-not-allowed rounded-full px-4 py-1.5 text-sm font-semibold text-slate-400"
+              >
+                Round trip
               </span>
-              <input
-                type="date"
-                value={date}
-                min={todayIso()}
-                onChange={(event) => setDate(event.target.value)}
-                className="tabular w-full rounded-xl border border-transparent bg-white px-3.5 py-2.5 text-sm outline-none transition focus:border-brand-400 focus:ring-4 focus:ring-brand-400/25"
-              />
-            </label>
+              <span className="rounded-full bg-brand-900 px-4 py-1.5 text-sm font-semibold text-white">
+                One way
+              </span>
+              <span
+                aria-disabled="true"
+                title="Not available yet"
+                className="cursor-not-allowed rounded-full px-4 py-1.5 text-sm font-semibold text-slate-400"
+              >
+                Multi-city
+              </span>
+            </div>
 
-            <TravellersPicker value={travellers} onChange={setTravellers} tone="dark" />
+            <div className="rounded-b-2xl rounded-tr-2xl bg-white p-4 shadow-[var(--shadow-float)]">
+              <div className="grid items-center gap-2 md:grid-cols-[1fr_auto_1fr_1fr_1fr_auto]">
+                <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
 
-            <button
-              type="submit"
-              disabled={sameAirport || busy}
-              className="inline-flex h-[44px] items-center justify-center gap-2 rounded-xl bg-brand-600 px-7 text-sm font-bold text-white transition-colors hover:bg-brand-500 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-brand-800 disabled:text-white/50"
-            >
-              {busy ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
-              ) : (
-                <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
-                  <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14z" />
-                </svg>
-              )}
-              Search
-            </button>
+                <button
+                  type="button"
+                  onClick={swap}
+                  aria-label="Swap origin and destination"
+                  className="hidden h-8 w-8 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 md:grid"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                    <path d="M7 7h11l-3-3 1.4-1.4L21.8 8 16.4 13.4 15 12l3-3H7V7zm10 10H6l3 3-1.4 1.4L2.2 16 7.6 10.6 9 12l-3 3h11v2z" />
+                  </svg>
+                </button>
 
-            {sameAirport ? (
-              <p className="text-sm font-medium text-red-300 md:col-span-6">
-                Origin and destination must be different.
-              </p>
-            ) : null}
+                <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} />
+
+                <TravellersPicker value={travellers} onChange={setTravellers} />
+
+                {/* Date tile, matching the others: gold disc + caption + value. */}
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2 transition focus-within:border-brand-900 focus-within:ring-1 focus-within:ring-brand-900 hover:border-slate-400">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent-500 text-white">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                      <path d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2zm0 16H5V10h14zM5 8V6h14v2z" />
+                    </svg>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold text-slate-500">Travelling when?</span>
+                    <input
+                      type="date"
+                      value={date}
+                      min={todayIso()}
+                      onChange={(event) => setDate(event.target.value)}
+                      className="tabular w-full border-0 bg-transparent p-0 text-[15px] font-bold text-slate-900 outline-none"
+                    />
+                  </span>
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={sameAirport || busy}
+                  className="inline-flex h-[52px] items-center justify-center gap-2 rounded-full bg-accent-500 px-8 text-base font-bold text-white transition-colors hover:bg-accent-600 focus-visible:ring-2 focus-visible:ring-accent-500/60 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-accent-200"
+                >
+                  {busy ? (
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
+                  ) : null}
+                  Search
+                </button>
+              </div>
+
+              {sameAirport ? (
+                <p className="mt-2 text-sm font-medium text-red-600">
+                  Origin and destination must be different.
+                </p>
+              ) : null}
+            </div>
           </form>
         </div>
       </div>

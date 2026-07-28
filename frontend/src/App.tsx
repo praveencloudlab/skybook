@@ -94,12 +94,12 @@ function Header() {
         <Link to="/" className="group flex items-center gap-2.5">
           {/* A mark, not just a wordmark - it is what makes the header read as
               an airline rather than an admin console. */}
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-600 transition group-hover:bg-brand-500">
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-accent-500 transition group-hover:bg-accent-400">
             <svg viewBox="0 0 24 24" className="h-4.5 w-4.5 fill-white" aria-hidden="true">
               <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
             </svg>
           </span>
-          <span className="display text-lg text-white">SkyBook</span>
+          <span className="text-lg font-bold tracking-tight text-white">SkyBook</span>
         </Link>
 
         <nav className="flex items-center gap-1 text-sm sm:gap-2">
