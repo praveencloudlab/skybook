@@ -96,8 +96,11 @@ export function LandingPage() {
 
   return (
     <>
-      {/* Hero */}
-      <section className="relative overflow-hidden bg-brand-950">
+      {/* Hero. NOT overflow-hidden: the booking widget's calendar and guests
+          panels open BELOW the band and must not be clipped at its edge (the
+          decorative layers are all inset-0, so nothing else overflows). z-10
+          keeps those panels above the sections that follow. */}
+      <section className="relative z-10 bg-brand-950">
         <div className="aurora" aria-hidden="true" />
         <div className="grid-texture absolute inset-0" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-brand-950/30 to-brand-950" />

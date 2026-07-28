@@ -130,9 +130,11 @@ export function SearchPage({
 
   return (
     <>
-      {/* Navy band the search bar sits on - restrained and engineered, not a
-          glow. A faint grid texture + a single hairline flight path. */}
-      <div className="relative overflow-hidden bg-brand-950">
+      {/* Teal band the booking widget sits on. NOT overflow-hidden: the
+          widget's calendar and guests panels open BELOW the band and must not
+          be clipped at its edge (the decorative layers are all inset-0). z-10
+          keeps those panels above the results that follow. */}
+      <div className="relative z-10 bg-brand-950">
         <div className="aurora" aria-hidden="true" />
         <div className="grid-texture absolute inset-0" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-brand-950/25 to-brand-950" />
