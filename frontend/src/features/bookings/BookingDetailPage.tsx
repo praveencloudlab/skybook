@@ -195,7 +195,8 @@ export function BookingDetailPage({
 
       {/* Header - a navy hero band, so the itinerary opens like a travel
           document rather than an admin record. */}
-      <div className="relative mt-4 overflow-hidden rounded-2xl bg-brand-950 px-6 py-5 text-white shadow-[var(--shadow-lift)]">
+      <div className="relative mt-4 overflow-hidden rounded-3xl bg-brand-950 px-6 py-5 text-white shadow-[var(--shadow-glow)]">
+        <div className="aurora" aria-hidden="true" />
         <div className="grid-texture absolute inset-0 opacity-60" aria-hidden="true" />
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 800 160" fill="none" aria-hidden="true">
           <path

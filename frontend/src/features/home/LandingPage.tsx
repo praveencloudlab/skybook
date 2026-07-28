@@ -70,7 +70,7 @@ function Stat({ value, suffix, label }: { value: number; suffix?: string; label:
   const shown = useCountUp(value);
   return (
     <div>
-      <div className="tabular text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+      <div className="tabular display bg-gradient-to-r from-white to-sky-200 bg-clip-text text-3xl text-transparent sm:text-4xl">
         {shown.toLocaleString()}
         {suffix}
       </div>
@@ -98,8 +98,9 @@ export function LandingPage() {
     <>
       {/* Hero */}
       <section className="relative overflow-hidden bg-brand-950">
+        <div className="aurora" aria-hidden="true" />
         <div className="grid-texture absolute inset-0" />
-        <div className="absolute inset-0 bg-gradient-to-b from-brand-900/50 via-brand-950 to-brand-950" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-brand-950/30 to-brand-950" />
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1200 520" fill="none" aria-hidden="true">
           <path d="M-40 420 C 320 340, 760 200, 1260 70" stroke="white" strokeOpacity="0.10" strokeWidth="1.5" strokeDasharray="7 10" />
           <path d="M-40 470 C 360 400, 820 280, 1260 150" stroke="white" strokeOpacity="0.06" strokeWidth="1.5" strokeDasharray="7 10" />
@@ -107,14 +108,14 @@ export function LandingPage() {
         </svg>
 
         <div className="relative mx-auto max-w-6xl px-6 pt-16 pb-14 sm:pt-20">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-medium text-white/70">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent-500" />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs font-medium text-white/80 backdrop-blur">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
             Real schedules · live fares · scannable boarding passes
           </span>
           <h1 className="display mt-6 max-w-2xl text-5xl leading-[1.05] text-white sm:text-6xl">
             Where would you
             <br />
-            like to fly?
+            like to <span className="gradient-text">fly?</span>
           </h1>
           <p className="mt-5 max-w-lg text-lg text-white/60">
             Search a year of departures across 30 routes, pick your seat from the actual cabin, and
@@ -124,7 +125,7 @@ export function LandingPage() {
           {/* Embedded search */}
           <form
             onSubmit={search}
-            className="mt-10 grid items-end gap-3 rounded-3xl border border-white/10 bg-white p-5 shadow-[var(--shadow-float)] md:grid-cols-[1fr_1fr_auto_auto]"
+            className="glass-card mt-10 grid items-end gap-3 p-5 md:grid-cols-[1fr_1fr_auto_auto]"
           >
             <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
             <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} />
@@ -143,7 +144,7 @@ export function LandingPage() {
             <button
               type="submit"
               disabled={sameAirport}
-              className="inline-flex h-[44px] items-center justify-center gap-2 rounded-full bg-brand-600 px-7 text-sm font-semibold text-white shadow-[var(--shadow-btn)] transition-all hover:bg-brand-500 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-slate-300 disabled:hover:translate-y-0"
+              className="inline-flex h-[44px] items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-600 via-indigo-600 to-violet-600 px-7 text-sm font-semibold text-white shadow-[var(--shadow-btn)] transition-all hover:brightness-110 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:from-slate-300 disabled:via-slate-300 disabled:to-slate-300 disabled:hover:translate-y-0"
             >
               <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
                 <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14z" />
@@ -232,10 +233,13 @@ export function LandingPage() {
 
       {/* CTA */}
       <section className="mx-auto max-w-6xl px-6 py-16">
-        <div className="relative overflow-hidden rounded-3xl bg-brand-900 px-8 py-14 text-center shadow-[var(--shadow-float)]">
+        <div className="relative overflow-hidden rounded-3xl bg-brand-950 px-8 py-14 text-center shadow-[var(--shadow-glow)]">
+          <div className="aurora" aria-hidden="true" />
           <div className="grid-texture absolute inset-0" />
           <div className="relative">
-            <h2 className="display text-3xl text-white sm:text-4xl">Ready when you are.</h2>
+            <h2 className="display text-3xl text-white sm:text-4xl">
+              Ready when <span className="gradient-text">you</span> are.
+            </h2>
             <p className="mx-auto mt-3 max-w-md text-sm text-white/60">
               Find a flight in seconds. Create an account only when you're ready to book.
             </p>

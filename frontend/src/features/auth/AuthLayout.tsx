@@ -31,12 +31,13 @@ export function AuthLayout({
         className="relative hidden overflow-hidden bg-brand-900 lg:block"
         aria-hidden="true"
       >
-        {/* A suggestion of altitude: a deep navy with a faint engineered grid,
+        {/* A suggestion of altitude: deep navy under drifting aurora colour,
             rather than a stock photo - nothing to ship, nothing to load, and it
             cannot look dated the way a hero image does. */}
         <div className="absolute inset-0 bg-brand-950" />
+        <div className="aurora" aria-hidden="true" />
         <div className="grid-texture absolute inset-0" />
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-950 via-transparent to-brand-900/40" />
+        <div className="absolute inset-0 bg-gradient-to-t from-brand-950 via-transparent to-transparent" />
 
         {/* Flight paths. */}
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 400 600" fill="none">
@@ -61,7 +62,7 @@ export function AuthLayout({
           <p className="display text-4xl leading-tight">
             Thirty routes.
             <br />
-            A year of departures.
+            <span className="gradient-text">A year of departures.</span>
           </p>
           <p className="mt-3 max-w-sm text-sm text-white/60">
             Search real schedules, pick your seat from the actual cabin, and carry a boarding pass

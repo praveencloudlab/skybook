@@ -14,10 +14,9 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANTS = {
-  // Solid brand with a soft brand-tinted glow that lifts on hover - the clean
-  // modern CTA, not a gradient (gradients on buttons age quickly).
+  // Azure-to-violet gradient with a coloured glow - the CTA carries light.
   primary:
-    'bg-brand-600 text-white shadow-[var(--shadow-btn)] hover:bg-brand-500 hover:-translate-y-0.5 active:translate-y-0 focus-visible:ring-brand-500/50 disabled:bg-brand-300 disabled:shadow-none disabled:hover:translate-y-0',
+    'bg-gradient-to-r from-brand-600 via-indigo-600 to-violet-600 text-white shadow-[var(--shadow-btn)] hover:brightness-110 hover:-translate-y-0.5 active:translate-y-0 focus-visible:ring-brand-500/50 disabled:from-brand-300 disabled:via-brand-300 disabled:to-brand-300 disabled:shadow-none disabled:hover:translate-y-0 disabled:hover:brightness-100',
   secondary:
     'border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 hover:-translate-y-0.5 active:translate-y-0 focus-visible:ring-slate-400/40 disabled:text-slate-400 disabled:hover:translate-y-0',
   ghost:

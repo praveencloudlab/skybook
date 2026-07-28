@@ -116,8 +116,9 @@ export function SearchPage({
       {/* Navy band the search bar sits on - restrained and engineered, not a
           glow. A faint grid texture + a single hairline flight path. */}
       <div className="relative overflow-hidden bg-brand-950">
+        <div className="aurora" aria-hidden="true" />
         <div className="grid-texture absolute inset-0" />
-        <div className="absolute inset-0 bg-gradient-to-b from-brand-900/40 to-brand-950" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-brand-950/25 to-brand-950" />
         <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1200 260" fill="none" aria-hidden="true">
           <path
             d="M-50 230 C 320 180, 720 90, 1250 30"
@@ -131,7 +132,7 @@ export function SearchPage({
 
         <div className="relative mx-auto max-w-6xl px-6 pt-14 pb-26">
           <h1 className="display text-4xl text-white sm:text-5xl">
-            Search flights
+            Search <span className="gradient-text">flights</span>
           </h1>
           <p className="mt-3 max-w-md text-sm text-white/60">
             A year of real schedules across 30 routes. Compare fares, pick your seat from the actual
@@ -144,7 +145,7 @@ export function SearchPage({
         {/* Search bar, lifted onto the band. */}
         <form
           onSubmit={handleSubmit}
-          className="relative -mt-14 grid items-end gap-3 rounded-3xl border border-slate-200/90 bg-white p-5 shadow-[var(--shadow-float)] md:grid-cols-[1fr_auto_1fr_auto_auto_auto]"
+          className="glass-card relative -mt-14 grid items-end gap-3 p-5 md:grid-cols-[1fr_auto_1fr_auto_auto_auto]"
         >
           <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
 
@@ -195,7 +196,7 @@ export function SearchPage({
           <button
             type="submit"
             disabled={sameAirport || busy}
-            className="inline-flex h-[44px] items-center justify-center gap-2 rounded-full bg-brand-600 px-7 text-sm font-semibold text-white shadow-[var(--shadow-btn)] transition-all hover:bg-brand-500 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-brand-300 disabled:shadow-none disabled:hover:translate-y-0"
+            className="inline-flex h-[44px] items-center justify-center gap-2 rounded-full bg-gradient-to-r from-brand-600 via-indigo-600 to-violet-600 px-7 text-sm font-semibold text-white shadow-[var(--shadow-btn)] transition-all hover:brightness-110 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:from-brand-300 disabled:via-brand-300 disabled:to-brand-300 disabled:shadow-none disabled:hover:translate-y-0"
           >
             {busy ? (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />

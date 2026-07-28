@@ -97,7 +97,7 @@ export function FlightCard({ flight, onSelect }: { flight: Flight; onSelect?: ()
               type="button"
               onClick={onSelect}
               disabled={cancelled}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-[var(--shadow-btn)] transition-all hover:bg-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+              className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-brand-600 via-indigo-600 to-violet-600 px-5 py-2 text-sm font-semibold text-white shadow-[var(--shadow-btn)] transition-all hover:brightness-110 focus-visible:ring-2 focus-visible:ring-brand-500/50 focus-visible:outline-none disabled:cursor-not-allowed disabled:from-slate-300 disabled:via-slate-300 disabled:to-slate-300 disabled:shadow-none"
             >
               Select
               <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current transition-transform duration-200 group-hover:translate-x-0.5" aria-hidden="true">
