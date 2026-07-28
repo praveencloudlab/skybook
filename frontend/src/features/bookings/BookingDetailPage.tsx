@@ -150,6 +150,22 @@ export function BookingDetailPage({
   const anyCancellable = cancellablePassengers.length > 0;
   const anyCheckedIn = activePassengers.some(checkedIn);
 
+  // A cancelled passenger has no seat and no valid check-in, so it must NOT
+  // appear in the check-in list (its stale checkin-service record would offer a
+  // Check-in that then fails at inventory). Match by BookingPassenger id, with
+  // name as a fallback.
+  const cancelledBpIds = new Set(booking.passengers.filter((p) => p.cancelled).map((p) => p.id));
+  const cancelledNames = new Set(
+    booking.passengers
+      .filter((p) => p.cancelled)
+      .map((p) => `${p.firstName} ${p.lastName}`.trim().toLowerCase()),
+  );
+  const visibleCheckIns = (checkIns ?? []).filter(
+    (r) =>
+      !cancelledBpIds.has(r.bookingPassengerId) &&
+      !cancelledNames.has((r.passengerName ?? '').trim().toLowerCase()),
+  );
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
       <button
@@ -440,14 +456,14 @@ export function BookingDetailPage({
 
           {checkIns === null ? (
             <p className="text-sm text-slate-500">Loading…</p>
-          ) : checkIns.length === 0 ? (
+          ) : visibleCheckIns.length === 0 ? (
             <Alert tone="info">
-              {booking.bookingStatus === 'CONFIRMED'
+              {booking.bookingStatus === 'CONFIRMED' || booking.bookingStatus === 'PARTIALLY_CANCELLED'
                 ? 'Preparing check-in for this booking — this usually takes a few seconds.'
                 : 'Check-in becomes available once your booking is confirmed.'}
             </Alert>
           ) : (
-            checkIns.map((record) => (
+            visibleCheckIns.map((record) => (
               <CheckInRow
                 key={record.id}
                 record={record}
