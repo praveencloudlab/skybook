@@ -136,10 +136,10 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
         <tr>
           <!-- Main coupon -->
           <td style="width:68%;vertical-align:top;padding:0;">
-            <div style="background:${RED};color:#fff;padding:16px 26px;">
-              <table style="width:100%;border-collapse:collapse;"><tr>
-                <td style="font-size:24px;font-weight:800;font-style:italic;">&#9992; SkyBook</td>
-                <td style="text-align:right;letter-spacing:4px;opacity:.85;font-size:16px;">&middot; &middot; &middot; &middot; &middot; &middot; &#9992;</td>
+            <div style="background:${RED};color:#fff;">
+              <table style="width:100%;height:64px;border-collapse:collapse;"><tr>
+                <td style="vertical-align:middle;padding:0 26px;font-size:23px;font-weight:800;font-style:italic;">&#9992; SkyBook</td>
+                <td style="vertical-align:middle;text-align:right;padding:0 26px;letter-spacing:4px;opacity:.85;font-size:16px;">&middot; &middot; &middot; &middot; &middot; &middot; &#9992;</td>
               </tr></table>
             </div>
             <table style="width:100%;border-collapse:collapse;">
@@ -167,7 +167,11 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
 
           <!-- Perforated tear-off stub -->
           <td style="width:32%;vertical-align:top;padding:0;border-left:2px dashed #cbd5e1;">
-            <div style="background:${RED};color:#fff;text-align:center;padding:16px;font-size:17px;font-weight:800;letter-spacing:1px;">&middot;&middot;&middot; BOARDING PASS &middot;&middot;&middot;</div>
+            <div style="background:${RED};color:#fff;">
+              <table style="width:100%;height:64px;border-collapse:collapse;"><tr>
+                <td style="vertical-align:middle;text-align:center;font-size:16px;font-weight:800;letter-spacing:1px;">&middot;&middot;&middot; BOARDING PASS &middot;&middot;&middot;</td>
+              </tr></table>
+            </div>
             <div style="padding:24px 22px;">
               ${box('PASSENGER', pass.passengerName)}
               ${box('FROM', cityFor(from))}

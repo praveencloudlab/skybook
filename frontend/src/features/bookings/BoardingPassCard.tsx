@@ -62,8 +62,8 @@ export function BoardingPassCard({
         <div className="relative flex-1">
           <div className="pointer-events-none absolute inset-0" style={mapBg} />
 
-          {/* Red header */}
-          <div className="relative flex items-center justify-between px-5 py-3 text-white" style={{ background: RED }}>
+          {/* Red header - fixed height so it lines up with the stub header. */}
+          <div className="relative flex h-16 items-center justify-between px-5 text-white" style={{ background: RED }}>
             <div className="flex items-center gap-2.5">
               <Logo />
               <span className="text-2xl font-extrabold italic tracking-tight">SkyBook</span>
@@ -136,7 +136,7 @@ export function BoardingPassCard({
           <span className="absolute -bottom-[7px] -left-[7px] h-3.5 w-3.5 rounded-full bg-white ring-1 ring-slate-200" />
           <div className="pointer-events-none absolute inset-0" style={mapBg} />
 
-          <div className="relative flex items-center justify-center gap-2 px-4 py-3 text-white" style={{ background: RED }}>
+          <div className="relative flex h-16 items-center justify-center gap-2 px-4 text-white" style={{ background: RED }}>
             <span className="tracking-[0.2em] opacity-80">···</span>
             <span className="text-lg font-extrabold tracking-wide">BOARDING PASS</span>
             <span className="tracking-[0.2em] opacity-80">···</span>
