@@ -33,6 +33,22 @@ export function dayAndMonth(isoLocal: string): string {
   });
 }
 
+/**
+ * A clock reading shifted by N minutes, e.g. boarding 10:15 - 30 => "09:45".
+ *
+ * <p>Same no-timezone-conversion rule as {@link time}: the input is a
+ * local-to-the-airport timestamp, so it is parsed and re-emitted as UTC purely
+ * to do the arithmetic without the viewer's own offset leaking in.
+ */
+export function timeShift(isoLocal: string, deltaMinutes: number): string {
+  const date = new Date(`${isoLocal.slice(0, 16)}:00Z`);
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+  date.setUTCMinutes(date.getUTCMinutes() + deltaMinutes);
+  return `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`;
+}
+
 /** A full readable date, e.g. "29 Jul 2026" - for documents like the boarding pass. */
 export function dayMonthYear(isoLocal: string): string {
   const [datePart] = isoLocal.split('T');

@@ -2,7 +2,7 @@ import type { Booking } from '../../api/bookings';
 import { AIRPORTS, type Flight } from '../../api/flights';
 import type { BoardingPass, CheckIn } from '../../api/checkin';
 import { TRAVEL_CLASS_LABELS, type TravelClass } from '../../api/quotes';
-import { dayMonthYear, money, time } from '../../lib/format';
+import { dayMonthYear, money, time, timeShift } from '../../lib/format';
 import { qrSvg } from '../../lib/qr';
 
 /**
@@ -98,6 +98,8 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
   const departDate = record ? dayMonthYear(record.departureTime) : DASH;
   const departTime = record ? time(record.departureTime) : DASH;
   const boardTime = pass.boardingTime ? time(pass.boardingTime) : DASH;
+  // Gate-arrival advisory: 30 minutes before boarding starts, not boarding itself.
+  const gateBy = pass.boardingTime ? timeShift(pass.boardingTime, -30) : DASH;
   const gate = pass.gate ?? TBA;
   const group = pass.boardingGroup ?? DASH;
   const issued = pass.issuedAt ? `${dayMonthYear(pass.issuedAt)} ${time(pass.issuedAt)}` : DASH;
@@ -180,7 +182,7 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
             <table style="width:100%;border-collapse:collapse;margin-top:14px;border-top:1px solid #eef1f5;">
               <tr>
                 <td style="padding:11px 22px;font-family:'Courier New',monospace;font-size:11px;color:#64748b;">
-                  <span style="color:${RED};font-weight:700;">&#9432; NOTICE:</span> Please be at the boarding gate by ${boardTime}. The gate closes before departure and late passengers may be offloaded.
+                  <span style="color:${RED};font-weight:700;">&#9432; NOTICE:</span> Please arrive at the boarding gate by ${gateBy}, 30 minutes before boarding begins at ${boardTime}. The gate closes before departure and late passengers may be offloaded.
                 </td>
                 <td style="padding:11px 22px;text-align:right;white-space:nowrap;font-family:'Courier New',monospace;font-size:11px;color:#64748b;">Issued ${issued}</td>
               </tr>
@@ -235,14 +237,6 @@ function durationHM(dep: string, arr: string): string {
   }
   return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(Math.round(mins % 60)).padStart(2, '0')}`;
 }
-function shiftTime(iso: string, deltaMinutes: number): string {
-  const dt = new Date(`${iso.slice(0, 16)}:00Z`);
-  if (Number.isNaN(dt.getTime())) {
-    return '';
-  }
-  dt.setUTCMinutes(dt.getUTCMinutes() + deltaMinutes);
-  return `${String(dt.getUTCHours()).padStart(2, '0')}:${String(dt.getUTCMinutes()).padStart(2, '0')}`;
-}
 function addDaysMon(iso: string, days: number): string {
   const dt = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
   dt.setUTCDate(dt.getUTCDate() + days);
@@ -289,7 +283,7 @@ export function printETicket(booking: Booking, flight: Flight | null, _currency 
         <td style="padding:10px 12px;vertical-align:top;">${flight.airlineCode}${flight.flightNumber.replace(/\D/g, '') || flight.flightNumber}</td>
         <td style="padding:10px 12px;vertical-align:top;"><b>${time(flight.departureTime)}</b><br>${ddMon(flight.departureTime)}</td>
         <td style="padding:10px 12px;vertical-align:top;"><b>${time(flight.arrivalTime)}</b><br>${ddMon(flight.arrivalTime)}</td>
-        <td style="padding:10px 12px;vertical-align:top;">${shiftTime(flight.departureTime, -60)}</td>
+        <td style="padding:10px 12px;vertical-align:top;">${timeShift(flight.departureTime, -60)}</td>
       </tr>
       <tr style="background:#ececec;font-size:12px;color:#222;">
         <td colspan="2" style="padding:10px 12px;vertical-align:top;">

@@ -1,7 +1,7 @@
 import type { BoardingPass, CheckIn } from '../../api/checkin';
 import { AIRPORTS } from '../../api/flights';
 import { TRAVEL_CLASS_LABELS, type TravelClass } from '../../api/quotes';
-import { dayMonthYear, time } from '../../lib/format';
+import { dayMonthYear, time, timeShift } from '../../lib/format';
 import { qrSvg } from '../../lib/qr';
 import { printBoardingPass } from './printable';
 
@@ -37,6 +37,8 @@ export function BoardingPassCard({
   const departDate = record?.departureTime ? dayMonthYear(record.departureTime) : DASH;
   const departTime = record?.departureTime ? time(record.departureTime) : DASH;
   const boardTime = pass.boardingTime ? time(pass.boardingTime) : DASH;
+  // Gate-arrival advisory: 30 minutes before boarding starts, not boarding itself.
+  const gateBy = pass.boardingTime ? timeShift(pass.boardingTime, -30) : DASH;
   const gate = pass.gate ?? TBA;
   const group = pass.boardingGroup ?? DASH;
   const issued = pass.issuedAt ? `${dayMonthYear(pass.issuedAt)} ${time(pass.issuedAt)}` : DASH;
@@ -122,7 +124,7 @@ export function BoardingPassCard({
           <div className="relative flex items-center justify-between gap-4 border-t border-slate-200/70 px-5 py-2.5">
             <p className="font-mono text-xs text-slate-600">
               <span className="mr-1 font-bold" style={{ color: RED }}>ⓘ NOTICE:</span>
-              Please be at the boarding gate by {boardTime}. The gate closes before departure and late passengers may be offloaded.
+              Please arrive at the boarding gate by {gateBy}, 30 minutes before boarding begins at {boardTime}. The gate closes before departure and late passengers may be offloaded.
             </p>
             <p className="whitespace-nowrap font-mono text-[11px] text-slate-500">Issued {issued}</p>
           </div>
