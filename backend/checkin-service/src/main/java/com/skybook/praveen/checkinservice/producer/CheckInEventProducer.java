@@ -41,6 +41,7 @@ public class CheckInEventProducer {
                 .token(pass.token())
                 .boardingTime(pass.boardingTime())
                 .boardingGroup(pass.boardingGroup())
+                .issuedAt(pass.issuedAt())
                 .build());
     }
 
@@ -69,6 +70,8 @@ public class CheckInEventProducer {
                 .flightNumber(checkIn.flightNumber())
                 .originAirportCode(checkIn.originAirportCode())
                 .destinationAirportCode(checkIn.destinationAirportCode())
+                .departureTime(checkIn.departureTime())
+                .travelClass(checkIn.travelClass())
                 .seatNumber(checkIn.seatNumber())
                 .gate(checkIn.gate())
                 .occurredAt(LocalDateTime.now());

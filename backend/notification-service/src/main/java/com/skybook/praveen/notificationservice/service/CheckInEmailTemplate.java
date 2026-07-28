@@ -4,8 +4,6 @@ import com.skybook.praveen.common.event.CheckInEvent;
 import com.skybook.praveen.notificationservice.service.AirlineLookup.AirlineBrand;
 import org.springframework.stereotype.Component;
 
-import java.time.format.DateTimeFormatter;
-
 /**
  * Renders the check-in confirmation email from a CheckInEvent's structured
  * fields - same plain inline-CSS HTML approach as BookingEmailTemplate (no
@@ -31,8 +29,6 @@ public class CheckInEmailTemplate {
 
     /** Content-ID under which the consumer attaches the inline QR PNG. */
     public static final String QR_CID = "skybook-boarding-qr";
-
-    private static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm");
 
     public String render(CheckInEvent event) {
 
@@ -181,7 +177,12 @@ public class CheckInEmailTemplate {
                 brand.primaryColor(), escape(nvl(event.getGate(), "TBA")),
                 brand.secondaryColor(), escape(nvl(event.getBoardingGroup(), "-")),
                 brand.secondaryColor(),
-                escape(event.getBoardingTime() != null ? event.getBoardingTime().format(DISPLAY_TIME) : "-"),
+                // Same derived boarding clock as the pass itself (BoardingDisplay),
+                // so the email chip and the attached PDF never disagree.
+                escape(BoardingDisplay.effectiveBoarding(event) != null
+                        ? BoardingDisplay.date(event.getDepartureTime()) + ", "
+                        + BoardingDisplay.clock(BoardingDisplay.effectiveBoarding(event))
+                        : "-"),
                 QR_CID,
                 escape(nvl(event.getBookingReference(), "")));
     }
