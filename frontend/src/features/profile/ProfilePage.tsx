@@ -32,17 +32,24 @@ export function ProfilePage() {
     return () => controller.abort();
   }, []);
 
+  const firstName = profile?.fullName?.trim().split(/\s+/)[0];
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
-      <h1 className="display text-3xl text-slate-900">Your profile</h1>
+      <h1 className="display text-3xl text-slate-900">
+        Welcome{firstName ? `, ${firstName}` : ''}
+      </h1>
       <p className="mt-1 text-sm text-slate-500">
-        Details you keep on file — reused to fill in bookings so you don't retype them.
+        Your account at a glance — details on file are reused to fill in bookings so you don't
+        retype them. Your trips live under{' '}
+        <span className="font-semibold text-slate-700">My trips</span>.
       </p>
 
       <div className="mt-6 space-y-6">
         <ErrorAlert error={error} />
         {profile ? (
           <>
+            <AccountOverview profile={profile} />
             <PersonalAndDocuments profile={profile} onSaved={setProfile} />
             <SavedTravellers />
             <ChangePassword />
@@ -52,6 +59,55 @@ export function ProfilePage() {
         ) : null}
       </div>
     </main>
+  );
+}
+
+/**
+ * Everything the account holds, read-only at a glance - the editable forms
+ * below change it. Passport number is shown masked; the edit form has the
+ * full value.
+ */
+function AccountOverview({ profile }: { profile: Profile }) {
+  const mask = (value: string | null) =>
+    value ? `${'•'.repeat(Math.max(value.length - 3, 0))}${value.slice(-3)}` : '—';
+  const rows: Array<[string, string]> = [
+    ['Full name', profile.fullName ?? '—'],
+    ['Email', profile.email],
+    ['Role', profile.role === 'ROLE_ADMIN' ? 'Administrator' : 'Passenger'],
+    ['Phone', profile.phone ?? '—'],
+    ['Date of birth', profile.dateOfBirth ?? '—'],
+    ['Nationality', profile.nationality ?? '—'],
+    ['Passport', mask(profile.passportNumber)],
+    ['Passport expiry', profile.passportExpiry ?? '—'],
+    ['Emergency contact', profile.emergencyContactName ?? '—'],
+    ['Emergency phone', profile.emergencyContactPhone ?? '—'],
+  ];
+
+  return (
+    <section className="card overflow-hidden">
+      <div className="flex items-center gap-3 border-b border-slate-100 bg-brand-950 px-5 py-4 text-white">
+        <span className="grid h-11 w-11 place-items-center rounded-full bg-accent-500 text-base font-bold">
+          {(profile.fullName ?? profile.email)
+            .split(/\s+/)
+            .map((part) => part[0])
+            .slice(0, 2)
+            .join('')
+            .toUpperCase()}
+        </span>
+        <div className="min-w-0">
+          <div className="truncate text-base font-bold">{profile.fullName ?? profile.email}</div>
+          <div className="truncate text-xs text-white/70">{profile.email}</div>
+        </div>
+      </div>
+      <dl className="grid gap-x-6 px-5 py-4 text-sm sm:grid-cols-2">
+        {rows.map(([label, value]) => (
+          <div key={label} className="flex items-baseline justify-between gap-3 border-b border-slate-50 py-1.5">
+            <dt className="shrink-0 text-slate-500">{label}</dt>
+            <dd className="tabular truncate text-right font-semibold text-slate-900">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 

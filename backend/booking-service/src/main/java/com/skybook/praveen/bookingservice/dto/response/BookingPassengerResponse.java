@@ -21,6 +21,19 @@ public record BookingPassengerResponse(
 
         String passportNumber,
 
+        // Full identity snapshot (title/gender/dob/nationality/expiry): what
+        // lets the frontend REBOOK this passenger onto another flight without
+        // asking them to retype documents that are already on file here.
+        String title,
+
+        String gender,
+
+        java.time.LocalDate dob,
+
+        String nationality,
+
+        java.time.LocalDate passportExpiry,
+
         TravelClass travelClass,
 
         FareType fareType,

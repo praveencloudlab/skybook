@@ -74,6 +74,7 @@ class BookingFacadeTest {
 
     private BookingPassengerResponse passenger(long id, String seat) {
         return new BookingPassengerResponse(id, id + 100, "Pax", "Test", "N000" + id,
+                "Mr", "MALE", java.time.LocalDate.of(1990, 1, 1), "GBR", java.time.LocalDate.of(2032, 1, 1),
                 TravelClass.ECONOMY, FareType.FLEXI, seat,
                 new BigDecimal("100.00"), BigDecimal.ZERO, 0, BigDecimal.ZERO,
                 com.skybook.praveen.bookingservice.enums.SeatAssignmentMode.MANUAL, "USD",

@@ -16,6 +16,7 @@ import { dayAndMonth, duration, money, time } from '../../lib/format';
 import { BoardingPassCard } from './BoardingPassCard';
 import { StatusBadge } from './StatusBadge';
 import { printETicket } from './printable';
+import { ModifyBookingDialog } from './ModifyBookingDialog';
 
 // Seeded fares are USD; the booking doesn't carry a currency of its own.
 const CURRENCY = 'USD';
@@ -47,6 +48,7 @@ export function BookingDetailPage({
   // actions stay hidden until the user explicitly opens them - a detail page
   // should read as an itinerary, not open on a cancellation form.
   const [managing, setManaging] = useState(false);
+  const [modifying, setModifying] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirm, setConfirm] = useState<'selected' | 'entire' | null>(null);
   const [refundNotice, setRefundNotice] = useState<string | null>(null);
@@ -358,7 +360,18 @@ export function BookingDetailPage({
         ) : booking.bookingStatus === 'CANCELLED' ? (
           <p className="mt-4 text-sm text-slate-400">This booking is cancelled.</p>
         ) : anyCancellable && !managing ? (
-          <div className="mt-4">
+          <div className="mt-4 flex flex-wrap gap-2">
+            {/* Change flight/date/bags = a guided rebook; impossible once
+                anyone holds a boarding pass. */}
+            {!anyCheckedIn ? (
+              <button
+                type="button"
+                onClick={() => setModifying(true)}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-brand-500 hover:text-brand-700"
+              >
+                Change flight, dates or bags
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => {
@@ -439,7 +452,7 @@ export function BookingDetailPage({
               {/* Whole-booking cancel disappears once anyone holds a boarding
                   pass - "entire" would silently exclude them, which is worse
                   than not offering it (a checked-in traveller needs support). */}
-              {!anyCheckedIn ? (
+              {!anyCheckedIn && activePassengers.length > 1 ? (
                 <button
                   type="button"
                   onClick={() => setConfirm('entire')}
@@ -543,6 +556,20 @@ export function BookingDetailPage({
           )}
         </div>
       </section>
+
+      {modifying ? (
+        <ModifyBookingDialog
+          booking={booking}
+          currentFlight={flight}
+          onClose={() => setModifying(false)}
+          onRebooked={() => {
+            // Back to the list: the new booking is there CONFIRMED, the old
+            // one CANCELLED with its refund - fresher than patching in place.
+            setModifying(false);
+            onBack();
+          }}
+        />
+      ) : null}
     </main>
   );
 }

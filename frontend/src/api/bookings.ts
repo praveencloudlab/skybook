@@ -61,6 +61,13 @@ export interface BookingPassenger {
   id: number;
   firstName: string;
   lastName: string;
+  passportNumber?: string;
+  /** Full identity snapshot - lets the UI rebook this passenger without retyping. */
+  title?: string;
+  gender?: string;
+  dob?: string;
+  nationality?: string;
+  passportExpiry?: string;
   seatNumber: string | null;
   travelClass: TravelClass;
   fareType: FareType;
