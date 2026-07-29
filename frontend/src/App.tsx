@@ -25,7 +25,10 @@ import { SearchPage } from './features/search/SearchPage';
 import { SiteFooter } from './components/SiteFooter';
 import { FlightQuotePage } from './features/search/FlightQuotePage';
 import { SeatSelectionPage } from './features/seats/SeatSelectionPage';
-import { CheckoutPage } from './features/booking/CheckoutPage';
+import { GuestsPage } from './features/booking/GuestsPage';
+import { BagsPage, EXTRA_BAG_FEE } from './features/booking/BagsPage';
+import { PaymentPage } from './features/booking/PaymentPage';
+import { emptyPassenger, type PassengerDraft } from './features/booking/PassengerForm';
 import { ConfirmationPage } from './features/booking/ConfirmationPage';
 import { MyBookingsPage } from './features/bookings/MyBookingsPage';
 import { BookingDetailPage } from './features/bookings/BookingDetailPage';
@@ -199,7 +202,7 @@ interface FareChoice {
 }
 
 /** Where the passenger is in the booking journey. */
-type Step = 'search' | 'fares' | 'seat' | 'checkout' | 'confirmed';
+type Step = 'search' | 'fares' | 'guests' | 'seat' | 'bags' | 'payment' | 'confirmed';
 
 /**
  * The log-in wall that appears the moment an anonymous browser tries to book.
@@ -285,6 +288,12 @@ function BookingJourney() {
   // One chosen seat per traveller, in passenger order; shorter than the party
   // means the rest are auto-assigned free at check-in.
   const [seats, setSeats] = useState<AircraftSeat[]>([]);
+  // Guest details, extra bags and the booking contact live at the journey
+  // level: the carrier flow spreads them across separate steps (guests ->
+  // seats -> bags -> payment) and each later step reads what earlier ones set.
+  const [guests, setGuests] = useState<PassengerDraft[]>([emptyPassenger()]);
+  const [bags, setBags] = useState<number[]>([0]);
+  const [contactEmail, setContactEmail] = useState('');
   const [result, setResult] = useState<{ booking: Booking; payment: Payment } | null>(null);
 
   const paxCount = totalTravellers(travellers);
@@ -302,14 +311,48 @@ function BookingJourney() {
     setTravellers(ONE_ADULT);
     setChoice(null);
     setSeats([]);
+    setGuests([emptyPassenger()]);
+    setBags([0]);
+    setContactEmail('');
     setResult(null);
   }
 
-  // Search and fares are public; everything from seat selection on writes owned
+  // Shared money math: every step's Summary rail shows the same running total,
+  // computed one way. Seats align to the SEATED party (lap infants hold none),
+  // so they are re-aligned to guest order for labels and the final request.
+  const seatedIndexes = paxTypes
+    .map((type, index) => (type !== 'INFANT' ? index : -1))
+    .filter((index) => index >= 0);
+  const alignedSeats: (AircraftSeat | undefined)[] = [];
+  seats.forEach((seat, seatedIdx) => {
+    const guestIdx = seatedIndexes[seatedIdx];
+    if (guestIdx !== undefined) {
+      alignedSeats[guestIdx] = seat;
+    }
+  });
+  const seatTotal = seats.reduce((sum, s) => sum + (Number(s.listedSurcharge) || 0), 0);
+  const bagTotal = bags.reduce((sum, b) => sum + b, 0) * EXTRA_BAG_FEE;
+  const total = (choice ? choice.baseFare * paxCount : 0) + seatTotal + bagTotal;
+  const guestLabel = (index: number) =>
+    `${guests[index]?.firstName ?? ''} ${guests[index]?.lastName ?? ''}`.trim() || `Guest ${index + 1}`;
+  const extras = [
+    ...alignedSeats.flatMap((seat, index) =>
+      seat
+        ? [{ label: `${guestLabel(index)} · Seat ${seat.seatNumber}`, amount: Number(seat.listedSurcharge) || 0 }]
+        : [],
+    ),
+    ...bags.flatMap((count, index) =>
+      count > 0
+        ? [{ label: `${guestLabel(index)} · ${count} extra bag${count > 1 ? 's' : ''}`, amount: count * EXTRA_BAG_FEE }]
+        : [],
+    ),
+  ];
+
+  // Search and fares are public; everything from guest details on writes owned
   // data and needs a principal. An anonymous browser that reaches those steps
   // meets the log-in wall here - with its flight and fare still in state, so it
   // resumes intact the instant the session appears.
-  if ((step === 'seat' || step === 'checkout' || step === 'confirmed') && !signedIn) {
+  if ((step === 'guests' || step === 'seat' || step === 'bags' || step === 'payment' || step === 'confirmed') && !signedIn) {
     return <BookingAuthGate flight={flight} choice={choice} onBack={() => setStep('fares')} />;
   }
 
@@ -319,21 +362,47 @@ function BookingJourney() {
     );
   }
 
-  if (step === 'checkout' && flight && choice) {
+  if (step === 'payment' && flight && choice) {
     return (
-      <CheckoutPage
+      <PaymentPage
         flight={flight}
         cabin={choice.cabin}
         fare={choice.fare}
-        baseFare={choice.baseFare}
         currency={choice.currency}
-        seats={seats}
-        paxTypes={paxTypes}
-        onBack={() => setStep('seat')}
+        travellers={travellers}
+        guests={guests}
+        seats={alignedSeats as AircraftSeat[]}
+        bags={bags}
+        contactEmail={contactEmail}
+        extras={extras}
+        total={total}
+        onBack={() => setStep('bags')}
         onBooked={(booking, payment) => {
           setResult({ booking, payment });
           setStep('confirmed');
         }}
+      />
+    );
+  }
+
+  if (step === 'bags' && flight && choice) {
+    return (
+      <BagsPage
+        flight={flight}
+        cabin={choice.cabin}
+        fare={choice.fare}
+        currency={choice.currency}
+        travellers={travellers}
+        paxTypes={paxTypes}
+        guests={guests}
+        bags={bags}
+        onAdjustBag={(index, delta) =>
+          setBags((prev) => prev.map((b, i) => (i === index ? Math.max(0, Math.min(5, b + delta)) : b)))
+        }
+        extras={extras}
+        total={total}
+        onBack={() => setStep('seat')}
+        onContinue={() => setStep('payment')}
       />
     );
   }
@@ -346,12 +415,34 @@ function BookingJourney() {
         fare={choice.fare}
         baseFare={choice.baseFare}
         currency={choice.currency}
-        paxCount={paxCount}
-        onBack={() => setStep('fares')}
+        travellers={travellers}
+        paxTypes={paxTypes}
+        guests={guests}
+        onBack={() => setStep('guests')}
         onContinue={(chosen) => {
           setSeats(chosen);
-          setStep('checkout');
+          setStep('bags');
         }}
+      />
+    );
+  }
+
+  if (step === 'guests' && flight && choice) {
+    return (
+      <GuestsPage
+        flight={flight}
+        cabin={choice.cabin}
+        fare={choice.fare}
+        currency={choice.currency}
+        travellers={travellers}
+        paxTypes={paxTypes}
+        guests={guests}
+        onGuestsChange={setGuests}
+        contactEmail={contactEmail}
+        onContactEmailChange={setContactEmail}
+        total={total}
+        onBack={() => setStep('fares')}
+        onContinue={() => setStep('seat')}
       />
     );
   }
@@ -360,11 +451,12 @@ function BookingJourney() {
     return (
       <FlightQuotePage
         flight={flight}
+        paxCount={paxCount}
         preferredCabin={preferredCabin}
         onBack={() => setStep('search')}
         onChoose={(chosen) => {
           setChoice(chosen);
-          setStep('seat');
+          setStep('guests');
         }}
       />
     );
@@ -377,6 +469,11 @@ function BookingJourney() {
         setTravellers(party);
         setPreferredCabin(cabin);
         setSeats([]);
+        // Fresh forms sized to the declared party, in paxTypes order
+        // (adults, then children, then infants).
+        setGuests(Array.from({ length: totalTravellers(party) }, emptyPassenger));
+        setBags(Array.from({ length: totalTravellers(party) }, () => 0));
+        setContactEmail('');
         setStep('fares');
       }}
     />

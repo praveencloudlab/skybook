@@ -38,6 +38,8 @@ export interface PassengerDetail {
   fareType: FareType;
   /** Omit to have a seat assigned free of charge. */
   seatNumber?: string;
+  /** Extra checked bags to buy (ancillary), charged per bag. */
+  extraBags?: number;
 }
 
 export interface BookingContact {
@@ -65,6 +67,9 @@ export interface BookingPassenger {
   baseFare?: string | number;
   seatSurcharge?: string | number;
   fare?: string | number;
+  /** Ancillary bags bought at booking, and what they cost. */
+  extraBags?: number;
+  baggageFee?: string | number;
   /** This traveller has been cancelled off the booking (booking survives). */
   cancelled?: boolean;
   /** ADULT / CHILD / INFANT, from DOB - drives the guardian rule. */

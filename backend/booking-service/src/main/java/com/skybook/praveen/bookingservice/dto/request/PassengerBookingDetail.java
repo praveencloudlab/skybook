@@ -56,7 +56,12 @@ public record PassengerBookingDetail(
         @NotNull(message = "Fare type is required")
         FareType fareType,
 
-        String seatNumber
+        String seatNumber,
+
+        /** Extra checked bags to buy (ancillary). Null/absent means none. */
+        @jakarta.validation.constraints.Min(value = 0, message = "extraBags cannot be negative")
+        @jakarta.validation.constraints.Max(value = 5, message = "At most 5 extra bags per passenger")
+        Integer extraBags
 
 ) {
 }

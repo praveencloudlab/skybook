@@ -18,6 +18,7 @@ export function SeatMap({
   currency,
   paxCount,
   selected,
+  initials,
   onToggle,
   onClear,
 }: {
@@ -29,6 +30,8 @@ export function SeatMap({
   paxCount: number;
   /** Chosen seats in passenger order (index 0 = passenger 1). */
   selected: AircraftSeat[];
+  /** Per-passenger initials ("PR") stamped on their chosen seat; falls back to P1/P2. */
+  initials?: string[];
   onToggle: (seat: AircraftSeat) => void;
   onClear: () => void;
 }) {
@@ -103,6 +106,7 @@ export function SeatMap({
                             currency={currency}
                             taken={map.taken.has(seat.seatNumber)}
                             passengerIndex={selected.findIndex((s) => s.seatNumber === seat.seatNumber)}
+                            initials={initials}
                             multi={paxCount > 1}
                             onSelect={onToggle}
                           />
@@ -177,6 +181,7 @@ function Seat({
   currency,
   taken,
   passengerIndex,
+  initials,
   multi,
   onSelect,
 }: {
@@ -185,6 +190,7 @@ function Seat({
   taken: boolean;
   /** Which traveller holds this seat (0-based), or -1 when unselected. */
   passengerIndex: number;
+  initials?: string[];
   /** Whether the party has more than one traveller (shows P1/P2 badges). */
   multi: boolean;
   onSelect: (seat: AircraftSeat) => void;
@@ -226,9 +232,9 @@ function Seat({
               : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100 ring-1 ring-inset ring-emerald-200')
       }
     >
-      {selected && multi ? (
-        <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-brand-600 px-1 text-[8px] font-bold leading-3 text-white ring-2 ring-white">
-          P{passengerIndex + 1}
+      {selected && (multi || (initials && initials[passengerIndex])) ? (
+        <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-brand-900 px-1 text-[8px] font-bold leading-3 text-white ring-2 ring-white">
+          {initials?.[passengerIndex] || `P${passengerIndex + 1}`}
         </span>
       ) : null}
       {seat.seatNumber.replace(/^\d+/, '')}

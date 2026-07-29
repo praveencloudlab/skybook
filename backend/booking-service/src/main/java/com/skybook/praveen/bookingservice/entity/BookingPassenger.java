@@ -92,6 +92,14 @@ public class BookingPassenger extends Auditable {
     @Column(name = "seat_surcharge", nullable = false)
     private BigDecimal seatSurcharge;
 
+    /** Extra checked bags bought at booking (ancillary), 0 for none. */
+    @Column(name = "extra_bags", nullable = false)
+    private int extraBags;
+
+    /** What those bags actually COST at booking time - part of the immutable breakdown. */
+    @Column(name = "baggage_fee", nullable = false)
+    private BigDecimal baggageFee;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "charged_seat_assignment_mode", nullable = false, length = 10)
     private SeatAssignmentMode chargedSeatAssignmentMode;
@@ -100,7 +108,7 @@ public class BookingPassenger extends Auditable {
     @Column(nullable = false, length = 3)
     private String currency;
 
-    /** All-in total = baseFare + seatSurcharge. What payment/refund/invoice bill against (unchanged). */
+    /** All-in total = baseFare + seatSurcharge + baggageFee. What payment/refund/invoice bill against (unchanged). */
     @Column(nullable = false)
     private BigDecimal fare;
 
@@ -124,6 +132,9 @@ public class BookingPassenger extends Auditable {
         // equals the total. New bookings set these explicitly.
         if (seatSurcharge == null) {
             seatSurcharge = BigDecimal.ZERO;
+        }
+        if (baggageFee == null) {
+            baggageFee = BigDecimal.ZERO;
         }
         if (chargedSeatAssignmentMode == null) {
             chargedSeatAssignmentMode = SeatAssignmentMode.MANUAL;

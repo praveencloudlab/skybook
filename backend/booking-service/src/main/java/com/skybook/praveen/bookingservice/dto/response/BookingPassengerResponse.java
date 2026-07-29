@@ -28,11 +28,16 @@ public record BookingPassengerResponse(
         String seatNumber,
 
         // Fare breakdown (SEAT_SELECTION_MODULE.md §8): the all-in `fare` is
-        // baseFare + seatSurcharge. seatSurcharge is what was actually charged
-        // (0 for an AUTO seat), not the seat's listed price.
+        // baseFare + seatSurcharge + baggageFee. seatSurcharge is what was
+        // actually charged (0 for an AUTO seat), not the seat's listed price.
         BigDecimal baseFare,
 
         BigDecimal seatSurcharge,
+
+        // Ancillary bags bought at booking, and what they actually cost.
+        int extraBags,
+
+        BigDecimal baggageFee,
 
         SeatAssignmentMode chargedSeatAssignmentMode,
 

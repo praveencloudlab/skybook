@@ -98,7 +98,7 @@ class BookingServiceImplTest {
                 LocalDate.of(1990, 1, 1), "FEMALE", "GBR",
                 "P1234567", LocalDate.of(2032, 1, 1),
                 "jane@example.com", "+441234567890",
-                travelClass, fareType, seatNumber
+                travelClass, fareType, seatNumber, null
         );
     }
 
@@ -191,7 +191,7 @@ class BookingServiceImplTest {
                     LocalDate.of(1990, 1, 1), "FEMALE", "GBR",
                     "P1234567", LocalDate.of(2026, 5, 1), // expires before departure
                     "jane@example.com", "+441234567890",
-                    TravelClass.ECONOMY, FareType.FLEXI, "12A"
+                    TravelClass.ECONOMY, FareType.FLEXI, "12A", null
             );
 
             CreateBookingRequest request = createRequest(List.of(expiredPassport));

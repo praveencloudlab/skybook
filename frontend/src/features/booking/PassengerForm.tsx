@@ -62,6 +62,7 @@ export function toPassengerDetail(
   cabin: TravelClass,
   fare: FareType,
   seatNumber: string | null,
+  extraBags = 0,
 ): PassengerDetail {
   return {
     title: draft.title,
@@ -77,6 +78,7 @@ export function toPassengerDetail(
     // request than "you choose", and the server's free auto-assignment path is
     // keyed on the field being absent.
     ...(seatNumber ? { seatNumber } : {}),
+    ...(extraBags > 0 ? { extraBags } : {}),
   };
 }
 

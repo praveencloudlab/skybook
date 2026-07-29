@@ -48,6 +48,9 @@ public class BookingServiceImpl implements BookingService {
     private static final int MAX_PNR_GENERATION_ATTEMPTS = 10;
     private static final String DEFAULT_CURRENCY = "USD";
 
+    /** Flat price per extra checked bag (ancillary), per passenger. */
+    private static final BigDecimal EXTRA_BAG_FEE = new BigDecimal("40.00");
+
     private final BookingRepository bookingRepository;
     private final BookingPassengerRepository bookingPassengerRepository;
 
@@ -107,6 +110,11 @@ public class BookingServiceImpl implements BookingService {
             BigDecimal baseFare = fareCalculator.calculateFare(
                     detail.travelClass(), detail.fareType(), flightDepartureTime);
 
+            // Ancillary bags priced here, once, into the immutable breakdown -
+            // refunds/invoices bill the stored fare, never a recomputation.
+            int extraBags = detail.extraBags() != null ? detail.extraBags() : 0;
+            BigDecimal baggageFee = EXTRA_BAG_FEE.multiply(BigDecimal.valueOf(extraBags));
+
             BookingPassenger bookingPassenger = BookingPassenger.builder()
                     .booking(booking)
                     .passenger(passenger)
@@ -115,14 +123,16 @@ public class BookingServiceImpl implements BookingService {
                     .fareType(detail.fareType())
                     .baseFare(baseFare)
                     .seatSurcharge(BigDecimal.ZERO)
+                    .extraBags(extraBags)
+                    .baggageFee(baggageFee)
                     .chargedSeatAssignmentMode(SeatAssignmentMode.MANUAL)
                     .currency(DEFAULT_CURRENCY)
-                    .fare(baseFare)
+                    .fare(baseFare.add(baggageFee))
                     .checkInStatus(CheckInStatus.NOT_OPEN)
                     .build();
 
             bookingPassengers.add(bookingPassenger);
-            totalFare = totalFare.add(baseFare);
+            totalFare = totalFare.add(bookingPassenger.getFare());
         }
 
         booking.setPassengers(bookingPassengers);
@@ -170,7 +180,16 @@ public class BookingServiceImpl implements BookingService {
             passenger.setSeatNumber(assignment.seatNumber());
             passenger.setSeatSurcharge(assignment.chargedSurcharge());
             passenger.setChargedSeatAssignmentMode(assignment.mode());
-            passenger.setFare(passenger.getBaseFare().add(assignment.chargedSurcharge()));
+            // All-in fare: base + charged seat surcharge + baggage bought at
+            // draft. Null-safe like the entity's own prePersist backfill: a row
+            // created before the baggage column (or a bare test fixture) reads
+            // as zero bags, not as a crash.
+            BigDecimal baggageFee = passenger.getBaggageFee() != null
+                    ? passenger.getBaggageFee()
+                    : BigDecimal.ZERO;
+            passenger.setFare(passenger.getBaseFare()
+                    .add(assignment.chargedSurcharge())
+                    .add(baggageFee));
         }
 
         for (BookingPassenger passenger : booking.getPassengers()) {

@@ -1,32 +1,58 @@
 import { useEffect, useState } from 'react';
 import type { Flight } from '../../api/flights';
-import { quotesApi, type FareType, type Quote, type TravelClass } from '../../api/quotes';
+import {
+  FARE_TYPE_LABELS,
+  TRAVEL_CLASS_LABELS,
+  TRAVEL_CLASS_ORDER,
+  quotesApi,
+  type CabinQuote,
+  type FareType,
+  type Quote,
+  type TravelClass,
+} from '../../api/quotes';
 import { ErrorAlert } from '../../components/Alert';
+import { BookingStepper } from '../../components/BookingStepper';
 import { Button } from '../../components/Button';
-import { TripSummaryBar } from '../../components/TripSummaryBar';
 import { ApiError } from '../../lib/errors';
-import { FareTable } from './FareTable';
+import { money } from '../../lib/format';
 
 /**
- * A chosen flight and its fares (FRONTEND_MODULE.md §5 screen 3).
- *
- * <p>The quote is fetched per flight rather than folded into search results:
- * booking-service is the only place inventory availability and base fares meet,
- * and asking for all of them up front would mean a quote request per result row.
+ * Choose your fare (carrier flow step 1b): the chosen cabin's fare families as
+ * rich feature cards - coloured top bar, price, a Choose pill and an honest
+ * tick/cross feature list - with cabin tabs above to switch cabin. Only claims
+ * the platform actually honours appear: refund generosity differs by fare
+ * type, baggage by cabin, seats are paid-or-free-at-check-in for everyone,
+ * and online date changes don't exist yet - so the cards say exactly that.
  */
+
+const BAGGAGE: Record<TravelClass, { checked: string; cabin: string }> = {
+  ECONOMY: { checked: '25kg checked baggage', cabin: '7kg cabin baggage' },
+  PREMIUM_ECONOMY: { checked: '30kg checked baggage', cabin: '7kg cabin baggage' },
+  BUSINESS: { checked: '40kg checked baggage', cabin: '10kg cabin baggage' },
+  FIRST: { checked: '50kg checked baggage', cabin: '10kg cabin baggage' },
+};
+
+const FARE_ORDER: FareType[] = ['SAVER', 'FLEXI', 'PREMIUM'];
+
+const CARD_BAR: Record<FareType, string> = {
+  SAVER: 'bg-orange-500',
+  FLEXI: 'bg-teal-600',
+  PREMIUM: 'bg-accent-500',
+};
+
 export function FlightQuotePage({
   flight,
-  preferredCabin,
+  paxCount,
+  preferredCabin = 'ECONOMY',
   onBack,
   onChoose,
 }: {
   flight: Flight;
-  /** The cabin chosen in the search widget - emphasised in the fare grid. */
+  paxCount: number;
   preferredCabin?: TravelClass;
   onBack: () => void;
-  // Carries the PRICE, not just the labels: the seat screen shows a running
-  // total, and re-deriving the fare there would mean a second quote call that
-  // could disagree with the one the passenger actually clicked.
+  // Carries the PRICE, not just the labels: later steps show a running total,
+  // and re-deriving the fare there could disagree with what was clicked.
   onChoose?: (choice: {
     cabin: TravelClass;
     fare: FareType;
@@ -35,6 +61,7 @@ export function FlightQuotePage({
   }) => void;
 }) {
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [cabin, setCabin] = useState<TravelClass>(preferredCabin);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(true);
 
@@ -45,9 +72,17 @@ export function FlightQuotePage({
 
     quotesApi
       .forFlight(flight.id, controller.signal)
-      .then((result) => setQuote(result))
+      .then((result) => {
+        setQuote(result);
+        // If the aircraft has no such cabin, land on the first it does have.
+        if (!result.cabins.some((c) => c.travelClass === preferredCabin)) {
+          const first = TRAVEL_CLASS_ORDER.find((tc) => result.cabins.some((c) => c.travelClass === tc));
+          if (first) {
+            setCabin(first);
+          }
+        }
+      })
       .catch((cause) => {
-        // An abort is us navigating away, not a failure worth reporting.
         if (cause instanceof DOMException && cause.name === 'AbortError') {
           return;
         }
@@ -56,54 +91,163 @@ export function FlightQuotePage({
       .finally(() => setBusy(false));
 
     return () => controller.abort();
-  }, [flight.id]);
+  }, [flight.id, preferredCabin]);
+
+  const cabins = quote
+    ? TRAVEL_CLASS_ORDER.map((tc) => quote.cabins.find((c) => c.travelClass === tc)).filter(
+        (c): c is CabinQuote => c !== undefined,
+      )
+    : [];
+  const selectedCabin = cabins.find((c) => c.travelClass === cabin) ?? cabins[0];
 
   return (
     <>
-      <TripSummaryBar flight={flight} step="fares" onBack={onBack} />
+      <BookingStepper
+        current="flights"
+        flight={flight}
+        route={`${flight.originAirportCode} → ${flight.destinationAirportCode}`}
+        onModify={onBack}
+      />
 
-      <main className="mx-auto max-w-5xl px-6 py-8">
-        <div className="max-w-xl">
-          <h1 className="display text-3xl text-slate-900">Choose your fare</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            Pick a cabin and fare. Every fare is the base price per passenger — you'll choose a seat
-            next, and letting us assign one is free.
-          </p>
-        </div>
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Choose your fare</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Prices are for all guests ({paxCount}) including taxes. You'll pick seats and bags next.
+        </p>
 
-        <div className="mt-6 space-y-3">
+        <div className="mt-4">
           <ErrorAlert error={error} />
-
-          {busy ? (
-            <div className="card px-4 py-8 text-center text-sm text-slate-500">
-              <span className="inline-flex items-center gap-2">
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-300 border-t-transparent" />
-                Loading live fares…
-              </span>
-            </div>
-          ) : quote ? (
-            <FareTable
-              quote={quote}
-              highlightCabin={preferredCabin}
-              onSelect={
-                onChoose
-                  ? (cabin, fare) => {
-                      const chosen = quote.cabins.find((c) => c.travelClass === cabin);
-                      const baseFare = Number(chosen?.baseFares[fare] ?? 0);
-                      onChoose({ cabin, fare, baseFare, currency: quote.currency });
-                    }
-                  : undefined
-              }
-            />
-          ) : null}
-
-          {error?.retryable ? (
-            <Button variant="secondary" onClick={() => setQuote(null)}>
-              Try again
-            </Button>
-          ) : null}
         </div>
+
+        {busy ? (
+          <div className="mt-4 rounded-2xl bg-white px-4 py-10 text-center text-sm text-slate-500 shadow-[var(--shadow-card)]">
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-300 border-t-transparent" />
+              Loading live fares…
+            </span>
+          </div>
+        ) : quote && selectedCabin ? (
+          <>
+            {/* Cabin tabs. */}
+            <div className="mt-4 flex flex-wrap gap-2">
+              {cabins.map((c) => {
+                const active = c.travelClass === selectedCabin.travelClass;
+                return (
+                  <button
+                    key={c.travelClass}
+                    type="button"
+                    onClick={() => setCabin(c.travelClass)}
+                    aria-pressed={active}
+                    className={
+                      'rounded-full px-5 py-2 text-sm font-bold transition ' +
+                      (active
+                        ? 'bg-brand-950 text-white'
+                        : 'border border-slate-300 bg-white text-slate-700 hover:border-slate-500')
+                    }
+                  >
+                    {TRAVEL_CLASS_LABELS[c.travelClass]}
+                    {c.availableSeats !== null && c.availableSeats !== undefined && c.availableSeats <= 5 ? (
+                      <span className="ml-2 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                        {c.availableSeats} seats left
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Fare cards. */}
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              {FARE_ORDER.map((fareType) => {
+                const perGuest = Number(selectedCabin.baseFares[fareType] ?? 0);
+                const cheapest = Number(selectedCabin.baseFares[FARE_ORDER[0]] ?? 0);
+                const partyPrice = perGuest * paxCount;
+                const increment = (perGuest - cheapest) * paxCount;
+                const recommended = fareType === 'FLEXI';
+                const bags = BAGGAGE[selectedCabin.travelClass];
+                return (
+                  <article
+                    key={fareType}
+                    className={
+                      'overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-card)] ' +
+                      (recommended ? 'ring-2 ring-accent-500' : 'ring-1 ring-slate-200')
+                    }
+                  >
+                    {recommended ? (
+                      <div className="bg-accent-500 py-1.5 text-center text-xs font-bold uppercase tracking-wide text-white">
+                        Recommended
+                      </div>
+                    ) : (
+                      <div className={'h-2.5 ' + CARD_BAR[fareType]} aria-hidden="true" />
+                    )}
+                    <div className="p-5">
+                      <h2 className="text-xl font-bold text-slate-900">{FARE_TYPE_LABELS[fareType]}</h2>
+                      <div className="tabular mt-2 text-2xl font-bold text-slate-900">
+                        {fareType === FARE_ORDER[0]
+                          ? money(partyPrice, quote.currency)
+                          : `+ ${money(increment, quote.currency)}`}
+                      </div>
+                      <p className="text-[11px] text-slate-400">for all guests</p>
+
+                      <Button
+                        className="mt-4 w-full"
+                        variant={recommended ? 'primary' : 'secondary'}
+                        onClick={() =>
+                          onChoose?.({
+                            cabin: selectedCabin.travelClass,
+                            fare: fareType,
+                            baseFare: perGuest,
+                            currency: quote.currency,
+                          })
+                        }
+                        disabled={!onChoose}
+                      >
+                        Choose
+                      </Button>
+
+                      <ul className="mt-4 space-y-2.5 border-t border-slate-100 pt-4 text-sm">
+                        <FeatureRow ok text={bags.checked} />
+                        <FeatureRow ok text={bags.cabin} />
+                        <FeatureRow
+                          ok
+                          text={
+                            fareType === 'SAVER'
+                              ? 'Partial refund — cancellation fee applies'
+                              : fareType === 'FLEXI'
+                                ? 'Generous refund on cancellation'
+                                : 'Highest refund — fully flexible'
+                          }
+                        />
+                        <FeatureRow ok text="Free auto-assigned seat at check-in" />
+                        <FeatureRow ok text="Pick any seat (listed surcharge)" />
+                        <FeatureRow ok text="Extra bags from $40 each" />
+                        <FeatureRow ok={false} text="Online date changes" />
+                      </ul>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </>
+        ) : null}
       </main>
     </>
+  );
+}
+
+function FeatureRow({ ok, text }: { ok: boolean; text: string }) {
+  return (
+    <li className="flex items-start gap-2 text-slate-700">
+      {ok ? (
+        <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 fill-emerald-600" aria-hidden="true">
+          <path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" className="mt-0.5 h-4 w-4 shrink-0 fill-red-500" aria-hidden="true">
+          <path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z" />
+        </svg>
+      )}
+      <span className={ok ? '' : 'text-slate-400'}>{text}</span>
+    </li>
   );
 }

@@ -75,7 +75,7 @@ class BookingFacadeTest {
     private BookingPassengerResponse passenger(long id, String seat) {
         return new BookingPassengerResponse(id, id + 100, "Pax", "Test", "N000" + id,
                 TravelClass.ECONOMY, FareType.FLEXI, seat,
-                new BigDecimal("100.00"), BigDecimal.ZERO,
+                new BigDecimal("100.00"), BigDecimal.ZERO, 0, BigDecimal.ZERO,
                 com.skybook.praveen.bookingservice.enums.SeatAssignmentMode.MANUAL, "USD",
                 new BigDecimal("100.00"), CheckInStatus.NOT_OPEN, false, "ADULT");
     }
@@ -103,7 +103,7 @@ class BookingFacadeTest {
                 java.time.LocalDate.of(1990, 1, 1), "MALE", "GBR",
                 "P1234567", java.time.LocalDate.of(2032, 1, 1),
                 "pax@example.com", "+441234567890",
-                TravelClass.ECONOMY, FareType.FLEXI, seatNumber);
+                TravelClass.ECONOMY, FareType.FLEXI, seatNumber, null);
     }
 
     private final FlightDetails flight = new FlightDetails(
