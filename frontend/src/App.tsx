@@ -205,6 +205,55 @@ interface FareChoice {
 type Step = 'search' | 'fares' | 'guests' | 'seat' | 'bags' | 'payment' | 'confirmed';
 
 /**
+ * The in-progress booking, persisted to sessionStorage so it survives every
+ * route away from /search - the header's Log in, Create an account, a
+ * mid-booking 401 redirect, even a refresh. Without this the journey's local
+ * state (and the traveller's chosen flight and fare with it) was destroyed by
+ * any navigation, and only the inline auth-gate login preserved it.
+ *
+ * <p>Passport numbers and expiries are deliberately NOT written to storage -
+ * names and dates of birth restore, passports are re-asked. If the saved step
+ * was already past the guests form, restoring clamps back to it so the
+ * missing passports are collected before anything is bookable.
+ */
+interface JourneyDraft {
+  step: Step;
+  flight: Flight;
+  travellers: Travellers;
+  preferredCabin: TravelClass;
+  choice: FareChoice | null;
+  seats: AircraftSeat[];
+  guests: PassengerDraft[];
+  bags: number[];
+  contactEmail: string;
+}
+
+const JOURNEY_KEY = 'skybook.journeyDraft';
+
+function loadJourneyDraft(): JourneyDraft | null {
+  try {
+    const raw = sessionStorage.getItem(JOURNEY_KEY);
+    if (!raw) {
+      return null;
+    }
+    const draft = JSON.parse(raw) as JourneyDraft;
+    if (!draft || !draft.flight || !draft.step || draft.step === 'confirmed') {
+      return null;
+    }
+    // Storage never holds passports; a draft resumed beyond the guests form
+    // goes back to it so they are re-collected.
+    const passportMissing =
+      Array.isArray(draft.guests) && draft.guests.some((g) => !g.passportNumber);
+    if (passportMissing && (draft.step === 'seat' || draft.step === 'bags' || draft.step === 'payment')) {
+      draft.step = 'guests';
+    }
+    return draft;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The log-in wall that appears the moment an anonymous browser tries to book.
  *
  * <p>Rendered INSIDE HomePage rather than as a route redirect, on purpose: the
@@ -223,6 +272,13 @@ function BookingAuthGate({
   choice: FareChoice | null;
   onBack: () => void;
 }) {
+  // If they log in via the HEADER (or register) instead of the inline form,
+  // the post-login redirect must bring them back here - the persisted draft
+  // does the rest.
+  useEffect(() => {
+    session.setReturnTo('/search');
+  }, []);
+
   return (
     <main className="mx-auto max-w-md px-6 py-12">
       <button
@@ -275,25 +331,27 @@ function BookingAuthGate({
 
 function BookingJourney() {
   const { signedIn } = useSession();
+  // One-time hydration from a persisted draft (see JourneyDraft above).
+  const [draft] = useState(loadJourneyDraft);
   // Kept in local state rather than routes: these are steps within one search,
   // and a /flights/:id route would re-fetch (and lose the results behind it) on
   // every back-navigation.
-  const [step, setStep] = useState<Step>('search');
-  const [flight, setFlight] = useState<Flight | null>(null);
-  const [travellers, setTravellers] = useState<Travellers>(ONE_ADULT);
+  const [step, setStep] = useState<Step>(draft?.step ?? 'search');
+  const [flight, setFlight] = useState<Flight | null>(draft?.flight ?? null);
+  const [travellers, setTravellers] = useState<Travellers>(draft?.travellers ?? ONE_ADULT);
   // The cabin chosen in the search widget - preselects (never hides) a cabin
   // on the fare step.
-  const [preferredCabin, setPreferredCabin] = useState<TravelClass>('ECONOMY');
-  const [choice, setChoice] = useState<FareChoice | null>(null);
+  const [preferredCabin, setPreferredCabin] = useState<TravelClass>(draft?.preferredCabin ?? 'ECONOMY');
+  const [choice, setChoice] = useState<FareChoice | null>(draft?.choice ?? null);
   // One chosen seat per traveller, in passenger order; shorter than the party
   // means the rest are auto-assigned free at check-in.
-  const [seats, setSeats] = useState<AircraftSeat[]>([]);
+  const [seats, setSeats] = useState<AircraftSeat[]>(draft?.seats ?? []);
   // Guest details, extra bags and the booking contact live at the journey
   // level: the carrier flow spreads them across separate steps (guests ->
   // seats -> bags -> payment) and each later step reads what earlier ones set.
-  const [guests, setGuests] = useState<PassengerDraft[]>([emptyPassenger()]);
-  const [bags, setBags] = useState<number[]>([0]);
-  const [contactEmail, setContactEmail] = useState('');
+  const [guests, setGuests] = useState<PassengerDraft[]>(draft?.guests ?? [emptyPassenger()]);
+  const [bags, setBags] = useState<number[]>(draft?.bags ?? [0]);
+  const [contactEmail, setContactEmail] = useState(draft?.contactEmail ?? '');
   const [result, setResult] = useState<{ booking: Booking; payment: Payment } | null>(null);
 
   const paxCount = totalTravellers(travellers);
@@ -305,7 +363,35 @@ function BookingJourney() {
     ...Array.from({ length: travellers.infants }, () => 'INFANT' as const),
   ];
 
+  // Persist the draft on every meaningful change; drop it once there is
+  // nothing to resume (back at search, or the booking is made). Passports are
+  // stripped before writing - see JourneyDraft.
+  useEffect(() => {
+    if (step === 'search' || step === 'confirmed' || !flight) {
+      sessionStorage.removeItem(JOURNEY_KEY);
+      return;
+    }
+    const persisted: JourneyDraft = {
+      step,
+      flight,
+      travellers,
+      preferredCabin,
+      choice,
+      seats,
+      bags,
+      contactEmail,
+      guests: guests.map((g) => ({ ...g, passportNumber: '', passportExpiry: '' })),
+    };
+    try {
+      sessionStorage.setItem(JOURNEY_KEY, JSON.stringify(persisted));
+    } catch {
+      // Storage full/blocked: the journey still works, it just won't survive
+      // a navigation - the pre-persistence behaviour.
+    }
+  }, [step, flight, travellers, preferredCabin, choice, seats, guests, bags, contactEmail]);
+
   function restart() {
+    sessionStorage.removeItem(JOURNEY_KEY);
     setStep('search');
     setFlight(null);
     setTravellers(ONE_ADULT);
