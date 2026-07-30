@@ -7,6 +7,7 @@ import {
   Routes,
   useLocation,
   useNavigate,
+  useSearchParams,
 } from 'react-router-dom';
 import { authApi } from './api/auth';
 import { setUnauthenticatedHandler } from './api/client';
@@ -331,8 +332,17 @@ function BookingAuthGate({
 
 function BookingJourney() {
   const { signedIn } = useSession();
-  // One-time hydration from a persisted draft (see JourneyDraft above).
-  const [draft] = useState(loadJourneyDraft);
+  const [searchParams] = useSearchParams();
+  // One-time hydration from a persisted draft (see JourneyDraft above) - but
+  // an explicit deep-linked search (?from&to: landing hero, popular
+  // destination cards) is a NEW search intent and beats any saved draft.
+  const [draft] = useState(() => {
+    if (searchParams.get('from') && searchParams.get('to')) {
+      sessionStorage.removeItem(JOURNEY_KEY);
+      return null;
+    }
+    return loadJourneyDraft();
+  });
   // Kept in local state rather than routes: these are steps within one search,
   // and a /flights/:id route would re-fetch (and lose the results behind it) on
   // every back-navigation.
@@ -434,6 +444,25 @@ function BookingJourney() {
     ),
   ];
 
+  // Any in-progress step carries an explicit exit: restart() clears the
+  // persisted draft too, so 'Start a new search' can never resume again.
+  const newSearchBar =
+    step !== 'search' && step !== 'confirmed' && flight ? (
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-brand-900 px-6 py-1.5 text-xs text-white/80">
+        <span className="tabular truncate">
+          Booking in progress: {flight.originAirportCode} → {flight.destinationAirportCode} ·{' '}
+          {flight.departureTime.slice(0, 10)}
+        </span>
+        <button
+          type="button"
+          onClick={restart}
+          className="shrink-0 font-bold text-accent-300 underline-offset-2 hover:underline"
+        >
+          Start a new search
+        </button>
+      </div>
+    ) : null;
+
   // Search and fares are public; everything from guest details on writes owned
   // data and needs a principal. An anonymous browser that reaches those steps
   // meets the log-in wall here - with its flight and fare still in state, so it
@@ -450,6 +479,8 @@ function BookingJourney() {
 
   if (step === 'payment' && flight && choice) {
     return (
+      <>
+      {newSearchBar}
       <PaymentPage
         flight={flight}
         cabin={choice.cabin}
@@ -468,11 +499,14 @@ function BookingJourney() {
           setStep('confirmed');
         }}
       />
+      </>
     );
   }
 
   if (step === 'bags' && flight && choice) {
     return (
+      <>
+      {newSearchBar}
       <BagsPage
         flight={flight}
         cabin={choice.cabin}
@@ -490,11 +524,14 @@ function BookingJourney() {
         onBack={() => setStep('seat')}
         onContinue={() => setStep('payment')}
       />
+      </>
     );
   }
 
   if (step === 'seat' && flight && choice) {
     return (
+      <>
+      {newSearchBar}
       <SeatSelectionPage
         flight={flight}
         cabin={choice.cabin}
@@ -510,11 +547,14 @@ function BookingJourney() {
           setStep('bags');
         }}
       />
+      </>
     );
   }
 
   if (step === 'guests' && flight && choice) {
     return (
+      <>
+      {newSearchBar}
       <GuestsPage
         flight={flight}
         cabin={choice.cabin}
@@ -530,11 +570,14 @@ function BookingJourney() {
         onBack={() => setStep('fares')}
         onContinue={() => setStep('seat')}
       />
+      </>
     );
   }
 
   if (step === 'fares' && flight) {
     return (
+      <>
+      {newSearchBar}
       <FlightQuotePage
         flight={flight}
         paxCount={paxCount}
@@ -545,6 +588,7 @@ function BookingJourney() {
           setStep('guests');
         }}
       />
+      </>
     );
   }
 
