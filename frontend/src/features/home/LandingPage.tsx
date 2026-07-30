@@ -90,6 +90,9 @@ export function LandingPage() {
       children: String(s.travellers.children),
       infants: String(s.travellers.infants),
       cabin: s.cabin,
+      // Round trip must survive the deep link, or the search page silently
+      // downgrades the trip to one-way.
+      ...(s.returnDate ? { return: s.returnDate } : {}),
     });
     navigate(`/search?${query}`);
   }

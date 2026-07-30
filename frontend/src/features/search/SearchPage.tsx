@@ -53,21 +53,33 @@ export function SearchPage({
   // with, so Select hands the journey the party/cabin that produced results.
   // Tomorrow, not today: same-day departures may already have left, and an
   // empty first result is a poor first impression of a working system.
-  const [initial] = useState<BookingSearch>(() => ({
-    origin: knownCode(params.get('from'), 'LHR'),
-    destination: knownCode(params.get('to'), 'DXB'),
-    date: params.get('date') || addDaysIso(todayIso(), 1),
-    travellers: {
-      adults: Math.max(1, Number(params.get('adults')) || 1),
-      children: Math.max(0, Number(params.get('children')) || 0),
-      infants: Math.max(0, Number(params.get('infants')) || 0),
-    },
-    cabin: knownCabin(params.get('cabin')),
-  }));
+  const [initial] = useState<BookingSearch>(() => {
+    const date = params.get('date') || addDaysIso(todayIso(), 1);
+    // A deep-linked round trip carries ?return= (landing hero); accept it
+    // only when it is a real date on or after the outbound.
+    const returnParam = params.get('return');
+    const returnDate =
+      returnParam && /^\d{4}-\d{2}-\d{2}$/.test(returnParam) && returnParam >= date
+        ? returnParam
+        : undefined;
+    return {
+      origin: knownCode(params.get('from'), 'LHR'),
+      destination: knownCode(params.get('to'), 'DXB'),
+      date,
+      ...(returnDate ? { returnDate } : {}),
+      travellers: {
+        adults: Math.max(1, Number(params.get('adults')) || 1),
+        children: Math.max(0, Number(params.get('children')) || 0),
+        infants: Math.max(0, Number(params.get('infants')) || 0),
+      },
+      cabin: knownCabin(params.get('cabin')),
+    };
+  });
   const [widgetKey, setWidgetKey] = useState(0);
   const [widgetInitial, setWidgetInitial] = useState<BookingSearch>(initial);
   // Round trip: the outbound picked in phase one, awaiting the return pick.
-  const [returnDate, setReturnDate] = useState<string | undefined>(undefined);
+  // Seeded from the deep link so a landing-page round trip STAYS a round trip.
+  const [returnDate, setReturnDate] = useState<string | undefined>(initial.returnDate);
   const [outbound, setOutbound] = useState<Flight | null>(null);
   const [party, setParty] = useState<{ travellers: Travellers; cabin: TravelClass }>({
     travellers: initial.travellers,
@@ -309,6 +321,11 @@ export function SearchPage({
                   <p className="text-sm text-slate-600">
                     <span className="font-semibold text-slate-900">{visibleItins.length}</span> trip
                     {visibleItins.length === 1 ? '' : 's'}
+                    {returnDate ? (
+                      <span className="ml-2 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700 ring-1 ring-inset ring-brand-100">
+                        Round trip · pick your {outbound ? 'return' : 'outbound'} flight
+                      </span>
+                    ) : null}
                   </p>
                   <p className="tabular text-xs text-slate-500">
                     {searched.origin} → {searched.destination} · {dayAndMonth(`${searched.date}T00:00`)}
