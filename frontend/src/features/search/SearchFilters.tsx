@@ -1,4 +1,5 @@
 import type { Flight } from '../../api/flights';
+import { AirlineLogo } from '../../components/AirlineLogo';
 import {
   airlineCounts,
   bucketCounts,
@@ -196,9 +197,7 @@ export function SearchFilters({
                 }
                 className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500/40"
               />
-              <span className="grid h-6 w-8 shrink-0 place-items-center rounded bg-brand-600 text-[10px] font-bold text-white">
-                {airline.code}
-              </span>
+              <AirlineLogo code={airline.code} className="h-6 w-6" />
               <span className="tabular flex-1 font-medium text-slate-700">{airline.code}</span>
               <span className="tabular text-xs text-slate-400">{airline.count}</span>
             </label>
