@@ -111,7 +111,9 @@ public class BookingFacade {
         BookingResponse booking = finalizeOrCompensate(draft, assignments);
 
         // Only a finalized (DRAFT -> CREATED) booking is announced (§5.1a).
-        bookingEventProducer.publishBookingCreated(booking, flight);
+        // Both legs' flight details ride the event (already fetched above).
+        bookingEventProducer.publishBookingCreated(booking,
+                returnFlight != null ? List.of(flight, returnFlight) : List.of(flight));
 
         return booking;
     }
@@ -123,7 +125,7 @@ public class BookingFacade {
 
         reserveHeldSeatsQuietly(booking);
 
-        bookingEventProducer.publishBookingConfirmed(booking, flightOrNull(booking.flightId()));
+        bookingEventProducer.publishBookingConfirmed(booking, flightsOrNull(booking));
 
         return booking;
     }
@@ -143,7 +145,7 @@ public class BookingFacade {
         reserveHeldSeatsQuietly(booking);
 
         if (confirmation.transitioned()) {
-            bookingEventProducer.publishBookingConfirmed(booking, flightOrNull(booking.flightId()));
+            bookingEventProducer.publishBookingConfirmed(booking, flightsOrNull(booking));
         }
 
         return booking;
@@ -164,7 +166,7 @@ public class BookingFacade {
             }
         }
 
-        bookingEventProducer.publishBookingCancelled(booking, flightOrNull(booking.flightId()));
+        bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking));
 
         return booking;
     }
@@ -192,7 +194,7 @@ public class BookingFacade {
         }
 
         if (result.bookingCancelled()) {
-            bookingEventProducer.publishBookingCancelled(booking, flightOrNull(booking.flightId()));
+            bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking));
         }
 
         return result;
@@ -276,6 +278,21 @@ public class BookingFacade {
      * without route details beats a confirmation that fails because
      * flight-service was briefly down.
      */
+    /** One best-effort FlightDetails per segment, for event enrichment (§6). */
+    private List<FlightDetails> flightsOrNull(BookingResponse booking) {
+        if (booking.segments() == null || booking.segments().isEmpty()) {
+            return List.of();
+        }
+        List<FlightDetails> flights = new ArrayList<>();
+        for (var segment : booking.segments()) {
+            FlightDetails details = flightOrNull(segment.flightId());
+            if (details != null) {
+                flights.add(details);
+            }
+        }
+        return flights;
+    }
+
     private FlightDetails flightOrNull(Long flightId) {
         try {
             // Service-token call: this runs during event publication, which for the

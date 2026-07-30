@@ -5,6 +5,7 @@ import com.skybook.praveen.checkinservice.facade.CheckInFacade;
 import com.skybook.praveen.checkinservice.service.CheckInService;
 import com.skybook.praveen.common.event.BookingEvent;
 import com.skybook.praveen.common.event.BookingEventPassenger;
+import com.skybook.praveen.common.event.BookingEventSegment;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -54,50 +55,81 @@ public class BookingEventConsumer {
 
     private void handleConfirmed(BookingEvent event) {
 
-        if (event.getBookingId() == null || event.getPassengers() == null) {
-            log.warn("Booking CONFIRMED event for {} has no bookingId/passengers (pre-enrichment producer) - skipping",
+        if (event.getBookingId() == null) {
+            log.warn("Booking CONFIRMED event for {} has no bookingId (pre-enrichment producer) - skipping",
+                    event.getBookingReference());
+            return;
+        }
+
+        // Nested segments preferred (ROUND_TRIP_MODULE.md §6): each leg's
+        // passengers get a CheckIn snapshotting THAT leg's flight - this is
+        // what makes per-direction check-in work on a round trip. Old events
+        // (null segments) fall back to the top-level flight + flat list.
+        if (event.getSegments() != null && !event.getSegments().isEmpty()) {
+            for (BookingEventSegment segment : event.getSegments()) {
+                if (segment.getPassengers() == null) {
+                    continue;
+                }
+                LocalDateTime departureTime = parseEventTime(segment.getDepartureTime());
+                for (BookingEventPassenger passenger : segment.getPassengers()) {
+                    createCheckIn(event, passenger, segment.getFlightId(), segment.getFlightNumber(),
+                            segment.getOriginAirportCode(), segment.getDestinationAirportCode(), departureTime);
+                }
+            }
+            return;
+        }
+
+        if (event.getPassengers() == null) {
+            log.warn("Booking CONFIRMED event for {} has no passengers (pre-enrichment producer) - skipping",
                     event.getBookingReference());
             return;
         }
 
         LocalDateTime departureTime = parseEventTime(event.getDepartureTime());
-
         for (BookingEventPassenger passenger : event.getPassengers()) {
-
-            if (passenger.getBookingPassengerId() == null) {
-                log.warn("Passenger {} on booking {} has no bookingPassengerId (pre-enrichment producer) - skipping",
-                        passenger.getName(), event.getBookingReference());
-                continue;
-            }
-
-            CreateCheckInRequest request = new CreateCheckInRequest(
-                    event.getBookingId(),
-                    event.getBookingReference(),
-                    passenger.getBookingPassengerId(),
-                    event.getFlightId(),
-                    event.getFlightNumber(),
-                    event.getOriginAirportCode(),
-                    event.getDestinationAirportCode(),
-                    departureTime,
-                    passenger.getName(),
-                    event.getContactEmail(),
-                    passenger.getSeatNumber(),
-                    passenger.getTravelClass(),
-                    passenger.getFareType(),
-                    // §9: the surcharge actually PAID at booking becomes the
-                    // free-seat-change ceiling; legacy events carry null => 0.
-                    passenger.getSeatSurcharge(),
-                    passenger.getCurrency(),
-                    // §4.2: ownership snapshot from the CONFIRMED event.
-                    event.getOwnerSubject(),
-                    // booking-service already validates passport data before
-                    // a booking can reach CONFIRMED (BookingValidator.
-                    // validatePassportValidForTravel) - true by construction.
-                    true
-            );
-
-            checkInService.createCheckIn(request, "KAFKA", "BOOKING_EVENT", event.getBookingReference());
+            createCheckIn(event, passenger, event.getFlightId(), event.getFlightNumber(),
+                    event.getOriginAirportCode(), event.getDestinationAirportCode(), departureTime);
         }
+    }
+
+    private void createCheckIn(BookingEvent event, BookingEventPassenger passenger,
+                               Long flightId, String flightNumber,
+                               String originAirportCode, String destinationAirportCode,
+                               LocalDateTime departureTime) {
+
+        if (passenger.getBookingPassengerId() == null) {
+            log.warn("Passenger {} on booking {} has no bookingPassengerId (pre-enrichment producer) - skipping",
+                    passenger.getName(), event.getBookingReference());
+            return;
+        }
+
+        CreateCheckInRequest request = new CreateCheckInRequest(
+                event.getBookingId(),
+                event.getBookingReference(),
+                passenger.getBookingPassengerId(),
+                flightId,
+                flightNumber,
+                originAirportCode,
+                destinationAirportCode,
+                departureTime,
+                passenger.getName(),
+                event.getContactEmail(),
+                passenger.getSeatNumber(),
+                passenger.getTravelClass(),
+                passenger.getFareType(),
+                // §9: the surcharge actually PAID at booking becomes the
+                // free-seat-change ceiling; legacy events carry null => 0.
+                passenger.getSeatSurcharge(),
+                passenger.getCurrency(),
+                // §4.2: ownership snapshot from the CONFIRMED event.
+                event.getOwnerSubject(),
+                // booking-service already validates passport data before
+                // a booking can reach CONFIRMED (BookingValidator.
+                // validatePassportValidForTravel) - true by construction.
+                true
+        );
+
+        checkInService.createCheckIn(request, "KAFKA", "BOOKING_EVENT", event.getBookingReference());
     }
 
     private static LocalDateTime parseEventTime(String value) {

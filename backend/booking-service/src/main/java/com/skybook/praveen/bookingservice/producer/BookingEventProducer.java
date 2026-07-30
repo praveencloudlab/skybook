@@ -5,6 +5,7 @@ import com.skybook.praveen.bookingservice.dto.response.BookingResponse;
 import com.skybook.praveen.common.constants.KafkaTopics;
 import com.skybook.praveen.common.event.BookingEvent;
 import com.skybook.praveen.common.event.BookingEventPassenger;
+import com.skybook.praveen.common.event.BookingEventSegment;
 import com.skybook.praveen.common.event.BookingEventType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,6 +13,9 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Publishes BookingEvent to Kafka for notification-service (emails) and
@@ -33,32 +37,51 @@ public class BookingEventProducer {
 
     private final KafkaTemplate<String, BookingEvent> kafkaTemplate;
 
-    public void publishBookingCreated(BookingResponse booking, FlightDetails flight) {
-        publish(booking, flight, BookingEventType.CREATED,
+    /** flights: one FlightDetails per segment, best-effort (null entries allowed). */
+    public void publishBookingCreated(BookingResponse booking, List<FlightDetails> flights) {
+        publish(booking, flights, BookingEventType.CREATED,
                 "Your SkyBook booking " + booking.bookingReference() + " has been created",
                 "Thanks for booking with SkyBook! Your booking reference is " + booking.bookingReference()
                         + ". Complete payment to confirm your seat(s).");
     }
 
-    public void publishBookingConfirmed(BookingResponse booking, FlightDetails flight) {
-        publish(booking, flight, BookingEventType.CONFIRMED,
+    public void publishBookingConfirmed(BookingResponse booking, List<FlightDetails> flights) {
+        publish(booking, flights, BookingEventType.CONFIRMED,
                 "Your SkyBook booking " + booking.bookingReference() + " is confirmed",
                 "Good news - your booking " + booking.bookingReference() + " is confirmed. Have a great flight.");
     }
 
-    public void publishBookingCancelled(BookingResponse booking, FlightDetails flight) {
-        publish(booking, flight, BookingEventType.CANCELLED,
+    public void publishBookingCancelled(BookingResponse booking, List<FlightDetails> flights) {
+        publish(booking, flights, BookingEventType.CANCELLED,
                 "Your SkyBook booking " + booking.bookingReference() + " has been cancelled",
                 "Your booking " + booking.bookingReference()
                         + " has been cancelled. If a refund is due, it will be processed shortly.");
     }
 
-    private void publish(BookingResponse booking, FlightDetails flight,
+    private void publish(BookingResponse booking, List<FlightDetails> flights,
                          BookingEventType type, String subject, String message) {
 
         if (booking.contact() == null) {
             log.warn("Booking {} has no contact on file - skipping notification", booking.bookingReference());
             return;
+        }
+
+        Map<Long, FlightDetails> flightById = new HashMap<>();
+        if (flights != null) {
+            for (FlightDetails details : flights) {
+                if (details != null) {
+                    flightById.put(details.id(), details);
+                }
+            }
+        }
+        FlightDetails flight = flightById.get(booking.flightId());
+
+        // rowId -> the traveller's e-ticket number (issued at CONFIRMED;
+        // empty map before ticketing, so CREATED events carry none).
+        Map<Long, String> ticketByRow = new HashMap<>();
+        if (booking.tickets() != null) {
+            booking.tickets().forEach(ticket -> ticket.coupons().forEach(
+                    coupon -> ticketByRow.put(coupon.bookingPassengerId(), ticket.ticketNumber())));
         }
 
         BookingEvent.BookingEventBuilder event = BookingEvent.builder()
@@ -78,21 +101,34 @@ public class BookingEventProducer {
                 .flightId(booking.flightId())
                 .bookingDate(booking.bookingDate() != null
                         ? booking.bookingDate().format(EVENT_TIME) : null)
+                // DEPRECATED flat mirror (ROUND_TRIP_MODULE.md §6) - kept one
+                // release for old consumers and replayed old events; new
+                // consumers read the nested segments below.
                 .passengers(booking.passengers() == null ? null : booking.passengers().stream()
-                        .map(p -> BookingEventPassenger.builder()
-                                .bookingPassengerId(p.id())
-                                .name((p.firstName() + " " + p.lastName()).trim())
-                                .seatNumber(p.seatNumber())
-                                .travelClass(p.travelClass() != null ? p.travelClass().name() : null)
-                                .fareType(p.fareType() != null ? p.fareType().name() : null)
-                                .fare(p.fare())
-                                // §9: check-in snapshots the surcharge actually
-                                // PAID as its free-change entitlement ceiling.
-                                .seatSurcharge(p.seatSurcharge())
-                                .currency(p.currency())
-                                .checkInStatus(p.checkInStatus() != null ? p.checkInStatus().name() : null)
-                                .build())
+                        .map(p -> eventPassenger(p, ticketByRow))
                         .toList())
+                .segments(booking.segments() == null || booking.segments().isEmpty() ? null
+                        : booking.segments().stream()
+                                .map(segment -> {
+                                    FlightDetails details = flightById.get(segment.flightId());
+                                    return BookingEventSegment.builder()
+                                            .segmentIndex(segment.segmentIndex())
+                                            .flightId(segment.flightId())
+                                            .flightNumber(details != null ? details.flightNumber() : null)
+                                            .originAirportCode(details != null ? details.originAirportCode() : null)
+                                            .destinationAirportCode(details != null ? details.destinationAirportCode() : null)
+                                            .departureTime(details != null && details.departureTime() != null
+                                                    ? details.departureTime().format(EVENT_TIME) : null)
+                                            .arrivalTime(details != null && details.arrivalTime() != null
+                                                    ? details.arrivalTime().format(EVENT_TIME) : null)
+                                            .passengers(booking.passengers() == null ? List.of()
+                                                    : booking.passengers().stream()
+                                                            .filter(p -> p.segmentIndex() == segment.segmentIndex())
+                                                            .map(p -> eventPassenger(p, ticketByRow))
+                                                            .toList())
+                                            .build();
+                                })
+                                .toList())
                 .totalFare(booking.totalFare())
                 .currency(booking.payment() != null ? booking.payment().currency() : null)
                 .paymentStatus(booking.payment() != null && booking.payment().paymentStatus() != null
@@ -121,5 +157,25 @@ public class BookingEventProducer {
                 });
 
         log.info("Published {} event for booking {}", type, booking.bookingReference());
+    }
+
+    private static BookingEventPassenger eventPassenger(
+            com.skybook.praveen.bookingservice.dto.response.BookingPassengerResponse p,
+            Map<Long, String> ticketByRow) {
+        return BookingEventPassenger.builder()
+                .bookingPassengerId(p.id())
+                .segmentIndex(p.segmentIndex())
+                .ticketNumber(ticketByRow.get(p.id()))
+                .name((p.firstName() + " " + p.lastName()).trim())
+                .seatNumber(p.seatNumber())
+                .travelClass(p.travelClass() != null ? p.travelClass().name() : null)
+                .fareType(p.fareType() != null ? p.fareType().name() : null)
+                .fare(p.fare())
+                // §9: check-in snapshots the surcharge actually
+                // PAID as its free-change entitlement ceiling.
+                .seatSurcharge(p.seatSurcharge())
+                .currency(p.currency())
+                .checkInStatus(p.checkInStatus() != null ? p.checkInStatus().name() : null)
+                .build();
     }
 }

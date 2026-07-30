@@ -26,6 +26,16 @@ public class BookingEventPassenger {
      */
     private Long bookingPassengerId;
 
+    /** 0 = outbound, 1 = return (ROUND_TRIP_MODULE.md). Null on old events (single-leg, treat as 0). */
+    private Integer segmentIndex;
+
+    /**
+     * The traveller's 13-digit e-ticket number (displayed 125-XXXXXXXXXX) -
+     * the same on all their rows; this row is one COUPON of it. Null before
+     * ticketing (CREATED events - tickets issue at CONFIRMED) and on old events.
+     */
+    private String ticketNumber;
+
     private String name;
 
     private String seatNumber;

@@ -154,7 +154,7 @@ class BookingFacadeTest {
             assertThat(assignments.get(0).chargedSurcharge()).isEqualByComparingTo("0.00");
             assertThat(assignments.get(0).mode()).isEqualTo(SeatAssignmentMode.MANUAL);
             // The FINALIZED response is announced, never the draft.
-            verify(bookingEventProducer).publishBookingCreated(created, flight);
+            verify(bookingEventProducer).publishBookingCreated(created, List.of(flight));
             verify(bookingService, never()).cancelBooking(anyLong(), anyString());
         }
 
@@ -177,7 +177,7 @@ class BookingFacadeTest {
             verify(bookingService).finalizeSeatAssignments(eq(7L), assignmentsCaptor.capture());
             assertThat(assignmentsCaptor.getValue().get(0).mode()).isEqualTo(SeatAssignmentMode.AUTO);
             assertThat(assignmentsCaptor.getValue().get(0).chargedSurcharge()).isEqualByComparingTo("0.00");
-            verify(bookingEventProducer).publishBookingCreated(created, flight);
+            verify(bookingEventProducer).publishBookingCreated(created, List.of(flight));
         }
 
         @Test
@@ -199,7 +199,7 @@ class BookingFacadeTest {
             assertThat(assignments).hasSize(2);
             assertThat(assignments.get(0).seatNumber()).isEqualTo("12A");
             assertThat(assignments.get(0).chargedSurcharge()).isEqualByComparingTo("0.00");
-            verify(bookingEventProducer).publishBookingCreated(created, flight);
+            verify(bookingEventProducer).publishBookingCreated(created, List.of(flight));
         }
 
         @Test
@@ -322,7 +322,7 @@ class BookingFacadeTest {
             verify(bookingService).finalizeSeatAssignments(eq(7L), assignmentsCaptor.capture());
             assertThat(assignmentsCaptor.getValue()).hasSize(2);
             assertThat(assignmentsCaptor.getValue().get(1).seatNumber()).isEqualTo("20B");
-            verify(bookingEventProducer).publishBookingCreated(created, flight);
+            verify(bookingEventProducer).publishBookingCreated(created, List.of(flight, returnFlight));
         }
 
         @Test
@@ -384,7 +384,7 @@ class BookingFacadeTest {
             facade.confirmBookingFromPayment(7L, "PAY-2026-K7M4Z9");
 
             verify(inventoryServiceClient).reserveSeat(10L, "12A", 7L, 1L);
-            verify(bookingEventProducer).publishBookingConfirmed(confirmed, null);
+            verify(bookingEventProducer).publishBookingConfirmed(eq(confirmed), any());
         }
 
         @Test
@@ -411,7 +411,7 @@ class BookingFacadeTest {
             BookingResponse result = facade.confirmBookingFromPayment(7L, "PAY-2026-K7M4Z9");
 
             assertThat(result.bookingStatus()).isEqualTo(BookingStatus.CONFIRMED);
-            verify(bookingEventProducer).publishBookingConfirmed(confirmed, null);
+            verify(bookingEventProducer).publishBookingConfirmed(eq(confirmed), any());
         }
     }
 
@@ -484,6 +484,6 @@ class BookingFacadeTest {
 
         verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12A"), eq(7L), anyString());
         verify(inventoryServiceClient).cancelReservationQuietly(eq(10L), eq("12B"), eq(7L), anyString());
-        verify(bookingEventProducer).publishBookingCancelled(cancelled, null);
+        verify(bookingEventProducer).publishBookingCancelled(eq(cancelled), any());
     }
 }

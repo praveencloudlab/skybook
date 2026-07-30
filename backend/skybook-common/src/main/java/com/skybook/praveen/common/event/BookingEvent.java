@@ -79,6 +79,15 @@ public class BookingEvent {
 
     private List<BookingEventPassenger> passengers;
 
+    /**
+     * The journey's legs with their passengers nested (ROUND_TRIP_MODULE.md
+     * §6). When present, consumers MUST prefer this over the top-level
+     * flight fields + flat passengers list, which are kept exactly one
+     * release as a deprecated segment-0 mirror for old consumers and
+     * replayed old events (null segments = old event, use the fallback).
+     */
+    private List<BookingEventSegment> segments;
+
     private BigDecimal totalFare;
 
     private String currency;
