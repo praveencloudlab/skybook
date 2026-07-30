@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   BrowserRouter,
   Link,
@@ -118,6 +118,7 @@ function Header() {
           ) : (
             <Link
               to="/search"
+              onClick={() => sessionStorage.removeItem(JOURNEY_KEY)}
               className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
             >
               Search flights
@@ -333,6 +334,7 @@ function BookingAuthGate({
 function BookingJourney() {
   const { signedIn } = useSession();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   // One-time hydration from a persisted draft (see JourneyDraft above) - but
   // an explicit deep-linked search (?from&to: landing hero, popular
   // destination cards) is a NEW search intent and beats any saved draft.
@@ -372,6 +374,21 @@ function BookingJourney() {
     ...Array.from({ length: travellers.children }, () => 'CHILD' as const),
     ...Array.from({ length: travellers.infants }, () => 'INFANT' as const),
   ];
+
+  // Clicking Search (a bare /search navigation) mid-journey means 'start
+  // again' - reset everything, including the stored draft via restart().
+  const firstNav = useRef(true);
+  useEffect(() => {
+    if (firstNav.current) {
+      firstNav.current = false;
+      return;
+    }
+    if (!searchParams.get('from') && step !== 'search') {
+      restart();
+    }
+    // Reacting to real navigations only, not journey state changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.key]);
 
   // Persist the draft on every meaningful change; drop it once there is
   // nothing to resume (back at search, or the booking is made). Passports are

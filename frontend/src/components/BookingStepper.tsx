@@ -47,9 +47,9 @@ export function BookingStepper({
             <button
               type="button"
               onClick={onModify}
-              className="font-semibold text-accent-300 underline-offset-4 hover:underline"
+              className="inline-flex items-center gap-1 rounded-full border border-white/25 px-3 py-0.5 font-semibold text-white/85 transition hover:bg-white/10"
             >
-              Modify
+              ← Back
             </button>
           ) : null}
         </div>

@@ -242,7 +242,14 @@ export function SearchPage({
                   <span className="text-brand-600">{filtersOpen ? 'Hide' : 'Show'}</span>
                 </button>
                 <div className={(filtersOpen ? 'mt-3 block' : 'hidden') + ' lg:sticky lg:top-20 lg:mt-0 lg:block'}>
-                  <SearchFilters results={results} state={filters} onChange={setFilters} />
+                  <SearchFilters
+                    results={results}
+                    state={filters}
+                    onChange={setFilters}
+                    stopCounts={[0, 1, 2].map((n) => itins?.filter((t) => t.stops === n).length ?? 0)}
+                    stopFilter={stopFilter}
+                    onStopFilter={setStopFilter}
+                  />
                 </div>
               </aside>
 
@@ -256,33 +263,6 @@ export function SearchPage({
                   <p className="tabular text-xs text-slate-500">
                     {searched.origin} → {searched.destination} · {dayAndMonth(`${searched.date}T00:00`)}
                   </p>
-                </div>
-
-                {/* Stops filter - the metasearch chips. */}
-                <div className="flex flex-wrap gap-2">
-                  {[null, 0, 1, 2].map((stops) => {
-                    const count = stops === null
-                      ? (itins?.length ?? 0)
-                      : (itins?.filter((t) => t.stops === stops).length ?? 0);
-                    const active = stopFilter === stops;
-                    return (
-                      <button
-                        key={String(stops)}
-                        type="button"
-                        onClick={() => setStopFilter(stops)}
-                        aria-pressed={active}
-                        className={
-                          'rounded-full px-4 py-1.5 text-xs font-bold transition ' +
-                          (active
-                            ? 'bg-brand-950 text-white'
-                            : 'border border-slate-300 bg-white text-slate-700 hover:border-slate-500')
-                        }
-                      >
-                        {stops === null ? 'All' : stops === 0 ? 'Direct' : stops === 1 ? '1 stop' : '2 stops'}
-                        <span className="tabular ml-1.5 opacity-60">{count}</span>
-                      </button>
-                    );
-                  })}
                 </div>
 
                 {visibleItins.length === 0 ? (
