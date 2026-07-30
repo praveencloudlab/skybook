@@ -28,7 +28,10 @@ docker exec "$C" psql -U postgres -d skybook_flight -c \
   "COPY (SELECT id, destination_airport_code FROM flights) TO STDOUT" \
 | docker exec -i "$C" psql -U postgres -d skybook_inventory -c "COPY tmp_flights FROM STDIN"
 
-echo "4/4  flight_inventory (skybook_inventory): one record per flight"
+echo "4/5  flight_inventory (skybook_inventory): one record per flight"
 docker exec -i "$C" psql -U postgres -d skybook_inventory -v ON_ERROR_STOP=1 < "$DIR/03_flight_inventory.sql"
+
+echo "5/5  full-mesh densification (every pair, 3x daily, +1 year from today)"
+bash "$DIR/seed_mesh.sh"
 
 echo "done."

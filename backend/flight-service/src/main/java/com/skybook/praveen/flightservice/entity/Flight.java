@@ -12,6 +12,15 @@ import java.time.LocalDateTime;
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_flight_number_departure_time",
                 columnNames = {"flight_number", "departure_time"}
+        ),
+        // Route+window searches, the itinerary engine's 2-day scans and the
+        // fare calendar all filter on exactly this triple; at full-mesh seed
+        // volume (~440k rows) a sequential scan per search is not viable.
+        // ddl-auto: update creates it on fresh installs; 06_full_mesh.sql
+        // creates it (IF NOT EXISTS) on existing databases.
+        indexes = @Index(
+                name = "idx_flights_route_departure",
+                columnList = "origin_airport_code, destination_airport_code, departure_time"
         )
 )
 @Getter
