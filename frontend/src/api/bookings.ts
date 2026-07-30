@@ -38,6 +38,8 @@ export interface PassengerDetail {
   fareType: FareType;
   /** Omit to have a seat assigned free of charge. */
   seatNumber?: string;
+  /** Round trip: the seat picked for the RETURN leg (omit = free auto-assign). */
+  returnSeatNumber?: string;
   /** Extra checked bags to buy (ancillary), charged per bag. */
   extraBags?: number;
 }

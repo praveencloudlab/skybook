@@ -25,6 +25,7 @@ import { SeatMap } from './SeatMap';
  */
 export function SeatSelectionPage({
   flight,
+  legLabel,
   cabin,
   fare,
   baseFare,
@@ -36,6 +37,8 @@ export function SeatSelectionPage({
   onContinue,
 }: {
   flight: Flight;
+  /** Round trip: which leg this seat map is for ("Outbound" / "Return"). */
+  legLabel?: string;
   cabin: TravelClass;
   fare: FareType;
   baseFare: number;
@@ -119,7 +122,14 @@ export function SeatSelectionPage({
 
       <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_320px]">
         <div className="rounded-2xl bg-white p-5 shadow-[var(--shadow-card)] sm:p-7">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Seat selection</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+            Seat selection
+            {legLabel ? (
+              <span className="ml-2 align-middle rounded-full bg-brand-50 px-2.5 py-1 text-sm font-semibold text-brand-700 ring-1 ring-inset ring-brand-100">
+                {legLabel} · {flight.originAirportCode} → {flight.destinationAirportCode}
+              </span>
+            ) : null}
+          </h1>
           <p className="mt-1 text-sm text-slate-500">
             {TRAVEL_CLASS_LABELS[cabin]} · {FARE_TYPE_LABELS[fare]} — secure your seat now, or let us
             assign one free at check-in.

@@ -58,6 +58,13 @@ public record PassengerBookingDetail(
 
         String seatNumber,
 
+        /**
+         * Round trip only (ROUND_TRIP_MODULE.md §4): the seat picked for the
+         * RETURN leg. Same optional semantics as seatNumber - absent means
+         * free auto-assignment on the return flight.
+         */
+        String returnSeatNumber,
+
         /** Extra checked bags to buy (ancillary). Null/absent means none. */
         @jakarta.validation.constraints.Min(value = 0, message = "extraBags cannot be negative")
         @jakarta.validation.constraints.Max(value = 5, message = "At most 5 extra bags per passenger")

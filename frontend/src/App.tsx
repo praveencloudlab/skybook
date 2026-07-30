@@ -204,7 +204,7 @@ interface FareChoice {
 }
 
 /** Where the passenger is in the booking journey. */
-type Step = 'search' | 'fares' | 'guests' | 'seat' | 'bags' | 'payment' | 'confirmed';
+type Step = 'search' | 'fares' | 'guests' | 'seat' | 'seatReturn' | 'bags' | 'payment' | 'confirmed';
 
 /**
  * The in-progress booking, persisted to sessionStorage so it survives every
@@ -226,6 +226,7 @@ interface JourneyDraft {
   choice: FareChoice | null;
   returnFlight?: Flight | null;
   seats: AircraftSeat[];
+  returnSeats?: AircraftSeat[];
   guests: PassengerDraft[];
   bags: number[];
   contactEmail: string;
@@ -247,7 +248,8 @@ function loadJourneyDraft(): JourneyDraft | null {
     // goes back to it so they are re-collected.
     const passportMissing =
       Array.isArray(draft.guests) && draft.guests.some((g) => !g.passportNumber);
-    if (passportMissing && (draft.step === 'seat' || draft.step === 'bags' || draft.step === 'payment')) {
+    if (passportMissing
+        && (draft.step === 'seat' || draft.step === 'seatReturn' || draft.step === 'bags' || draft.step === 'payment')) {
       draft.step = 'guests';
     }
     return draft;
@@ -360,6 +362,8 @@ function BookingJourney() {
   // One chosen seat per traveller, in passenger order; shorter than the party
   // means the rest are auto-assigned free at check-in.
   const [seats, setSeats] = useState<AircraftSeat[]>(draft?.seats ?? []);
+  // Round trip: the return leg's picks, chosen on its own seat map.
+  const [returnSeats, setReturnSeats] = useState<AircraftSeat[]>(draft?.returnSeats ?? []);
   // Guest details, extra bags and the booking contact live at the journey
   // level: the carrier flow spreads them across separate steps (guests ->
   // seats -> bags -> payment) and each later step reads what earlier ones set.
@@ -408,6 +412,7 @@ function BookingJourney() {
       choice,
       returnFlight,
       seats,
+      returnSeats,
       bags,
       contactEmail,
       guests: guests.map((g) => ({ ...g, passportNumber: '', passportExpiry: '' })),
@@ -418,7 +423,7 @@ function BookingJourney() {
       // Storage full/blocked: the journey still works, it just won't survive
       // a navigation - the pre-persistence behaviour.
     }
-  }, [step, flight, returnFlight, travellers, preferredCabin, choice, seats, guests, bags, contactEmail]);
+  }, [step, flight, returnFlight, travellers, preferredCabin, choice, seats, returnSeats, guests, bags, contactEmail]);
 
   function restart() {
     sessionStorage.removeItem(JOURNEY_KEY);
@@ -428,6 +433,7 @@ function BookingJourney() {
     setTravellers(ONE_ADULT);
     setChoice(null);
     setSeats([]);
+    setReturnSeats([]);
     setGuests([emptyPassenger()]);
     setBags([0]);
     setContactEmail('');
@@ -447,13 +453,22 @@ function BookingJourney() {
       alignedSeats[guestIdx] = seat;
     }
   });
+  const alignedReturnSeats: (AircraftSeat | undefined)[] = [];
+  returnSeats.forEach((seat, seatedIdx) => {
+    const guestIdx = seatedIndexes[seatedIdx];
+    if (guestIdx !== undefined) {
+      alignedReturnSeats[guestIdx] = seat;
+    }
+  });
   // Flexi/Premium entitlement: seat surcharges are waived (server does the
   // same at booking), so only Saver totals them.
   const seatCharge = (s: AircraftSeat) =>
     choice && choice.fare !== 'SAVER' ? 0 : Number(s.listedSurcharge) || 0;
-  const seatTotal = seats.reduce((sum, s) => sum + seatCharge(s), 0);
+  const seatTotal =
+    seats.reduce((sum, s) => sum + seatCharge(s), 0) +
+    returnSeats.reduce((sum, s) => sum + seatCharge(s), 0);
   const tripLegs = returnFlight ? 2 : 1;
-  // Each direction is its own ticket, so bags are charged per ticket.
+  // Bags fly both directions on a round trip, charged per leg.
   const bagTotal = bags.reduce((sum, b) => sum + b, 0) * EXTRA_BAG_FEE * tripLegs;
   const total = (choice ? choice.baseFare * paxCount : 0) + seatTotal + bagTotal;
   const guestLabel = (index: number) =>
@@ -461,7 +476,12 @@ function BookingJourney() {
   const extras = [
     ...alignedSeats.flatMap((seat, index) =>
       seat
-        ? [{ label: `${guestLabel(index)} · Seat ${seat.seatNumber}`, amount: seatCharge(seat) }]
+        ? [{ label: `${guestLabel(index)} · Seat ${seat.seatNumber}${tripLegs > 1 ? ' (out)' : ''}`, amount: seatCharge(seat) }]
+        : [],
+    ),
+    ...alignedReturnSeats.flatMap((seat, index) =>
+      seat
+        ? [{ label: `${guestLabel(index)} · Seat ${seat.seatNumber} (return)`, amount: seatCharge(seat) }]
         : [],
     ),
     ...bags.flatMap((count, index) =>
@@ -494,7 +514,7 @@ function BookingJourney() {
   // data and needs a principal. An anonymous browser that reaches those steps
   // meets the log-in wall here - with its flight and fare still in state, so it
   // resumes intact the instant the session appears.
-  if ((step === 'guests' || step === 'seat' || step === 'bags' || step === 'payment' || step === 'confirmed') && !signedIn) {
+  if ((step === 'guests' || step === 'seat' || step === 'seatReturn' || step === 'bags' || step === 'payment' || step === 'confirmed') && !signedIn) {
     return <BookingAuthGate flight={flight} choice={choice} onBack={() => setStep('fares')} />;
   }
 
@@ -516,6 +536,7 @@ function BookingJourney() {
         travellers={travellers}
         guests={guests}
         seats={alignedSeats as AircraftSeat[]}
+        returnSeats={alignedReturnSeats as AircraftSeat[]}
         returnFlight={returnFlight}
         bags={bags}
         contactEmail={contactEmail}
@@ -549,7 +570,7 @@ function BookingJourney() {
         }
         extras={extras}
         total={total}
-        onBack={() => setStep(returnFlight ? 'guests' : 'seat')}
+        onBack={() => setStep(returnFlight ? 'seatReturn' : 'seat')}
         onContinue={() => setStep('payment')}
       />
       </>
@@ -562,6 +583,7 @@ function BookingJourney() {
       {newSearchBar}
       <SeatSelectionPage
         flight={flight}
+        legLabel={returnFlight ? 'Outbound' : undefined}
         cabin={choice.cabin}
         fare={choice.fare}
         baseFare={choice.baseFare}
@@ -572,6 +594,32 @@ function BookingJourney() {
         onBack={() => setStep('guests')}
         onContinue={(chosen) => {
           setSeats(chosen);
+          setStep(returnFlight ? 'seatReturn' : 'bags');
+        }}
+      />
+      </>
+    );
+  }
+
+  // Round trip: the return leg gets its OWN seat map (its own flight, its
+  // own availability and surcharges).
+  if (step === 'seatReturn' && returnFlight && choice) {
+    return (
+      <>
+      {newSearchBar}
+      <SeatSelectionPage
+        flight={returnFlight}
+        legLabel="Return"
+        cabin={choice.cabin}
+        fare={choice.fare}
+        baseFare={choice.baseFare}
+        currency={choice.currency}
+        travellers={travellers}
+        paxTypes={paxTypes}
+        guests={guests}
+        onBack={() => setStep('seat')}
+        onContinue={(chosen) => {
+          setReturnSeats(chosen);
           setStep('bags');
         }}
       />
@@ -596,7 +644,7 @@ function BookingJourney() {
         onContactEmailChange={setContactEmail}
         total={total}
         onBack={() => setStep('fares')}
-        onContinue={() => setStep(returnFlight ? 'bags' : 'seat')}
+        onContinue={() => setStep('seat')}
       />
       </>
     );

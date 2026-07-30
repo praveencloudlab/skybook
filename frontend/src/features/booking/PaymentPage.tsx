@@ -43,6 +43,7 @@ export function PaymentPage({
   travellers,
   guests,
   seats,
+  returnSeats = [],
   bags,
   contactEmail,
   extras,
@@ -59,6 +60,8 @@ export function PaymentPage({
   travellers: Travellers;
   guests: PassengerDraft[];
   seats: AircraftSeat[];
+  /** Round trip: each guest's pick on the RETURN leg's seat map. */
+  returnSeats?: AircraftSeat[];
   bags: number[];
   contactEmail: string;
   extras: SummaryExtra[];
@@ -86,7 +89,8 @@ export function PaymentPage({
         flightId: flight.id,
         ...(returnFlight ? { returnFlightId: returnFlight.id } : {}),
         passengers: guests.map((g, i) =>
-          toPassengerDetail(g, cabin, fare, seats[i]?.seatNumber ?? null, bags[i] ?? 0),
+          toPassengerDetail(g, cabin, fare, seats[i]?.seatNumber ?? null, bags[i] ?? 0,
+            returnSeats[i]?.seatNumber ?? null),
         ),
         contact: {
           contactName: `${guests[0].firstName} ${guests[0].lastName}`.trim(),

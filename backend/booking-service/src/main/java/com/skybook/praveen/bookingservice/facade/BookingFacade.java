@@ -452,9 +452,11 @@ public class BookingFacade {
 
                 BookingPassengerResponse passenger = draft.passengers().get(i);
                 PassengerBookingDetail detail = request.passengers().get(i % travellerCount);
-                // Seat picks apply to the outbound only (v1) - return-leg
-                // rows always auto-assign, matching the booking journey UI.
-                String requestedSeat = passenger.segmentIndex() == 0 ? detail.seatNumber() : null;
+                // Each leg takes its own pick: seatNumber for the outbound,
+                // returnSeatNumber for the return - absent means free AUTO.
+                String requestedSeat = passenger.segmentIndex() == 0
+                        ? detail.seatNumber()
+                        : detail.returnSeatNumber();
                 boolean manual = requestedSeat != null && !requestedSeat.isBlank();
 
                 Optional<InventoryHoldDetails> hold = manual
@@ -521,16 +523,17 @@ public class BookingFacade {
         }
     }
 
-    /** Hold-if-exists fallback: seats as requested (manual, outbound only) or none (auto), all charged 0. */
+    /** Hold-if-exists fallback: each leg's requested seat (manual) or none (auto), all charged 0. */
     private List<SeatAssignmentResult> noInventoryAssignments(BookingResponse draft,
                                                               CreateBookingRequest request) {
         int travellerCount = request.passengers().size();
         List<SeatAssignmentResult> assignments = new ArrayList<>();
         for (int i = 0; i < draft.passengers().size(); i++) {
             BookingPassengerResponse row = draft.passengers().get(i);
+            PassengerBookingDetail detail = request.passengers().get(i % travellerCount);
             String requestedSeat = row.segmentIndex() == 0
-                    ? request.passengers().get(i % travellerCount).seatNumber()
-                    : null;
+                    ? detail.seatNumber()
+                    : detail.returnSeatNumber();
             boolean manual = requestedSeat != null && !requestedSeat.isBlank();
             assignments.add(new SeatAssignmentResult(
                     row.id(),
