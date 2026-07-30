@@ -1,6 +1,6 @@
 import type { Flight, Itinerary } from '../api/flights';
 import { AIRPORTS } from '../api/flights';
-import { dayOffset, duration, time } from '../lib/format';
+import { dayOffset, duration, price, time } from '../lib/format';
 
 /**
  * One trip option in the results (metasearch presentation): every leg spelled
@@ -11,9 +11,17 @@ import { dayOffset, duration, time } from '../lib/format';
  */
 export function ItineraryCard({
   itinerary,
+  fareForDate,
   onSelectLeg,
 }: {
   itinerary: Itinerary;
+  /**
+   * Lowest per-person fare (GBP) for a departure day in the searched cabin -
+   * the same deterministic floor the date strip and quote page price from,
+   * so the card can never disagree with checkout. A connection's price is
+   * the sum of its legs (each leg is its own ticket).
+   */
+  fareForDate?: (isoDate: string) => number | undefined;
   /** Book a leg (direct = the only leg). */
   onSelectLeg?: (flight: Flight) => void;
 }) {
@@ -23,6 +31,14 @@ export function ItineraryCard({
   const plusDays = dayOffset(first.departureTime, last.arrivalTime);
   const cityFor = (code: string) => AIRPORTS.find((a) => a.code === code)?.city ?? code;
   const fmt = (mins: number) => `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
+
+  // Sum the legs' day-floor fares; any unknown leg means no honest total,
+  // so show nothing rather than a wrong number.
+  const legFares = fareForDate ? legs.map((leg) => fareForDate(leg.departureTime.slice(0, 10))) : [];
+  const fromFare =
+    legFares.length && legFares.every((f) => f !== undefined)
+      ? (legFares as number[]).reduce((sum, f) => sum + f, 0)
+      : undefined;
 
   return (
     <article className="overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200 transition duration-200 hover:shadow-[var(--shadow-lift)]">
@@ -45,9 +61,18 @@ export function ItineraryCard({
             </span>
           ) : null}
         </div>
-        <span className="tabular text-xs font-semibold text-slate-600">
-          Total {fmt(totalDurationMinutes)}
-          {plusDays > 0 ? <span className="ml-1 text-accent-600">+{plusDays} day{plusDays > 1 ? 's' : ''}</span> : null}
+        <span className="flex items-baseline gap-3">
+          {fromFare !== undefined ? (
+            <span className="tabular text-sm font-bold text-slate-900">
+              <span className="mr-1 text-[11px] font-semibold text-slate-500">from</span>
+              {price(fromFare, 'GBP')}
+              <span className="ml-1 text-[11px] font-medium text-slate-400">pp</span>
+            </span>
+          ) : null}
+          <span className="tabular text-xs font-semibold text-slate-600">
+            Total {fmt(totalDurationMinutes)}
+            {plusDays > 0 ? <span className="ml-1 text-accent-600">+{plusDays} day{plusDays > 1 ? 's' : ''}</span> : null}
+          </span>
         </span>
       </div>
 

@@ -8,7 +8,7 @@ import {
   type Itinerary,
   type SearchCriteria,
 } from '../../api/flights';
-import type { TravelClass } from '../../api/quotes';
+import { quotesApi, type TravelClass } from '../../api/quotes';
 import { ErrorAlert } from '../../components/Alert';
 import { BookingWidget, type BookingSearch } from '../../components/BookingWidget';
 import { DateStrip } from '../../components/DateStrip';
@@ -110,9 +110,19 @@ export function SearchPage({
       .filter((t) => stopsChecked[t.stops] ?? true);
   }, [itins, visible, stopsChecked]);
 
-  async function runSearch(criteria: SearchCriteria) {
+  // Day-floor fares for pricing the result cards ("from £X pp"): keyed by
+  // departure date, covering the searched day +2 (overnight connection legs).
+  // Same deterministic source the date strip and quote page use, so the card
+  // price can never disagree with checkout.
+  const [legFares, setLegFares] = useState<Map<string, number>>(new Map());
+
+  async function runSearch(criteria: SearchCriteria, cabin: TravelClass = party.cabin) {
     setBusy(true);
     setError(null);
+    quotesApi
+      .fareCalendar(criteria.origin, criteria.destination, criteria.date, addDaysIso(criteria.date, 2), cabin)
+      .then((days) => setLegFares(new Map(days.map((d) => [d.date, Number(d.minFare)]))))
+      .catch(() => setLegFares(new Map()));
     try {
       const trips = await flightsApi.itineraries(criteria);
       const firstLegs = trips.map((t) => t.legs[0]);
@@ -135,7 +145,11 @@ export function SearchPage({
     setParty({ travellers: search.travellers, cabin: search.cabin });
     setReturnDate(search.returnDate);
     setOutbound(null);
-    void runSearch({ origin: search.origin, destination: search.destination, date: search.date });
+    // Cabin passed explicitly: setParty hasn't landed yet in this tick.
+    void runSearch(
+      { origin: search.origin, destination: search.destination, date: search.date },
+      search.cabin,
+    );
   }
 
   function pickRoute(route: { origin: string; destination: string }) {
@@ -341,6 +355,7 @@ export function SearchPage({
                     <ItineraryCard
                       key={trip.legs.map((l) => l.id).join('-')}
                       itinerary={trip}
+                      fareForDate={(isoDate) => legFares.get(isoDate)}
                       onSelectLeg={
                         onSelectFlight
                           ? (leg) => {
