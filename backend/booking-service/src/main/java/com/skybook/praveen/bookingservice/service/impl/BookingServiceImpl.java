@@ -55,6 +55,9 @@ public class BookingServiceImpl implements BookingService {
     private static final int MAX_PNR_GENERATION_ATTEMPTS = 10;
     private static final String DEFAULT_CURRENCY = "GBP";
 
+    /** Bookings close this long before scheduled departure (check-in shuts at 45). */
+    private static final long BOOKING_CLOSE_MINUTES = 60;
+
     /** Flat price per extra checked bag (ancillary), per passenger. */
     private static final BigDecimal EXTRA_BAG_FEE = new BigDecimal("40.00");
 
@@ -127,6 +130,18 @@ public class BookingServiceImpl implements BookingService {
         // the facade correlates row i with request detail i % travellerCount,
         // which this ordering guarantees.
         for (SegmentSpec spec : specs) {
+
+            // Authoritative bookability guard (not just UI hygiene): booking
+            // closes 60 minutes before scheduled departure, so a departed or
+            // imminently-departing flight is rejected here no matter what
+            // client sent the request. Applies to every leg of the journey.
+            if (spec.departureTime() != null
+                    && !spec.departureTime().isAfter(LocalDateTime.now().plusMinutes(BOOKING_CLOSE_MINUTES))) {
+                throw new IllegalArgumentException(
+                        "Booking for flight " + spec.flightId() + " is closed - it departs (or departed) at "
+                                + spec.departureTime() + ". Bookings close " + BOOKING_CLOSE_MINUTES
+                                + " minutes before departure.");
+            }
 
             BookingSegment segment = BookingSegment.builder()
                     .booking(booking)

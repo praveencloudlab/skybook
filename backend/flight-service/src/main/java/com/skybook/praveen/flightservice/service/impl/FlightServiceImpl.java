@@ -21,6 +21,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class FlightServiceImpl implements FlightService {
 
+    // Public shopping cutoff: booking closes 60 minutes before scheduled
+    // departure (check-in shuts at 45). Applied to itineraries and the route
+    // calendar - never to admin reads, which must see departed flights.
+    static final long BOOKING_CUTOFF_MINUTES = 60;
+
     private final FlightRepository flightRepository;
 
     @Override
@@ -169,6 +174,13 @@ public class FlightServiceImpl implements FlightService {
         String origin = originAirportCode.toUpperCase();
         String destination = destinationAirportCode.toUpperCase();
 
+        // Public shopping must not offer what can no longer be bought: a leg
+        // that has departed, or departs within the booking cutoff (booking
+        // closes 60 minutes before scheduled departure - check-in desks shut
+        // at 45). Admin's /search stays unfiltered on purpose: back-office
+        // needs to see today's departed flights to run them.
+        LocalDateTime bookableFrom = LocalDateTime.now().plusMinutes(BOOKING_CUTOFF_MINUTES);
+
         // One window covers every possible leg: first legs depart on the
         // requested date; onward legs may run into the next day (overnight
         // arrivals), and a second connection the day after that.
@@ -177,6 +189,7 @@ public class FlightServiceImpl implements FlightService {
                         departureDate.plusDays(2).atStartOfDay())
                 .stream()
                 .filter(f -> f.getStatus() != FlightStatus.CANCELLED)
+                .filter(f -> f.getDepartureTime().isAfter(bookableFrom))
                 .toList();
 
         java.util.Map<String, List<Flight>> byOrigin = new java.util.HashMap<>();
@@ -264,6 +277,10 @@ public class FlightServiceImpl implements FlightService {
             throw new IllegalArgumentException("Calendar range must not exceed 124 days");
         }
 
+        // Same bookability cutoff as itineraries: the calendar must not price
+        // a "today" whose remaining departures have already left.
+        LocalDateTime bookableFrom = LocalDateTime.now().plusMinutes(BOOKING_CUTOFF_MINUTES);
+
         return flightRepository
                 .findByOriginAirportCodeAndDestinationAirportCodeAndDepartureTimeBetween(
                         originAirportCode.toUpperCase(),
@@ -272,6 +289,7 @@ public class FlightServiceImpl implements FlightService {
                         endDate.plusDays(1).atStartOfDay().minusNanos(1))
                 .stream()
                 .filter(flight -> flight.getStatus() != FlightStatus.CANCELLED)
+                .filter(flight -> flight.getDepartureTime().isAfter(bookableFrom))
                 .collect(java.util.stream.Collectors.groupingBy(
                         flight -> flight.getDepartureTime().toLocalDate(),
                         java.util.TreeMap::new,

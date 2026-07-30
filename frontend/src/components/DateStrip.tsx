@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { quotesApi, type TravelClass } from '../api/quotes';
-import { addDaysIso, price } from '../lib/format';
+import { addDaysIso, price, todayIso } from '../lib/format';
 
 /**
  * The date-price strip above search results (carrier pattern): a pageable run
@@ -59,8 +59,11 @@ export function DateStrip({
       <button
         type="button"
         aria-label="Earlier dates"
+        // Clamp at today: there is nothing bookable behind it, and the
+        // backend calendar no longer prices past days anyway.
+        disabled={days[0] <= todayIso()}
         onClick={() => setStart((s) => addDaysIso(s, -WINDOW))}
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-slate-500 transition hover:bg-slate-100"
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-30"
       >
         ‹
       </button>

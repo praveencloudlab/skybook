@@ -149,6 +149,37 @@ class BookingServiceImplTest {
         }
 
         @Test
+        void departedOrImminentFlightsAreRejectedOutright() {
+            when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
+
+            CreateBookingRequest request = createRequest(
+                    List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
+
+            // Departed two hours ago.
+            assertThatThrownBy(() -> bookingService.createDraftBooking(
+                    request, java.time.LocalDateTime.now().minusHours(2), null, "owner@test.com"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("closed");
+
+            // Departs in 30 minutes - inside the 60-minute booking cutoff.
+            assertThatThrownBy(() -> bookingService.createDraftBooking(
+                    request, java.time.LocalDateTime.now().plusMinutes(30), null, "owner@test.com"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("closed");
+
+            // A round trip whose RETURN leg is somehow in the past dies too.
+            CreateBookingRequest roundTrip = new CreateBookingRequest(
+                    100L, 1L, 2L,
+                    List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)),
+                    new BookingContactRequest("John Doe", "john@example.com", "+441234567891"),
+                    null);
+            assertThatThrownBy(() -> bookingService.createDraftBooking(
+                    roundTrip, NEUTRAL_DEPARTURE, java.time.LocalDateTime.now().minusDays(1), "owner@test.com"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("closed");
+        }
+
+        @Test
         void roundTripDraftCreatesTwoSegmentsWithPerLegPricing() {
             when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
             stubSaveReturnsArgument();
@@ -218,12 +249,14 @@ class BookingServiceImplTest {
 
         @Test
         void rejectsWhenPassportExpiresBeforeTravelDate() {
-            LocalDateTime departureTime = LocalDateTime.of(2026, 6, 1, 10, 0);
+            // Future departure (the bookability guard fires first otherwise);
+            // the passport expires between now and travel.
+            LocalDateTime departureTime = LocalDateTime.now().plusMonths(6);
 
             PassengerBookingDetail expiredPassport = new PassengerBookingDetail(
                     "Mr", "Jane", null, "Doe",
                     LocalDate.of(1990, 1, 1), "FEMALE", "GBR",
-                    "P1234567", LocalDate.of(2026, 5, 1), // expires before departure
+                    "P1234567", LocalDate.now().plusMonths(3), // expires before departure
                     "jane@example.com", "+441234567890",
                     TravelClass.ECONOMY, FareType.FLEXI, "12A", null, null
             );
