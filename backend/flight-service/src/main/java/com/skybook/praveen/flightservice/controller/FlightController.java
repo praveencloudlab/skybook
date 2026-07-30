@@ -78,6 +78,21 @@ public class FlightController {
     }
 
     @Operation(
+            summary = "Trip itineraries",
+            description = "Direct flights plus 1-stop and 2-stop connections for a route and date, "
+                    + "with per-stop layover times. Public shopping data, like /search."
+    )
+    @GetMapping("/itineraries")
+    public List<com.skybook.praveen.flightservice.dto.response.ItineraryResponse> getItineraries(
+            @RequestParam String originAirportCode,
+            @RequestParam String destinationAirportCode,
+            @RequestParam
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            LocalDate departureDate) {
+        return flightService.getItineraries(originAirportCode, destinationAirportCode, departureDate);
+    }
+
+    @Operation(
             summary = "Search Flights",
             description = "Search flights by origin, destination and departure date."
     )

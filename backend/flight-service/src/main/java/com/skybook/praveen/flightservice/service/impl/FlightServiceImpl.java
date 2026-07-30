@@ -161,6 +161,94 @@ public class FlightServiceImpl implements FlightService {
     }
 
     @Override
+    public List<com.skybook.praveen.flightservice.dto.response.ItineraryResponse> getItineraries(
+            String originAirportCode,
+            String destinationAirportCode,
+            LocalDate departureDate) {
+
+        String origin = originAirportCode.toUpperCase();
+        String destination = destinationAirportCode.toUpperCase();
+
+        // One window covers every possible leg: first legs depart on the
+        // requested date; onward legs may run into the next day (overnight
+        // arrivals), and a second connection the day after that.
+        List<Flight> window = flightRepository.findByDepartureTimeBetween(
+                        departureDate.atStartOfDay(),
+                        departureDate.plusDays(2).atStartOfDay())
+                .stream()
+                .filter(f -> f.getStatus() != FlightStatus.CANCELLED)
+                .toList();
+
+        java.util.Map<String, List<Flight>> byOrigin = new java.util.HashMap<>();
+        for (Flight f : window) {
+            byOrigin.computeIfAbsent(f.getOriginAirportCode(), k -> new java.util.ArrayList<>()).add(f);
+        }
+
+        long minLayover = 60;   // minutes - a self-transfer needs time to change planes
+        long maxLayover = 420;  // 7h - beyond this nobody calls it a connection
+        long maxTotal = 40 * 60;
+
+        List<com.skybook.praveen.flightservice.dto.response.ItineraryResponse> results = new java.util.ArrayList<>();
+
+        java.util.function.BiFunction<Flight, Flight, Long> layover = (a, b) ->
+                java.time.Duration.between(a.getArrivalTime(), b.getDepartureTime()).toMinutes();
+
+        for (Flight first : byOrigin.getOrDefault(origin, List.of())) {
+            if (!first.getDepartureTime().toLocalDate().equals(departureDate)) {
+                continue;
+            }
+            // Direct.
+            if (first.getDestinationAirportCode().equals(destination)) {
+                results.add(itinerary(List.of(first), List.of()));
+                continue;
+            }
+            // 1 stop and 2 stops.
+            for (Flight second : byOrigin.getOrDefault(first.getDestinationAirportCode(), List.of())) {
+                long wait1 = layover.apply(first, second);
+                if (wait1 < minLayover || wait1 > maxLayover) {
+                    continue;
+                }
+                if (second.getDestinationAirportCode().equals(destination)) {
+                    results.add(itinerary(List.of(first, second), List.of(wait1)));
+                    continue;
+                }
+                if (second.getDestinationAirportCode().equals(origin)) {
+                    continue;
+                }
+                for (Flight third : byOrigin.getOrDefault(second.getDestinationAirportCode(), List.of())) {
+                    if (!third.getDestinationAirportCode().equals(destination)) {
+                        continue;
+                    }
+                    long wait2 = layover.apply(second, third);
+                    if (wait2 < minLayover || wait2 > maxLayover) {
+                        continue;
+                    }
+                    results.add(itinerary(List.of(first, second, third), List.of(wait1, wait2)));
+                }
+            }
+        }
+
+        return results.stream()
+                .filter(i -> i.totalDurationMinutes() <= maxTotal)
+                .sorted(java.util.Comparator.comparingLong(
+                        com.skybook.praveen.flightservice.dto.response.ItineraryResponse::totalDurationMinutes))
+                .limit(20)
+                .toList();
+    }
+
+    private com.skybook.praveen.flightservice.dto.response.ItineraryResponse itinerary(
+            List<Flight> legs, List<Long> layovers) {
+        long total = java.time.Duration.between(
+                legs.get(0).getDepartureTime(),
+                legs.get(legs.size() - 1).getArrivalTime()).toMinutes();
+        return new com.skybook.praveen.flightservice.dto.response.ItineraryResponse(
+                legs.stream().map(FlightMapper::toResponse).toList(),
+                legs.size() - 1,
+                total,
+                layovers);
+    }
+
+    @Override
     public List<RouteCalendarDayResponse> getRouteCalendar(
             String originAirportCode,
             String destinationAirportCode,

@@ -53,6 +53,17 @@ public interface FlightService {
     );
 
     /**
+     * Trip options for a route+date: direct flights plus 1-stop and 2-stop
+     * connections assembled from the schedule (layover 60m-7h, total under
+     * 40h), cheapest-to-assemble first by total duration. The metasearch view.
+     */
+    List<com.skybook.praveen.flightservice.dto.response.ItineraryResponse> getItineraries(
+            String originAirportCode,
+            String destinationAirportCode,
+            LocalDate departureDate
+    );
+
+    /**
      * A route's availability calendar: bookable-departure counts per day over
      * [startDate, endDate], for the fare-calendar date picker. Days without
      * flights are absent. The range is capped server-side (§ the calendar shows

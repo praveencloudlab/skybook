@@ -39,7 +39,25 @@ export interface RouteCalendarDay {
   flights: number;
 }
 
+/** One bookable trip option: a direct leg or a 1-2 stop self-transfer connection. */
+export interface Itinerary {
+  legs: Flight[];
+  stops: number;
+  totalDurationMinutes: number;
+  /** Waiting time at each stop, minutes, in leg order. */
+  layoverMinutes: number[];
+}
+
 export const flightsApi = {
+  itineraries({ origin, destination, date }: SearchCriteria, signal?: AbortSignal): Promise<Itinerary[]> {
+    const query = new URLSearchParams({
+      originAirportCode: origin,
+      destinationAirportCode: destination,
+      departureDate: date,
+    });
+    return api.get<Itinerary[]>(`/api/flights/itineraries?${query}`, { signal });
+  },
+
   search({ origin, destination, date }: SearchCriteria, signal?: AbortSignal): Promise<Flight[]> {
     const query = new URLSearchParams({
       originAirportCode: origin,

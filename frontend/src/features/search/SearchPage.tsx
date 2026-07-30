@@ -5,12 +5,13 @@ import {
   POPULAR_ROUTES,
   flightsApi,
   type Flight,
+  type Itinerary,
   type SearchCriteria,
 } from '../../api/flights';
 import type { TravelClass } from '../../api/quotes';
 import { ErrorAlert } from '../../components/Alert';
 import { BookingWidget, type BookingSearch } from '../../components/BookingWidget';
-import { FlightCard } from '../../components/FlightCard';
+import { ItineraryCard } from '../../components/ItineraryCard';
 import type { Travellers } from '../../components/TravellersPicker';
 import { ApiError } from '../../lib/errors';
 import { addDaysIso, dayAndMonth, todayIso } from '../../lib/format';
@@ -69,6 +70,9 @@ export function SearchPage({
   });
 
   const [results, setResults] = useState<Flight[] | null>(null);
+  const [itins, setItins] = useState<Itinerary[] | null>(null);
+  // null = all; 0/1/2 = exactly that many stops.
+  const [stopFilter, setStopFilter] = useState<number | null>(null);
   const [searched, setSearched] = useState<SearchCriteria | null>(null);
   const [filters, setFilters] = useState<FilterState | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -79,19 +83,31 @@ export function SearchPage({
     () => (results && filters ? applyFilters(results, filters) : (results ?? [])),
     [results, filters],
   );
+  const visibleItins = useMemo(() => {
+    if (!itins) {
+      return [];
+    }
+    const firstLegOk = new Set(visible.map((f) => f.id));
+    return itins
+      .filter((t) => firstLegOk.has(t.legs[0].id))
+      .filter((t) => stopFilter === null || t.stops === stopFilter);
+  }, [itins, visible, stopFilter]);
 
   async function runSearch(criteria: SearchCriteria) {
     setBusy(true);
     setError(null);
     try {
-      const flights = await flightsApi.search(criteria);
-      flights.sort((a, b) => a.departureTime.localeCompare(b.departureTime));
-      setResults(flights);
-      setFilters(initialFilters(flights));
+      const trips = await flightsApi.itineraries(criteria);
+      const firstLegs = trips.map((t) => t.legs[0]);
+      setItins(trips);
+      setResults(firstLegs);
+      setFilters(initialFilters(firstLegs));
+      setStopFilter(null);
       setSearched(criteria);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : null);
       setResults(null);
+      setItins(null);
       setFilters(null);
     } finally {
       setBusy(false);
@@ -234,27 +250,53 @@ export function SearchPage({
               <section className="space-y-3">
                 <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
                   <p className="text-sm text-slate-600">
-                    <span className="font-semibold text-slate-900">{visible.length}</span>
-                    {visible.length === results.length ? '' : ` of ${results.length}`} flight
-                    {results.length === 1 ? '' : 's'}
+                    <span className="font-semibold text-slate-900">{visibleItins.length}</span> trip
+                    {visibleItins.length === 1 ? '' : 's'}
                   </p>
                   <p className="tabular text-xs text-slate-500">
                     {searched.origin} → {searched.destination} · {dayAndMonth(`${searched.date}T00:00`)}
                   </p>
                 </div>
 
-                {visible.length === 0 ? (
+                {/* Stops filter - the metasearch chips. */}
+                <div className="flex flex-wrap gap-2">
+                  {[null, 0, 1, 2].map((stops) => {
+                    const count = stops === null
+                      ? (itins?.length ?? 0)
+                      : (itins?.filter((t) => t.stops === stops).length ?? 0);
+                    const active = stopFilter === stops;
+                    return (
+                      <button
+                        key={String(stops)}
+                        type="button"
+                        onClick={() => setStopFilter(stops)}
+                        aria-pressed={active}
+                        className={
+                          'rounded-full px-4 py-1.5 text-xs font-bold transition ' +
+                          (active
+                            ? 'bg-brand-950 text-white'
+                            : 'border border-slate-300 bg-white text-slate-700 hover:border-slate-500')
+                        }
+                      >
+                        {stops === null ? 'All' : stops === 0 ? 'Direct' : stops === 1 ? '1 stop' : '2 stops'}
+                        <span className="tabular ml-1.5 opacity-60">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {visibleItins.length === 0 ? (
                   <p className="card px-4 py-3 text-sm text-slate-600">
-                    No flights match these filters. Widen the airline or time selection on the left.
+                    No trips match these filters. Widen the stops, airline or time selection.
                   </p>
                 ) : (
-                  visible.map((flight) => (
-                    <FlightCard
-                      key={flight.id}
-                      flight={flight}
-                      onSelect={
+                  visibleItins.map((trip) => (
+                    <ItineraryCard
+                      key={trip.legs.map((l) => l.id).join('-')}
+                      itinerary={trip}
+                      onSelectLeg={
                         onSelectFlight
-                          ? () => onSelectFlight(flight, party.travellers, party.cabin)
+                          ? (leg) => onSelectFlight(leg, party.travellers, party.cabin)
                           : undefined
                       }
                     />
