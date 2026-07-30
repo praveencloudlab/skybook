@@ -19,6 +19,10 @@ public record BookingPassengerResponse(
         // passenger has one row per segment since V10 (ROUND_TRIP_MODULE.md).
         int segmentIndex,
 
+        // The row's own flight - what seat holds, releases and reservations
+        // must target on a multi-segment booking (never the booking-level id).
+        Long flightId,
+
         String firstName,
 
         String lastName,

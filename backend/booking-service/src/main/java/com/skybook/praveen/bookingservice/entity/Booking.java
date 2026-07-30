@@ -94,7 +94,11 @@ public class Booking extends Auditable {
     @Column(name = "owner_subject", updatable = false)
     private String ownerSubject;
 
+    // id ASC = insertion order = segment-major (ROUND_TRIP_MODULE.md §5):
+    // the facade's row<->request-detail correlation relies on a reloaded
+    // booking listing rows in exactly the order the draft created them.
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("id ASC")
     @Builder.Default
     private List<BookingPassenger> passengers = new ArrayList<>();
 

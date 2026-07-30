@@ -82,7 +82,7 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public BookingResponse createDraftBooking(CreateBookingRequest request, LocalDateTime flightDepartureTime,
-                                              String ownerSubject) {
+                                              LocalDateTime returnDepartureTime, String ownerSubject) {
 
         Booking booking = Booking.builder()
                 .bookingReference(generateUniquePnr())
@@ -95,56 +95,80 @@ public class BookingServiceImpl implements BookingService {
                 .ownerSubject(ownerSubject)
                 .build();
 
-        // Segment 0 = the outbound leg (ROUND_TRIP_MODULE.md §3). A one-way
-        // booking is a one-segment journey; the round-trip saga adds the
-        // return as segment 1.
-        BookingSegment outbound = BookingSegment.builder()
-                .booking(booking)
-                .segmentIndex(0)
-                .flightId(request.flightId())
-                .build();
-        booking.getSegments().add(outbound);
+        // The journey's legs (ROUND_TRIP_MODULE.md §3/§5): segment 0 is the
+        // outbound; a returnFlightId makes this a single-PNR round trip with
+        // the return as segment 1. Each leg keeps its OWN departure time -
+        // fares are demand-priced and passports validity-checked per leg.
+        record SegmentSpec(int index, Long flightId, LocalDateTime departureTime) {
+        }
+        List<SegmentSpec> specs = new ArrayList<>();
+        specs.add(new SegmentSpec(0, request.flightId(), flightDepartureTime));
+        if (request.returnFlightId() != null) {
+            specs.add(new SegmentSpec(1, request.returnFlightId(), returnDepartureTime));
+        }
+
+        // ONE Passenger identity per traveller, shared by their row on every
+        // segment - the person flies both directions; only the per-leg
+        // commercial data (seat, fare, bags, check-in) differs.
+        List<Passenger> travellers = request.passengers().stream()
+                .map(PassengerMapper::toEntity)
+                .toList();
 
         List<BookingPassenger> bookingPassengers = new ArrayList<>();
         BigDecimal totalFare = BigDecimal.ZERO;
 
-        for (PassengerBookingDetail detail : request.passengers()) {
+        // Segment-major row order (all outbound rows, then all return rows):
+        // the facade correlates row i with request detail i % travellerCount,
+        // which this ordering guarantees.
+        for (SegmentSpec spec : specs) {
 
-            Passenger passenger = PassengerMapper.toEntity(detail);
-            bookingValidator.validatePassportValidForTravel(passenger, flightDepartureTime);
-
-            // Draft stage (§5.1): fare = base fare only, seat NULL, surcharge 0.
-            // finalizeSeatAssignments writes the authoritative seat/surcharge/
-            // mode from the inventory hold results. The MANUAL placeholder mode
-            // exists only because the column is NOT NULL - it is meaningless
-            // until finalize overwrites it.
-            BigDecimal baseFare = fareCalculator.calculateFare(
-                    detail.travelClass(), detail.fareType(), flightDepartureTime);
-
-            // Ancillary bags priced here, once, into the immutable breakdown -
-            // refunds/invoices bill the stored fare, never a recomputation.
-            int extraBags = detail.extraBags() != null ? detail.extraBags() : 0;
-            BigDecimal baggageFee = EXTRA_BAG_FEE.multiply(BigDecimal.valueOf(extraBags));
-
-            BookingPassenger bookingPassenger = BookingPassenger.builder()
+            BookingSegment segment = BookingSegment.builder()
                     .booking(booking)
-                    .passenger(passenger)
-                    .segment(outbound)
-                    .flightId(request.flightId())
-                    .travelClass(detail.travelClass())
-                    .fareType(detail.fareType())
-                    .baseFare(baseFare)
-                    .seatSurcharge(BigDecimal.ZERO)
-                    .extraBags(extraBags)
-                    .baggageFee(baggageFee)
-                    .chargedSeatAssignmentMode(SeatAssignmentMode.MANUAL)
-                    .currency(DEFAULT_CURRENCY)
-                    .fare(baseFare.add(baggageFee))
-                    .checkInStatus(CheckInStatus.NOT_OPEN)
+                    .segmentIndex(spec.index())
+                    .flightId(spec.flightId())
                     .build();
+            booking.getSegments().add(segment);
 
-            bookingPassengers.add(bookingPassenger);
-            totalFare = totalFare.add(bookingPassenger.getFare());
+            for (int i = 0; i < request.passengers().size(); i++) {
+
+                PassengerBookingDetail detail = request.passengers().get(i);
+                Passenger passenger = travellers.get(i);
+                bookingValidator.validatePassportValidForTravel(passenger, spec.departureTime());
+
+                // Draft stage (§5.1): fare = base fare only, seat NULL, surcharge 0.
+                // finalizeSeatAssignments writes the authoritative seat/surcharge/
+                // mode from the inventory hold results. The MANUAL placeholder mode
+                // exists only because the column is NOT NULL - it is meaningless
+                // until finalize overwrites it.
+                BigDecimal baseFare = fareCalculator.calculateFare(
+                        detail.travelClass(), detail.fareType(), spec.departureTime());
+
+                // Ancillary bags priced here, once, into the immutable breakdown -
+                // refunds/invoices bill the stored fare, never a recomputation.
+                // Bags apply per segment: the same count flies each direction (v1).
+                int extraBags = detail.extraBags() != null ? detail.extraBags() : 0;
+                BigDecimal baggageFee = EXTRA_BAG_FEE.multiply(BigDecimal.valueOf(extraBags));
+
+                BookingPassenger bookingPassenger = BookingPassenger.builder()
+                        .booking(booking)
+                        .passenger(passenger)
+                        .segment(segment)
+                        .flightId(spec.flightId())
+                        .travelClass(detail.travelClass())
+                        .fareType(detail.fareType())
+                        .baseFare(baseFare)
+                        .seatSurcharge(BigDecimal.ZERO)
+                        .extraBags(extraBags)
+                        .baggageFee(baggageFee)
+                        .chargedSeatAssignmentMode(SeatAssignmentMode.MANUAL)
+                        .currency(DEFAULT_CURRENCY)
+                        .fare(baseFare.add(baggageFee))
+                        .checkInStatus(CheckInStatus.NOT_OPEN)
+                        .build();
+
+                bookingPassengers.add(bookingPassenger);
+                totalFare = totalFare.add(bookingPassenger.getFare());
+            }
         }
 
         booking.setPassengers(bookingPassengers);

@@ -104,7 +104,7 @@ class BookingServiceImplTest {
 
     private CreateBookingRequest createRequest(List<PassengerBookingDetail> passengers) {
         return new CreateBookingRequest(
-                100L, 1L, passengers,
+                100L, 1L, null, passengers,
                 new BookingContactRequest("John Doe", "john@example.com", "+441234567891"),
                 null
         );
@@ -129,7 +129,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = bookingService.createDraftBooking(request, NEUTRAL_DEPARTURE, "owner@test.com");
+            BookingResponse response = bookingService.createDraftBooking(request, NEUTRAL_DEPARTURE, null, "owner@test.com");
 
             assertThat(response.bookingReference()).matches("^SB[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$");
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.DRAFT);
@@ -149,6 +149,40 @@ class BookingServiceImplTest {
         }
 
         @Test
+        void roundTripDraftCreatesTwoSegmentsWithPerLegPricing() {
+            when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
+            stubSaveReturnsArgument();
+
+            // returnFlightId present => segment 1, one row per traveller per
+            // segment, each priced against ITS OWN departure (both dates sit
+            // in the neutral 1.00 demand band here, so legs price equally).
+            CreateBookingRequest request = new CreateBookingRequest(
+                    100L, 1L, 2L,
+                    List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)),
+                    new BookingContactRequest("John Doe", "john@example.com", "+441234567891"),
+                    null);
+
+            BookingResponse response = bookingService.createDraftBooking(
+                    request, NEUTRAL_DEPARTURE, NEUTRAL_DEPARTURE.plusDays(7), "owner@test.com");
+
+            assertThat(response.segments()).hasSize(2);
+            assertThat(response.segments().get(0).segmentIndex()).isZero();
+            assertThat(response.segments().get(0).flightId()).isEqualTo(1L);
+            assertThat(response.segments().get(1).segmentIndex()).isEqualTo(1);
+            assertThat(response.segments().get(1).flightId()).isEqualTo(2L);
+            // Segment-major rows: outbound row first, then the return row.
+            assertThat(response.passengers()).hasSize(2);
+            assertThat(response.passengers().get(0).segmentIndex()).isZero();
+            assertThat(response.passengers().get(0).flightId()).isEqualTo(1L);
+            assertThat(response.passengers().get(1).segmentIndex()).isEqualTo(1);
+            assertThat(response.passengers().get(1).flightId()).isEqualTo(2L);
+            // Same traveller identity on both rows; combined total, ONE booking.
+            assertThat(response.passengers().get(1).passportNumber())
+                    .isEqualTo(response.passengers().get(0).passportNumber());
+            assertThat(response.totalFare()).isEqualByComparingTo("200.00");
+        }
+
+        @Test
         void sumsUpBaseFaresAcrossMultiplePassengers() {
             when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
             stubSaveReturnsArgument();
@@ -158,7 +192,7 @@ class BookingServiceImplTest {
                     passengerDetail("12B", TravelClass.BUSINESS, FareType.SAVER)   // 350 * 0.85 = 297.50
             ));
 
-            BookingResponse response = bookingService.createDraftBooking(request, NEUTRAL_DEPARTURE, "owner@test.com");
+            BookingResponse response = bookingService.createDraftBooking(request, NEUTRAL_DEPARTURE, null, "owner@test.com");
 
             assertThat(response.passengers()).hasSize(2);
             assertThat(response.totalFare()).isEqualByComparingTo("397.50");
@@ -176,7 +210,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail(null, TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = bookingService.createDraftBooking(request, NEUTRAL_DEPARTURE, "owner@test.com");
+            BookingResponse response = bookingService.createDraftBooking(request, NEUTRAL_DEPARTURE, null, "owner@test.com");
 
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.DRAFT);
             assertThat(response.passengers().get(0).seatNumber()).isNull();
@@ -196,7 +230,7 @@ class BookingServiceImplTest {
 
             CreateBookingRequest request = createRequest(List.of(expiredPassport));
 
-            assertThatThrownBy(() -> bookingService.createDraftBooking(request, departureTime, "owner@test.com"))
+            assertThatThrownBy(() -> bookingService.createDraftBooking(request, departureTime, null, "owner@test.com"))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("passport");
 
@@ -210,7 +244,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            assertThatThrownBy(() -> bookingService.createDraftBooking(request, NEUTRAL_DEPARTURE, "owner@test.com"))
+            assertThatThrownBy(() -> bookingService.createDraftBooking(request, NEUTRAL_DEPARTURE, null, "owner@test.com"))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("unique PNR");
         }
@@ -231,7 +265,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = serviceWithMockedPnr.createDraftBooking(request, NEUTRAL_DEPARTURE, "owner@test.com");
+            BookingResponse response = serviceWithMockedPnr.createDraftBooking(request, NEUTRAL_DEPARTURE, null, "owner@test.com");
 
             assertThat(response.bookingReference()).isEqualTo("SBBBBB");
         }

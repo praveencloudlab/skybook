@@ -29,6 +29,15 @@ public record CreateBookingRequest(
         @NotNull(message = "flightId is required")
         Long flightId,
 
+        /**
+         * Present = single-PNR round trip (ROUND_TRIP_MODULE.md §4): the
+         * return leg's flight, booked as segment 1 of the same booking. Every
+         * passenger gets one row per segment; seat picks apply to the
+         * outbound (v1 - return seats auto-assign) and extraBags to each
+         * segment. One payment covers the combined total.
+         */
+        Long returnFlightId,
+
         @NotEmpty(message = "At least one passenger is required")
         @Size(max = 9, message = "A single booking supports at most 9 passengers")
         @Valid

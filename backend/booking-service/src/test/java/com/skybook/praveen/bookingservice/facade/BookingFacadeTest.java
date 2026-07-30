@@ -73,7 +73,7 @@ class BookingFacadeTest {
     }
 
     private BookingPassengerResponse passenger(long id, String seat) {
-        return new BookingPassengerResponse(id, id + 100, 0, "Pax", "Test", "N000" + id,
+        return new BookingPassengerResponse(id, id + 100, 0, 10L, "Pax", "Test", "N000" + id,
                 "Mr", "MALE", java.time.LocalDate.of(1990, 1, 1), "GBR", java.time.LocalDate.of(2032, 1, 1),
                 TravelClass.ECONOMY, FareType.FLEXI, seat,
                 new BigDecimal("100.00"), BigDecimal.ZERO, 0, BigDecimal.ZERO,
@@ -127,7 +127,7 @@ class BookingFacadeTest {
 
         // Two manual seats; the draft persists passengers seatless in this order.
         private final CreateBookingRequest request = new CreateBookingRequest(
-                1L, 10L, List.of(detail("12A"), detail("12B")), null, null);
+                1L, 10L, null, List.of(detail("12A"), detail("12B")), null, null);
 
         private final BookingResponse draft = booking(BookingStatus.DRAFT, (String) null, (String) null);
 
@@ -135,7 +135,7 @@ class BookingFacadeTest {
         void holdsEverySeatFinalizesThenPublishes() {
             stubFlightOk();
             BookingResponse created = booking(BookingStatus.CREATED, "12A", "12B");
-            when(bookingService.createDraftBooking(request, departure(), null)).thenReturn(draft);
+            when(bookingService.createDraftBooking(request, departure(), null, null)).thenReturn(draft);
             when(inventoryServiceClient.holdSeat(eq(10L), anyString(), eq(7L), anyLong(), eq(TravelClass.ECONOMY)))
                     .thenAnswer(inv -> Optional.of(hold(inv.getArgument(1), "MANUAL", "12.00", "12.00")));
             when(bookingService.finalizeSeatAssignments(eq(7L), any())).thenReturn(created);
@@ -162,10 +162,10 @@ class BookingFacadeTest {
         void blankSeatGoesThroughTheAtomicAutoHold() {
             stubFlightOk();
             CreateBookingRequest autoRequest = new CreateBookingRequest(
-                    1L, 10L, List.of(detail(null)), null, null);
+                    1L, 10L, null, List.of(detail(null)), null, null);
             BookingResponse autoDraft = booking(BookingStatus.DRAFT, (String) null);
             BookingResponse created = booking(BookingStatus.CREATED, "20B");
-            when(bookingService.createDraftBooking(autoRequest, departure(), null)).thenReturn(autoDraft);
+            when(bookingService.createDraftBooking(autoRequest, departure(), null, null)).thenReturn(autoDraft);
             when(inventoryServiceClient.autoHoldSeat(10L, 7L, 1L, TravelClass.ECONOMY))
                     .thenReturn(Optional.of(hold("20B", "AUTO", "0.00", "0.00")));
             when(bookingService.finalizeSeatAssignments(eq(7L), any())).thenReturn(created);
@@ -184,7 +184,7 @@ class BookingFacadeTest {
         void flightWithoutInventoryFinalizesRequestedSeatsUnpriced() {
             stubFlightOk();
             BookingResponse created = booking(BookingStatus.CREATED, "12A", "12B");
-            when(bookingService.createDraftBooking(request, departure(), null)).thenReturn(draft);
+            when(bookingService.createDraftBooking(request, departure(), null, null)).thenReturn(draft);
             when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
                     .thenReturn(Optional.empty());
             when(bookingService.finalizeSeatAssignments(eq(7L), any())).thenReturn(created);
@@ -209,7 +209,7 @@ class BookingFacadeTest {
             // state. The earlier hold must be released and the draft
             // cancelled, never finalized unpriced (review hardening).
             stubFlightOk();
-            when(bookingService.createDraftBooking(request, departure(), null)).thenReturn(draft);
+            when(bookingService.createDraftBooking(request, departure(), null, null)).thenReturn(draft);
             when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
                     .thenReturn(Optional.of(hold("12A", "MANUAL", "12.00", "12.00")));
             when(inventoryServiceClient.holdSeat(10L, "12B", 7L, 2L, TravelClass.ECONOMY))
@@ -228,7 +228,7 @@ class BookingFacadeTest {
         @Test
         void seatConflictCompensatesAndCancelsTheDraft() {
             stubFlightOk();
-            when(bookingService.createDraftBooking(request, departure(), null)).thenReturn(draft);
+            when(bookingService.createDraftBooking(request, departure(), null, null)).thenReturn(draft);
             when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
                     .thenReturn(Optional.of(hold("12A", "MANUAL", "12.00", "12.00")));
             when(inventoryServiceClient.holdSeat(10L, "12B", 7L, 2L, TravelClass.ECONOMY))
@@ -248,7 +248,7 @@ class BookingFacadeTest {
         @Test
         void finalizeFailureReleasesHoldsAndCancelsTheDraft() {
             stubFlightOk();
-            when(bookingService.createDraftBooking(request, departure(), null)).thenReturn(draft);
+            when(bookingService.createDraftBooking(request, departure(), null, null)).thenReturn(draft);
             when(inventoryServiceClient.holdSeat(eq(10L), anyString(), eq(7L), anyLong(), eq(TravelClass.ECONOMY)))
                     .thenAnswer(inv -> Optional.of(hold(inv.getArgument(1), "MANUAL", "12.00", "12.00")));
             when(bookingService.finalizeSeatAssignments(eq(7L), any()))
@@ -261,6 +261,108 @@ class BookingFacadeTest {
             verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12B"), eq(7L), anyString());
             verify(bookingService).cancelBooking(eq(7L), anyString());
             verify(bookingEventProducer, never()).publishBookingCreated(any(), any());
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Round trip - one PNR, two segments, one saga (ROUND_TRIP_MODULE.md §5)
+    // ---------------------------------------------------------------
+
+    @Nested
+    class RoundTrip {
+
+        private final FlightDetails returnFlight = new FlightDetails(
+                20L, "AI132", "DEL", "LHR",
+                LocalDateTime.of(2030, 7, 23, 10, 0), LocalDateTime.of(2030, 7, 23, 19, 0),
+                FlightBookingStatus.SCHEDULED);
+
+        // One traveller with a manual outbound seat pick; return auto-assigns.
+        private final CreateBookingRequest request = new CreateBookingRequest(
+                1L, 10L, 20L, List.of(detail("12A")), null, null);
+
+        private BookingPassengerResponse row(long id, int segmentIndex, Long flightId, String seat) {
+            return new BookingPassengerResponse(id, 100L, segmentIndex, flightId, "Pax", "Test", "N0001",
+                    "Mr", "MALE", java.time.LocalDate.of(1990, 1, 1), "GBR", java.time.LocalDate.of(2032, 1, 1),
+                    TravelClass.ECONOMY, FareType.FLEXI, seat,
+                    new BigDecimal("100.00"), BigDecimal.ZERO, 0, BigDecimal.ZERO,
+                    SeatAssignmentMode.MANUAL, "USD",
+                    new BigDecimal("100.00"), CheckInStatus.NOT_OPEN, false, "ADULT");
+        }
+
+        /** Segment-major rows: row 1 = traveller on the outbound, row 2 = same traveller on the return. */
+        private BookingResponse roundTripBooking(BookingStatus status, String outboundSeat, String returnSeat) {
+            return new BookingResponse(7L, "SBFACD", 1L, 10L,
+                    List.of(new com.skybook.praveen.bookingservice.dto.response.BookingSegmentResponse(1L, 0, 10L, "UPCOMING"),
+                            new com.skybook.praveen.bookingservice.dto.response.BookingSegmentResponse(2L, 1, 20L, "UPCOMING")),
+                    status, LocalDateTime.now(),
+                    new BigDecimal("200.00"), null, null,
+                    List.of(row(1L, 0, 10L, outboundSeat), row(2L, 1, 20L, returnSeat)),
+                    null, null, "system", "system", 0L, LocalDateTime.now(), LocalDateTime.now());
+        }
+
+        @Test
+        void holdsAcrossBothFlightsAndFinalizesOnce() {
+            stubFlightOk();
+            when(flightServiceClient.getFlight(20L)).thenReturn(returnFlight);
+            BookingResponse draft = roundTripBooking(BookingStatus.DRAFT, null, null);
+            BookingResponse created = roundTripBooking(BookingStatus.CREATED, "12A", "20B");
+            when(bookingService.createDraftBooking(request, departure(), returnFlight.departureTime(), null))
+                    .thenReturn(draft);
+            when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
+                    .thenReturn(Optional.of(hold("12A", "MANUAL", "12.00", "12.00")));
+            when(inventoryServiceClient.autoHoldSeat(20L, 7L, 2L, TravelClass.ECONOMY))
+                    .thenReturn(Optional.of(hold("20B", "AUTO", "0.00", "0.00")));
+            when(bookingService.finalizeSeatAssignments(eq(7L), any())).thenReturn(created);
+
+            BookingResponse result = facade.createBooking(request);
+
+            // ONE finalize, ONE event, ONE booking - the outbound seat manual,
+            // the return auto on ITS OWN flight.
+            assertThat(result.segments()).hasSize(2);
+            verify(bookingService).finalizeSeatAssignments(eq(7L), assignmentsCaptor.capture());
+            assertThat(assignmentsCaptor.getValue()).hasSize(2);
+            assertThat(assignmentsCaptor.getValue().get(1).seatNumber()).isEqualTo("20B");
+            verify(bookingEventProducer).publishBookingCreated(created, flight);
+        }
+
+        @Test
+        void returnFlightHoldFailureReleasesOutboundHoldsToo() {
+            // THE critical saga test (ROUND_TRIP_MODULE.md §10 step 2): the
+            // second flight's first hold fails after the first flight's holds
+            // succeeded - every hold on EITHER flight must be released and
+            // the draft cancelled. All-or-nothing.
+            stubFlightOk();
+            when(flightServiceClient.getFlight(20L)).thenReturn(returnFlight);
+            BookingResponse draft = roundTripBooking(BookingStatus.DRAFT, null, null);
+            when(bookingService.createDraftBooking(request, departure(), returnFlight.departureTime(), null))
+                    .thenReturn(draft);
+            when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
+                    .thenReturn(Optional.of(hold("12A", "MANUAL", "12.00", "12.00")));
+            when(inventoryServiceClient.autoHoldSeat(20L, 7L, 2L, TravelClass.ECONOMY))
+                    .thenThrow(new SeatUnavailableException(20L, "ANY", "cabin full"));
+
+            assertThatThrownBy(() -> facade.createBooking(request))
+                    .isInstanceOf(SeatUnavailableException.class);
+
+            verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12A"), eq(7L), anyString());
+            verify(bookingService).cancelBooking(eq(7L), anyString());
+            verify(bookingService, never()).finalizeSeatAssignments(anyLong(), any());
+            verify(bookingEventProducer, never()).publishBookingCreated(any(), any());
+        }
+
+        @Test
+        void returnDepartingBeforeOutboundArrivalIsRejectedBeforeAnyDraft() {
+            stubFlightOk();
+            FlightDetails tooEarly = new FlightDetails(20L, "AI132", "DEL", "LHR",
+                    flight.arrivalTime().minusHours(2), flight.arrivalTime().plusHours(6),
+                    FlightBookingStatus.SCHEDULED);
+            when(flightServiceClient.getFlight(20L)).thenReturn(tooEarly);
+
+            assertThatThrownBy(() -> facade.createBooking(request))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("after the outbound arrives");
+
+            verify(bookingService, never()).createDraftBooking(any(), any(), any(), any());
         }
     }
 

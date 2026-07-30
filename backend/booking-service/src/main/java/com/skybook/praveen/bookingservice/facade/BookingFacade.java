@@ -85,8 +85,26 @@ public class BookingFacade {
             throw new IllegalArgumentException("Cannot book a cancelled flight");
         }
 
+        // Round trip (ROUND_TRIP_MODULE.md §5): validate the return leg up
+        // front - both flights bookable and the chronology sane - before any
+        // row or hold exists, so a bad pair fails cheap.
+        FlightDetails returnFlight = null;
+        if (request.returnFlightId() != null) {
+            returnFlight = flightServiceClient.getFlight(request.returnFlightId());
+            if (returnFlight.status() == FlightBookingStatus.CANCELLED) {
+                throw new IllegalArgumentException("Cannot book a cancelled return flight");
+            }
+            if (flight.arrivalTime() != null
+                    && !returnFlight.departureTime().isAfter(flight.arrivalTime())) {
+                throw new IllegalArgumentException(
+                        "The return flight must depart after the outbound arrives");
+            }
+        }
+
         BookingResponse draft = bookingService.createDraftBooking(
-                request, flight.departureTime(), currentSubject());
+                request, flight.departureTime(),
+                returnFlight != null ? returnFlight.departureTime() : null,
+                currentSubject());
 
         List<SeatAssignmentResult> assignments = holdSeatsOrCompensate(draft, request);
 
@@ -139,9 +157,9 @@ public class BookingFacade {
         // reservations if it was. Cleanup must not fail the cancellation.
         for (BookingPassengerResponse passenger : booking.passengers()) {
             if (passenger.seatNumber() != null && !passenger.seatNumber().isBlank()) {
-                inventoryServiceClient.releaseHoldQuietly(booking.flightId(),
+                inventoryServiceClient.releaseHoldQuietly(passenger.flightId(),
                         passenger.seatNumber(), booking.id(), "booking cancelled");
-                inventoryServiceClient.cancelReservationQuietly(booking.flightId(),
+                inventoryServiceClient.cancelReservationQuietly(passenger.flightId(),
                         passenger.seatNumber(), booking.id(), "booking cancelled");
             }
         }
@@ -166,9 +184,9 @@ public class BookingFacade {
         // theirs (rules 6, 7). Quiet + idempotent, so re-running is harmless.
         for (BookingPassengerResponse passenger : booking.passengers()) {
             if (passenger.cancelled() && passenger.seatNumber() != null && !passenger.seatNumber().isBlank()) {
-                inventoryServiceClient.releaseHoldQuietly(booking.flightId(),
+                inventoryServiceClient.releaseHoldQuietly(passenger.flightId(),
                         passenger.seatNumber(), booking.id(), "passenger cancelled");
-                inventoryServiceClient.cancelReservationQuietly(booking.flightId(),
+                inventoryServiceClient.cancelReservationQuietly(passenger.flightId(),
                         passenger.seatNumber(), booking.id(), "passenger cancelled");
             }
         }
@@ -292,23 +310,34 @@ public class BookingFacade {
      * Any failure compensates: releases the holds already taken, cancels the
      * draft (DRAFT -> CANCELLED), rethrows.
      */
+    /** A hold taken during the saga: which flight it lives on, and which seat - the unit of compensation. */
+    private record HeldSeat(Long flightId, String seatNumber) {
+    }
+
     private List<SeatAssignmentResult> holdSeatsOrCompensate(BookingResponse draft,
                                                              CreateBookingRequest request) {
 
+        // Rows are segment-major (outbound rows first, then return rows), so
+        // row i belongs to traveller i % travellerCount. ONE compensation
+        // list spans every flight (ROUND_TRIP_MODULE.md §5): any failure on
+        // either leg releases all holds taken on both. All-or-nothing.
+        int travellerCount = request.passengers().size();
         List<SeatAssignmentResult> assignments = new ArrayList<>();
-        List<String> heldSeats = new ArrayList<>();
+        List<HeldSeat> heldSeats = new ArrayList<>();
         try {
             for (int i = 0; i < draft.passengers().size(); i++) {
 
                 BookingPassengerResponse passenger = draft.passengers().get(i);
-                PassengerBookingDetail detail = request.passengers().get(i);
-                String requestedSeat = detail.seatNumber();
+                PassengerBookingDetail detail = request.passengers().get(i % travellerCount);
+                // Seat picks apply to the outbound only (v1) - return-leg
+                // rows always auto-assign, matching the booking journey UI.
+                String requestedSeat = passenger.segmentIndex() == 0 ? detail.seatNumber() : null;
                 boolean manual = requestedSeat != null && !requestedSeat.isBlank();
 
                 Optional<InventoryHoldDetails> hold = manual
-                        ? inventoryServiceClient.holdSeat(draft.flightId(),
+                        ? inventoryServiceClient.holdSeat(passenger.flightId(),
                                 requestedSeat.toUpperCase(), draft.id(), passenger.id(), detail.travelClass())
-                        : inventoryServiceClient.autoHoldSeat(draft.flightId(),
+                        : inventoryServiceClient.autoHoldSeat(passenger.flightId(),
                                 draft.id(), passenger.id(), detail.travelClass());
 
                 if (hold.isEmpty()) {
@@ -321,7 +350,7 @@ public class BookingFacade {
                         return noInventoryAssignments(draft, request);
                     }
                     throw new IllegalStateException("inventory reported no inventory for flight "
-                            + draft.flightId() + " after " + heldSeats.size()
+                            + passenger.flightId() + " after " + heldSeats.size()
                             + " seat(s) were already held - inconsistent inventory state");
                 }
 
@@ -338,7 +367,7 @@ public class BookingFacade {
                         held.listedSurcharge(),
                         charged,
                         SeatAssignmentMode.valueOf(held.assignmentMode())));
-                heldSeats.add(held.seatNumber());
+                heldSeats.add(new HeldSeat(passenger.flightId(), held.seatNumber()));
             }
             return assignments;
 
@@ -353,24 +382,35 @@ public class BookingFacade {
         try {
             return bookingService.finalizeSeatAssignments(draft.id(), assignments);
         } catch (RuntimeException finalizeFailure) {
-            List<String> heldSeats = assignments.stream()
-                    .map(SeatAssignmentResult::seatNumber)
-                    .filter(seat -> seat != null && !seat.isBlank())
+            // Recover each held seat's flight through its passenger row - the
+            // assignment carries only the row id, and on a round trip the
+            // seats live on two different flights.
+            Map<Long, Long> flightByRowId = new java.util.HashMap<>();
+            for (BookingPassengerResponse row : draft.passengers()) {
+                flightByRowId.put(row.id(), row.flightId());
+            }
+            List<HeldSeat> heldSeats = assignments.stream()
+                    .filter(a -> a.seatNumber() != null && !a.seatNumber().isBlank())
+                    .map(a -> new HeldSeat(flightByRowId.get(a.bookingPassengerId()), a.seatNumber()))
                     .toList();
             compensate(draft, heldSeats, "Finalization failed: " + finalizeFailure.getMessage());
             throw finalizeFailure;
         }
     }
 
-    /** Hold-if-exists fallback: seats as requested (manual) or none (auto), all charged 0. */
+    /** Hold-if-exists fallback: seats as requested (manual, outbound only) or none (auto), all charged 0. */
     private List<SeatAssignmentResult> noInventoryAssignments(BookingResponse draft,
                                                               CreateBookingRequest request) {
+        int travellerCount = request.passengers().size();
         List<SeatAssignmentResult> assignments = new ArrayList<>();
         for (int i = 0; i < draft.passengers().size(); i++) {
-            String requestedSeat = request.passengers().get(i).seatNumber();
+            BookingPassengerResponse row = draft.passengers().get(i);
+            String requestedSeat = row.segmentIndex() == 0
+                    ? request.passengers().get(i % travellerCount).seatNumber()
+                    : null;
             boolean manual = requestedSeat != null && !requestedSeat.isBlank();
             assignments.add(new SeatAssignmentResult(
-                    draft.passengers().get(i).id(),
+                    row.id(),
                     manual ? requestedSeat.toUpperCase() : null,
                     ZERO_MONEY, ZERO_MONEY,
                     manual ? SeatAssignmentMode.MANUAL : SeatAssignmentMode.AUTO));
@@ -378,10 +418,10 @@ public class BookingFacade {
         return assignments;
     }
 
-    /** Release taken holds and cancel the draft (DRAFT -> CANCELLED, §5.1a). */
-    private void compensate(BookingResponse draft, List<String> heldSeats, String reason) {
-        for (String seat : heldSeats) {
-            inventoryServiceClient.releaseHoldQuietly(draft.flightId(), seat, draft.id(),
+    /** Release taken holds - on every flight involved - and cancel the draft (DRAFT -> CANCELLED, §5.1a). */
+    private void compensate(BookingResponse draft, List<HeldSeat> heldSeats, String reason) {
+        for (HeldSeat held : heldSeats) {
+            inventoryServiceClient.releaseHoldQuietly(held.flightId(), held.seatNumber(), draft.id(),
                     "compensation - " + reason);
         }
         bookingService.cancelBooking(draft.id(), reason);
@@ -401,7 +441,7 @@ public class BookingFacade {
                 continue;
             }
             try {
-                inventoryServiceClient.reserveSeat(booking.flightId(), seat, booking.id(), passenger.id());
+                inventoryServiceClient.reserveSeat(passenger.flightId(), seat, booking.id(), passenger.id());
             } catch (RuntimeException e) {
                 log.warn("Could not convert hold to reservation for seat {} on booking {}: {}",
                         seat, booking.bookingReference(), e.getMessage());

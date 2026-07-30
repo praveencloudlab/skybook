@@ -27,11 +27,16 @@ public interface BookingService {
      *                            validating the flight with flight-service) -
      *                            this service needs it for passport-validity
      *                            checks but must not fetch it itself.
+     * @param returnDepartureTime the return leg's departure when the request
+     *                            carries returnFlightId (round trip,
+     *                            ROUND_TRIP_MODULE.md §5), null for one-way -
+     *                            each segment's rows are priced and
+     *                            passport-checked against ITS OWN departure.
      * @param ownerSubject        the authenticated JWT subject captured as the
      *                            booking owner (SECURITY_HARDENING_MODULE.md §4.2).
      */
     BookingResponse createDraftBooking(CreateBookingRequest request, LocalDateTime flightDepartureTime,
-                                       String ownerSubject);
+                                       LocalDateTime returnDepartureTime, String ownerSubject);
 
     /**
      * Stage 3 (§5.1): ONE transaction that synchronizes all money fields from

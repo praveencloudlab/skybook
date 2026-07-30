@@ -79,6 +79,7 @@ public final class BookingMapper {
                 bookingPassenger.getId(),
                 bookingPassenger.getPassenger().getId(),
                 bookingPassenger.getSegment() != null ? bookingPassenger.getSegment().getSegmentIndex() : 0,
+                bookingPassenger.getFlightId(),
                 bookingPassenger.getPassenger().getFirstName(),
                 bookingPassenger.getPassenger().getLastName(),
                 bookingPassenger.getPassenger().getPassportNumber(),
