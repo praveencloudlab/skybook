@@ -492,9 +492,7 @@ public class BookingFacade {
                 PassengerBookingDetail detail = request.passengers().get(i % travellerCount);
                 // Each leg takes its own pick: seatNumber for the outbound,
                 // returnSeatNumber for the return - absent means free AUTO.
-                String requestedSeat = passenger.segmentIndex() == 0
-                        ? detail.seatNumber()
-                        : detail.returnSeatNumber();
+                String requestedSeat = requestedSeatFor(passenger.segmentIndex(), request, detail);
                 boolean manual = requestedSeat != null && !requestedSeat.isBlank();
 
                 Optional<InventoryHoldDetails> hold = manual
@@ -569,9 +567,7 @@ public class BookingFacade {
         for (int i = 0; i < draft.passengers().size(); i++) {
             BookingPassengerResponse row = draft.passengers().get(i);
             PassengerBookingDetail detail = request.passengers().get(i % travellerCount);
-            String requestedSeat = row.segmentIndex() == 0
-                    ? detail.seatNumber()
-                    : detail.returnSeatNumber();
+            String requestedSeat = requestedSeatFor(row.segmentIndex(), request, detail);
             boolean manual = requestedSeat != null && !requestedSeat.isBlank();
             assignments.add(new SeatAssignmentResult(
                     row.id(),
@@ -580,6 +576,24 @@ public class BookingFacade {
                     manual ? SeatAssignmentMode.MANUAL : SeatAssignmentMode.AUTO));
         }
         return assignments;
+    }
+
+    /**
+     * The seat the traveller asked for on a given segment: segment 0 reads
+     * seatNumber, a through-ticket onward leg reads its connectionSeatNumbers
+     * entry, and the return segment reads returnSeatNumber. Null/blank = AUTO.
+     */
+    private static String requestedSeatFor(int segmentIndex, CreateBookingRequest request,
+                                           PassengerBookingDetail detail) {
+        if (segmentIndex == 0) {
+            return detail.seatNumber();
+        }
+        int connectionLegs = request.connectionFlightIds() == null ? 0 : request.connectionFlightIds().size();
+        if (segmentIndex <= connectionLegs) {
+            List<String> seats = detail.connectionSeatNumbers();
+            return seats != null && seats.size() >= segmentIndex ? seats.get(segmentIndex - 1) : null;
+        }
+        return detail.returnSeatNumber();
     }
 
     /** Release taken holds - on every flight involved - and cancel the draft (DRAFT -> CANCELLED, §5.1a). */

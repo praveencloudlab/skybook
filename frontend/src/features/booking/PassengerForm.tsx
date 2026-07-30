@@ -64,6 +64,7 @@ export function toPassengerDetail(
   seatNumber: string | null,
   extraBags = 0,
   returnSeatNumber: string | null = null,
+  connectionSeatNumbers: (string | null)[] = [],
 ): PassengerDetail {
   return {
     title: draft.title,
@@ -80,6 +81,11 @@ export function toPassengerDetail(
     // keyed on the field being absent.
     ...(seatNumber ? { seatNumber } : {}),
     ...(returnSeatNumber ? { returnSeatNumber } : {}),
+    // Index-aligned with connectionFlightIds: blanks keep later legs' picks
+    // in the right position, so only send when at least one pick exists.
+    ...(connectionSeatNumbers.some((s) => s)
+      ? { connectionSeatNumbers: connectionSeatNumbers.map((s) => s ?? '') }
+      : {}),
     ...(extraBags > 0 ? { extraBags } : {}),
   };
 }

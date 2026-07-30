@@ -40,6 +40,11 @@ export interface PassengerDetail {
   seatNumber?: string;
   /** Round trip: the seat picked for the RETURN leg (omit = free auto-assign). */
   returnSeatNumber?: string;
+  /**
+   * Seat picks per through-ticket connection leg, aligned by index with
+   * connectionFlightIds; empty string = free auto-assignment on that leg.
+   */
+  connectionSeatNumbers?: string[];
   /** Extra checked bags to buy (ancillary), charged per bag. */
   extraBags?: number;
 }

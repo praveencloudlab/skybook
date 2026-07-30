@@ -106,7 +106,7 @@ class BookingFacadeTest {
                 java.time.LocalDate.of(1990, 1, 1), "MALE", "GBR",
                 "P1234567", java.time.LocalDate.of(2032, 1, 1),
                 "pax@example.com", "+441234567890",
-                TravelClass.ECONOMY, FareType.FLEXI, seatNumber, null, null);
+                TravelClass.ECONOMY, FareType.FLEXI, seatNumber, null, null, null);
     }
 
     private final FlightDetails flight = new FlightDetails(

@@ -39,6 +39,7 @@ export function PaymentPage({
   flight,
   returnFlight = null,
   connection = [],
+  connectionSeats = [],
   cabin,
   fare,
   currency,
@@ -58,6 +59,8 @@ export function PaymentPage({
   returnFlight?: Flight | null;
   /** Same-carrier through-ticket: the onward connection legs after `flight`. */
   connection?: Flight[];
+  /** Seat picks per connection leg (guest order), aligned with `connection`. */
+  connectionSeats?: AircraftSeat[][];
   cabin: TravelClass;
   fare: FareType;
   currency: string;
@@ -95,7 +98,8 @@ export function PaymentPage({
         ...(connection.length ? { connectionFlightIds: connection.map((leg) => leg.id) } : {}),
         passengers: guests.map((g, i) =>
           toPassengerDetail(g, cabin, fare, seats[i]?.seatNumber ?? null, bags[i] ?? 0,
-            returnSeats[i]?.seatNumber ?? null),
+            returnSeats[i]?.seatNumber ?? null,
+            connection.map((_, legIdx) => connectionSeats[legIdx]?.[i]?.seatNumber ?? null)),
         ),
         contact: {
           contactName: `${guests[0].firstName} ${guests[0].lastName}`.trim(),

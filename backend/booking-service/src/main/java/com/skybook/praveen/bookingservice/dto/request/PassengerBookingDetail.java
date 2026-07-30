@@ -59,6 +59,15 @@ public record PassengerBookingDetail(
         String seatNumber,
 
         /**
+         * Seat picks for the through-ticket connection legs, aligned by index
+         * with CreateBookingRequest.connectionFlightIds (entry i = the seat on
+         * connection leg i). Null list, short list or blank entry = free AUTO
+         * assignment on that leg, exactly like seatNumber.
+         */
+        @jakarta.validation.constraints.Size(max = 2, message = "At most 2 connection-leg seats")
+        java.util.List<String> connectionSeatNumbers,
+
+        /**
          * Round trip only (ROUND_TRIP_MODULE.md §4): the seat picked for the
          * RETURN leg. Same optional semantics as seatNumber - absent means
          * free auto-assignment on the return flight.

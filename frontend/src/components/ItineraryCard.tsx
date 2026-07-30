@@ -1,6 +1,7 @@
 import type { Flight, Itinerary } from '../api/flights';
 import { AIRPORTS } from '../api/flights';
 import { dayOffset, duration, price, time } from '../lib/format';
+import { AirlineLogo } from './AirlineLogo';
 
 /**
  * One trip option in the results (metasearch presentation): every leg spelled
@@ -93,9 +94,7 @@ export function ItineraryCard({
           <div key={leg.id}>
             {/* Leg row. */}
             <div className="flex items-center gap-4 py-2.5">
-              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-600 text-[10px] font-bold text-white">
-                {leg.airlineCode}
-              </span>
+              <AirlineLogo code={leg.airlineCode} />
               <div className="min-w-[4.2rem]">
                 <div className="tabular text-xl font-bold leading-none text-slate-900">{time(leg.departureTime)}</div>
                 <div className="mt-1 text-xs font-semibold text-slate-500">{leg.originAirportCode}</div>
