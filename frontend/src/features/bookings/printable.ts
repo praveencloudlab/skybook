@@ -383,6 +383,113 @@ export function printETicket(
     })
     .join('');
 
+  // ------------------------------------------------------------------
+  // Ticket-office ledger (user-chosen Style C): PASSENGER(S) rows and a
+  // monospace FARE CALCULATION box with dotted leaders, built from the
+  // booking's real per-row fare breakdown.
+  // ------------------------------------------------------------------
+  const usd = (n: number) => `USD ${n.toFixed(2)}`;
+  const typeCode = (t?: string) => (t === 'CHILD' ? 'CHD' : t === 'INFANT' ? 'INF' : 'ADT');
+  const titleOf = (p: (typeof booking.passengers)[number]) => (p.title ?? '').toUpperCase();
+  const travellers = booking.passengers.filter((p) => (p.segmentIndex ?? 0) === 0);
+  const rowsOf = (t: (typeof booking.passengers)[number]) =>
+    booking.passengers.filter((p) =>
+      t.passengerId != null && p.passengerId != null
+        ? p.passengerId === t.passengerId
+        : `${p.firstName} ${p.lastName}` === `${t.firstName} ${t.lastName}`,
+    );
+
+  const passengerRows = travellers
+    .map((t, i) => {
+      const rows = rowsOf(t);
+      const active = rows.filter((p) => !p.cancelled);
+      const shown = active.length ? active : rows;
+      const seatOf = (idx: number) =>
+        shown.find((p) => (p.segmentIndex ?? 0) === idx)?.seatNumber ?? '&mdash;';
+      const seatText = multi ? `${seatOf(0)} / ${seatOf(1)}` : seatOf(0);
+      const farePaid = active.reduce((sum, p) => sum + (Number(p.fare) || 0), 0);
+      const ticket = booking.tickets?.find((tk) => tk.passengerId === t.passengerId);
+      const ticketText = ticket
+        ? `${ticket.ticketNumber.slice(0, 3)}-${ticket.ticketNumber.slice(3)}`
+        : '&mdash;';
+      return `
+        <tr${i % 2 === 1 ? ' style="background:#f6f2f4;"' : ''}>
+          <td style="padding:13px 12px;"><b>${t.lastName.toUpperCase()}/${t.firstName.toUpperCase()} ${titleOf(t)}</b> <span style="color:#64748b;">(${typeCode(t.passengerType)})</span></td>
+          <td style="padding:13px 12px;font-family:'Courier New',monospace;"><b>${ticketText}</b></td>
+          <td style="padding:13px 12px;font-family:'Courier New',monospace;"><b>${seatText}</b></td>
+          <td style="padding:13px 12px;">${t.travelClass[0]} &middot; <b>${t.fareType}</b>${active.length === 0 ? ' &middot; <b style="color:#b42318;">CANCELLED</b>' : ''}</td>
+          <td style="padding:13px 12px;text-align:right;font-family:'Courier New',monospace;"><b>${usd(farePaid)}</b></td>
+        </tr>`;
+    })
+    .join('');
+
+  const passengersBlock = `
+      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:18px;letter-spacing:.5px;padding:14px 20px;margin-top:24px;border-radius:6px;">PASSENGER(S)</div>
+      <table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:13px;">
+        <tr style="font-size:10px;letter-spacing:1px;color:#8a93a3;text-align:left;">
+          <th style="padding:9px 12px;border-bottom:2px solid ${MAROON};font-weight:800;">NAME</th>
+          <th style="padding:9px 12px;border-bottom:2px solid ${MAROON};font-weight:800;">E-TICKET</th>
+          <th style="padding:9px 12px;border-bottom:2px solid ${MAROON};font-weight:800;">${multi ? 'SEATS OUT / RET' : 'SEAT'}</th>
+          <th style="padding:9px 12px;border-bottom:2px solid ${MAROON};font-weight:800;">CABIN &middot; FARE</th>
+          <th style="padding:9px 12px;border-bottom:2px solid ${MAROON};font-weight:800;text-align:right;">FARE PAID</th>
+        </tr>
+        ${passengerRows}
+      </table>`;
+
+  // Ledger lines: fixed-width label, description padded with dot leaders,
+  // right-aligned bold amount - rendered in a white-space:pre monospace box.
+  const LEDGER_DESC_WIDTH = 40;
+  const ledgerLine = (label: string, desc: string, amount: string, opts: { bold?: boolean } = {}) => {
+    const padded = (desc + ' ').padEnd(LEDGER_DESC_WIDTH, '.');
+    const amt = amount.padStart(12);
+    const line = `<b>${label.padEnd(9)}</b>${padded}<b>${amt}</b>`;
+    return opts.bold ? `<span style="color:${MAROON};font-weight:700;">${line}</span>` : line;
+  };
+
+  const activeRows = booking.passengers.filter((p) => !p.cancelled);
+  const rowsPriced = activeRows.length ? activeRows : booking.passengers;
+  const fareLines = segs
+    .map((seg, i) => {
+      const flight = flightsById[seg.flightId];
+      const legRows = rowsPriced.filter((p) => (p.segmentIndex ?? 0) === seg.segmentIndex);
+      if (!legRows.length) {
+        return '';
+      }
+      const bases = legRows.map((p) => Number(p.baseFare ?? p.fare) || 0);
+      const uniform = bases.every((b) => b === bases[0]);
+      const route = flight
+        ? `${flight.originAirportCode}-${flight.destinationAirportCode}`
+        : legLabel(seg.segmentIndex);
+      const desc = uniform ? `${route} ${legRows.length} X ${usd(bases[0])}` : route;
+      return ledgerLine(i === 0 ? 'FARE' : '', desc, usd(bases.reduce((s, b) => s + b, 0)));
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  const seatCharges = rowsPriced.reduce((sum, p) => sum + (Number(p.seatSurcharge) || 0), 0);
+  const seatList = rowsPriced.map((p) => p.seatNumber).filter(Boolean).join(' ') || 'AUTO';
+  const seatsWaived = seatCharges === 0 && rowsPriced.some((p) => p.seatNumber && p.fareType !== 'SAVER');
+  const bagCount = rowsPriced.reduce((sum, p) => sum + (p.extraBags ?? 0), 0);
+  const bagCharges = rowsPriced.reduce((sum, p) => sum + (Number(p.baggageFee) || 0), 0);
+  const paymentRef = booking.payment?.externalPaymentReference;
+
+  const fareCalcBlock = `
+      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:18px;letter-spacing:.5px;padding:14px 20px;margin-top:24px;border-radius:6px;">FARE CALCULATION</div>
+      <div style="margin-top:12px;background:#fbfaf7;border:1px solid #e7e2d8;border-radius:8px;padding:18px 22px;">
+        <div style="font-family:'Courier New',monospace;font-size:13px;line-height:2.3;white-space:pre;overflow-x:auto;color:#1f2328;">${[
+          fareLines,
+          ledgerLine('SEATS', `${seatList}${seatsWaived ? ' (WAIVED)' : ''}`, usd(seatCharges)),
+          ledgerLine('BAGS', bagCount > 0 ? `${bagCount} EXTRA${multi ? ' X 2 LEGS' : ''}` : 'NONE', usd(bagCharges)),
+          ledgerLine('TAX', 'INCLUDED', usd(0)),
+        ].filter(Boolean).join('\n')}</div>
+        <div style="border-top:2px solid ${MAROON};margin-top:10px;padding-top:10px;font-family:'Courier New',monospace;font-size:13px;white-space:pre;overflow-x:auto;">${ledgerLine(
+          'TOTAL',
+          paymentRef ? `PAID ${paymentRef}` : 'PAID (INCL. ALL TAXES)',
+          usd(Number(booking.totalFare) || 0),
+          { bold: true },
+        )}</div>
+      </div>`;
+
   const body = `
     <div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:13px;">
       <!-- Header -->
@@ -440,6 +547,10 @@ export function printETicket(
         <tbody>${segment}</tbody>
       </table>
       <div style="border-top:2px solid #333;margin-top:0;"></div>
+
+      ${passengersBlock}
+
+      ${fareCalcBlock}
 
       <!-- Footnotes -->
       <div style="font-size:11.5px;color:#333;margin-top:20px;padding:0 6px;line-height:1.9;">

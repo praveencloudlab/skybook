@@ -143,6 +143,14 @@ export interface Booking {
   segments?: BookingSegment[];
   passengers: BookingPassenger[];
   contact?: BookingContact;
+  /** Payment snapshot (amount = totalFare; reference once captured). */
+  payment?: {
+    paymentStatus: string;
+    amount: string | number;
+    currency: string;
+    externalPaymentReference?: string | null;
+    paidAt?: string | null;
+  };
   /** E-tickets, issued once the booking is CONFIRMED. */
   tickets?: Ticket[];
 }
