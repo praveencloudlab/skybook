@@ -15,6 +15,10 @@ public record BookingPassengerResponse(
 
         Long passengerId,
 
+        // Which journey leg this row is (0 = outbound, 1 = return): a
+        // passenger has one row per segment since V10 (ROUND_TRIP_MODULE.md).
+        int segmentIndex,
+
         String firstName,
 
         String lastName,

@@ -59,10 +59,18 @@ public class Booking extends Auditable {
     @Column
     private Long customerId;
 
-    // Single flight per booking for v1 - multi-segment itineraries are
-    // deferred (docs section 11).
+    // DEPRECATED (ROUND_TRIP_MODULE.md §3): segment 0's flight, kept one
+    // release for readers not yet on segments. The authoritative journey is
+    // the segments list below; a follow-up migration drops this column.
     @Column(nullable = false)
     private Long flightId;
+
+    // The journey's flight legs in order (0 = outbound, 1 = return). A
+    // single-flight booking is simply a one-segment journey.
+    @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("segmentIndex ASC")
+    @Builder.Default
+    private List<BookingSegment> segments = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

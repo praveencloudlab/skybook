@@ -4,10 +4,15 @@ import com.skybook.praveen.bookingservice.dto.response.BookingContactResponse;
 import com.skybook.praveen.bookingservice.dto.response.BookingPassengerResponse;
 import com.skybook.praveen.bookingservice.dto.response.BookingPaymentResponse;
 import com.skybook.praveen.bookingservice.dto.response.BookingResponse;
+import com.skybook.praveen.bookingservice.dto.response.BookingSegmentResponse;
 import com.skybook.praveen.bookingservice.entity.Booking;
 import com.skybook.praveen.bookingservice.entity.BookingContact;
 import com.skybook.praveen.bookingservice.entity.BookingPassenger;
 import com.skybook.praveen.bookingservice.entity.BookingPayment;
+import com.skybook.praveen.bookingservice.entity.BookingSegment;
+import com.skybook.praveen.bookingservice.enums.CheckInStatus;
+
+import java.util.List;
 
 public final class BookingMapper {
 
@@ -20,6 +25,9 @@ public final class BookingMapper {
                 booking.getBookingReference(),
                 booking.getCustomerId(),
                 booking.getFlightId(),
+                booking.getSegments().stream()
+                        .map(segment -> toSegmentResponse(booking, segment))
+                        .toList(),
                 booking.getBookingStatus(),
                 booking.getBookingDate(),
                 booking.getTotalFare(),
@@ -36,10 +44,41 @@ public final class BookingMapper {
         );
     }
 
+    /**
+     * Derived, never stored (ROUND_TRIP_MODULE.md §3): CANCELLED when every
+     * row on the leg is cancelled, CHECKED_IN when any active row is, else
+     * UPCOMING. FLOWN is the frontend's call - it has the departure time.
+     */
+    private static BookingSegmentResponse toSegmentResponse(Booking booking, BookingSegment segment) {
+        List<BookingPassenger> rows = booking.getPassengers().stream()
+                .filter(p -> isOnSegment(p, segment))
+                .toList();
+        String status;
+        if (!rows.isEmpty() && rows.stream().allMatch(BookingPassenger::isCancelled)) {
+            status = "CANCELLED";
+        } else if (rows.stream().anyMatch(p -> !p.isCancelled()
+                && p.getCheckInStatus() == CheckInStatus.CHECKED_IN)) {
+            status = "CHECKED_IN";
+        } else {
+            status = "UPCOMING";
+        }
+        return new BookingSegmentResponse(segment.getId(), segment.getSegmentIndex(),
+                segment.getFlightId(), status);
+    }
+
+    // Reference equality covers a not-yet-flushed aggregate (ids still null);
+    // id equality covers rows reloaded from the database.
+    private static boolean isOnSegment(BookingPassenger row, BookingSegment segment) {
+        return row.getSegment() == segment
+                || (row.getSegment() != null && row.getSegment().getId() != null
+                    && row.getSegment().getId().equals(segment.getId()));
+    }
+
     public static BookingPassengerResponse toPassengerResponse(BookingPassenger bookingPassenger) {
         return new BookingPassengerResponse(
                 bookingPassenger.getId(),
                 bookingPassenger.getPassenger().getId(),
+                bookingPassenger.getSegment() != null ? bookingPassenger.getSegment().getSegmentIndex() : 0,
                 bookingPassenger.getPassenger().getFirstName(),
                 bookingPassenger.getPassenger().getLastName(),
                 bookingPassenger.getPassenger().getPassportNumber(),

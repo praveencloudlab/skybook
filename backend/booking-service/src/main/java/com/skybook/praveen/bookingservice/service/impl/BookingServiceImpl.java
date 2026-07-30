@@ -15,6 +15,7 @@ import com.skybook.praveen.bookingservice.domain.PassengerCategory;
 import com.skybook.praveen.bookingservice.dto.response.CancelPassengersResponse;
 import com.skybook.praveen.bookingservice.entity.BookingPassenger;
 import com.skybook.praveen.bookingservice.entity.BookingPayment;
+import com.skybook.praveen.bookingservice.entity.BookingSegment;
 import com.skybook.praveen.bookingservice.entity.Passenger;
 import com.skybook.praveen.bookingservice.enums.BookingStatus;
 import com.skybook.praveen.bookingservice.enums.CheckInStatus;
@@ -94,6 +95,16 @@ public class BookingServiceImpl implements BookingService {
                 .ownerSubject(ownerSubject)
                 .build();
 
+        // Segment 0 = the outbound leg (ROUND_TRIP_MODULE.md §3). A one-way
+        // booking is a one-segment journey; the round-trip saga adds the
+        // return as segment 1.
+        BookingSegment outbound = BookingSegment.builder()
+                .booking(booking)
+                .segmentIndex(0)
+                .flightId(request.flightId())
+                .build();
+        booking.getSegments().add(outbound);
+
         List<BookingPassenger> bookingPassengers = new ArrayList<>();
         BigDecimal totalFare = BigDecimal.ZERO;
 
@@ -118,6 +129,7 @@ public class BookingServiceImpl implements BookingService {
             BookingPassenger bookingPassenger = BookingPassenger.builder()
                     .booking(booking)
                     .passenger(passenger)
+                    .segment(outbound)
                     .flightId(request.flightId())
                     .travelClass(detail.travelClass())
                     .fareType(detail.fareType())

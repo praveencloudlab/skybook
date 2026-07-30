@@ -62,6 +62,18 @@ public class BookingPassenger extends Auditable {
     @JoinColumn(name = "passenger_id", nullable = false)
     private Passenger passenger;
 
+    // The journey leg this row belongs to (ROUND_TRIP_MODULE.md §3): since
+    // V10 a passenger has one row PER SEGMENT, so seat, fare breakdown,
+    // check-in mirror and cancellation are all naturally per-direction.
+    // Cascades PERSIST/MERGE for the same reason passenger does: the segment
+    // is new in the same transaction as the booking, and the cascade
+    // guarantees Hibernate inserts it before rows that reference it.
+    @ManyToOne(fetch = FetchType.LAZY, cascade = {CascadeType.PERSIST, CascadeType.MERGE})
+    @JoinColumn(name = "segment_id", nullable = false)
+    private BookingSegment segment;
+
+    // Denormalized copy of segment.flightId - kept because every existing
+    // reader (events, check-in comparisons, refunds) keys on it directly.
     @Column(name = "flight_id", nullable = false)
     private Long flightId;
 

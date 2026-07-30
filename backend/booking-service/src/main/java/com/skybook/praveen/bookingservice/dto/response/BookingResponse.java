@@ -14,7 +14,11 @@ public record BookingResponse(
 
         Long customerId,
 
+        // DEPRECATED: segment 0's flight - read segments instead.
         Long flightId,
+
+        // The journey's legs in order (ROUND_TRIP_MODULE.md §4).
+        List<BookingSegmentResponse> segments,
 
         BookingStatus bookingStatus,
 

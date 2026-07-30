@@ -73,7 +73,7 @@ class BookingFacadeTest {
     }
 
     private BookingPassengerResponse passenger(long id, String seat) {
-        return new BookingPassengerResponse(id, id + 100, "Pax", "Test", "N000" + id,
+        return new BookingPassengerResponse(id, id + 100, 0, "Pax", "Test", "N000" + id,
                 "Mr", "MALE", java.time.LocalDate.of(1990, 1, 1), "GBR", java.time.LocalDate.of(2032, 1, 1),
                 TravelClass.ECONOMY, FareType.FLEXI, seat,
                 new BigDecimal("100.00"), BigDecimal.ZERO, 0, BigDecimal.ZERO,
@@ -87,7 +87,9 @@ class BookingFacadeTest {
         for (String seat : seats) {
             passengers.add(passenger(id++, seat));
         }
-        return new BookingResponse(7L, "SBFACD", 1L, 10L, status, LocalDateTime.now(),
+        return new BookingResponse(7L, "SBFACD", 1L, 10L,
+                List.of(new com.skybook.praveen.bookingservice.dto.response.BookingSegmentResponse(1L, 0, 10L, "UPCOMING")),
+                status, LocalDateTime.now(),
                 new BigDecimal("100.00"), null, null, passengers, null, null,
                 "system", "system", 0L, LocalDateTime.now(), LocalDateTime.now());
     }
