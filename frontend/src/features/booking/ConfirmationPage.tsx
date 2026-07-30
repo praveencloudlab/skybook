@@ -21,13 +21,10 @@ import { usePolledResource } from '../../lib/usePolledResource';
 export function ConfirmationPage({
   booking,
   payment,
-  returnBooking,
   onDone,
 }: {
   booking: Booking;
   payment: Payment;
-  /** Round trip: the separately-ticketed return booking. */
-  returnBooking?: Booking;
   onDone: () => void;
 }) {
   const fetchBooking = useCallback(
@@ -66,9 +63,9 @@ export function ConfirmationPage({
         <p className="tabular mt-4 inline-block rounded-2xl bg-brand-50 px-5 py-3 font-mono text-3xl font-bold tracking-[0.2em] text-brand-700 ring-1 ring-inset ring-brand-100">
           {booking.bookingReference}
         </p>
-      {returnBooking ? (
+      {(current.segments?.length ?? 0) > 1 ? (
         <p className="tabular mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-200">
-          Return ticket booked separately — reference {returnBooking.bookingReference} · {money(returnBooking.totalFare, 'USD')}
+          Round trip on one booking — outbound and return both travel under this reference.
         </p>
       ) : null}
 
@@ -94,6 +91,24 @@ export function ConfirmationPage({
             <dd className="font-medium text-slate-900">{current.bookingStatus}</dd>
           </div>
         </dl>
+
+        {/* E-tickets appear once the booking confirms (issued on capture). */}
+        {(current.tickets?.length ?? 0) > 0 ? (
+          <div className="mt-5 rounded-xl bg-slate-50 px-4 py-3 text-sm ring-1 ring-inset ring-slate-100">
+            <p className="mb-1 font-semibold text-slate-700">E-ticket{current.tickets!.length > 1 ? 's' : ''}</p>
+            {current.tickets!.map((ticket) => {
+              const owner = current.passengers.find((p) => p.passengerId === ticket.passengerId);
+              return (
+                <p key={ticket.id} className="flex justify-between text-slate-900">
+                  <span>{owner ? `${owner.firstName} ${owner.lastName}` : 'Traveller'}</span>
+                  <span className="tabular font-mono">
+                    {ticket.ticketNumber.slice(0, 3)}-{ticket.ticketNumber.slice(3)}
+                  </span>
+                </p>
+              );
+            })}
+          </div>
+        ) : null}
 
         <div className="mt-6">
           {confirmation.status === 'working' ? (

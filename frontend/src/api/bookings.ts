@@ -50,6 +50,11 @@ export interface BookingContact {
 
 export interface CreateBookingRequest {
   flightId: number;
+  /**
+   * Present = single-PNR round trip: the return leg books as segment 1 of
+   * the SAME booking - one reference, one payment, one confirmation.
+   */
+  returnFlightId?: number;
   passengers: PassengerDetail[];
   contact: BookingContact;
   remarks?: string;
@@ -57,8 +62,41 @@ export interface CreateBookingRequest {
   customerId?: number;
 }
 
+/** One flight leg of the journey. status is server-derived (never stored). */
+export interface BookingSegment {
+  id: number;
+  segmentIndex: number;
+  flightId: number;
+  status: 'UPCOMING' | 'CHECKED_IN' | 'CANCELLED';
+}
+
+/** One coupon = the traveller's right to fly ONE segment. */
+export interface TicketCoupon {
+  couponNumber: number;
+  segmentIndex: number;
+  bookingPassengerId: number;
+  status: 'OPEN' | 'CHECKED_IN' | 'FLOWN' | 'CANCELLED' | 'REFUNDED';
+}
+
+/** IATA-style e-ticket: one per traveller, a coupon per segment. */
+export interface Ticket {
+  id: number;
+  /** Raw 13 digits - display as 125-XXXXXXXXXX. */
+  ticketNumber: string;
+  passengerId: number;
+  status: 'ISSUED' | 'VOID' | 'REFUNDED';
+  issuedAt: string;
+  coupons: TicketCoupon[];
+}
+
 export interface BookingPassenger {
   id: number;
+  /** The traveller's identity id - shared by their rows on every segment. */
+  passengerId?: number;
+  /** 0 = outbound, 1 = return - a traveller has one row PER SEGMENT. */
+  segmentIndex?: number;
+  /** This row's own flight (differs per segment on a round trip). */
+  flightId?: number;
   firstName: string;
   lastName: string;
   passportNumber?: string;
@@ -99,8 +137,12 @@ export interface Booking {
   bookingDate: string;
   totalFare: string | number;
   ownerSubject: string | null;
+  /** The journey's legs in order (single-PNR round trips have two). */
+  segments?: BookingSegment[];
   passengers: BookingPassenger[];
   contact?: BookingContact;
+  /** E-tickets, issued once the booking is CONFIRMED. */
+  tickets?: Ticket[];
 }
 
 export const bookingsApi = {
@@ -138,6 +180,31 @@ export const bookingsApi = {
     return api.post<CancelPassengersResult>(
       `/api/bookings/${id}/passengers/cancel`,
       { bookingPassengerIds },
+      { signal },
+    );
+  },
+
+  /**
+   * Drop just the return leg (segmentIndex >= 1 only - the outbound can't be
+   * cancelled alone). Seats release, coupons refund, the booking survives as
+   * PARTIALLY_CANCELLED with the outbound intact.
+   */
+  cancelSegment(id: number, segmentIndex: number, signal?: AbortSignal): Promise<CancelPassengersResult> {
+    return api.post<CancelPassengersResult>(
+      `/api/bookings/${id}/segments/${segmentIndex}/cancel`,
+      undefined,
+      { signal },
+    );
+  },
+
+  /**
+   * Premium date change: move one leg onto a new flight, SAME booking and
+   * tickets - fare difference only. The server rejects non-Premium fares.
+   */
+  rebookSegment(id: number, segmentIndex: number, newFlightId: number, signal?: AbortSignal): Promise<Booking> {
+    return api.post<Booking>(
+      `/api/bookings/${id}/segments/${segmentIndex}/rebook`,
+      { newFlightId },
       { signal },
     );
   },

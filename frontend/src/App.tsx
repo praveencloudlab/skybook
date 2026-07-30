@@ -366,7 +366,7 @@ function BookingJourney() {
   const [guests, setGuests] = useState<PassengerDraft[]>(draft?.guests ?? [emptyPassenger()]);
   const [bags, setBags] = useState<number[]>(draft?.bags ?? [0]);
   const [contactEmail, setContactEmail] = useState(draft?.contactEmail ?? '');
-  const [result, setResult] = useState<{ booking: Booking; payment: Payment; returnBooking?: Booking } | null>(null);
+  const [result, setResult] = useState<{ booking: Booking; payment: Payment } | null>(null);
 
   const paxCount = totalTravellers(travellers);
   // Adults first, then children, then infants - the order checkout renders
@@ -500,7 +500,7 @@ function BookingJourney() {
 
   if (step === 'confirmed' && result) {
     return (
-      <ConfirmationPage booking={result.booking} payment={result.payment} returnBooking={result.returnBooking} onDone={restart} />
+      <ConfirmationPage booking={result.booking} payment={result.payment} onDone={restart} />
     );
   }
 
@@ -522,8 +522,8 @@ function BookingJourney() {
         extras={extras}
         total={total}
         onBack={() => setStep('bags')}
-        onBooked={(booking, payment, returnBooking) => {
-          setResult({ booking, payment, returnBooking });
+        onBooked={(booking, payment) => {
+          setResult({ booking, payment });
           setStep('confirmed');
         }}
       />

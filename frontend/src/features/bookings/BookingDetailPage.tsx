@@ -39,6 +39,13 @@ export function BookingDetailPage({
 }) {
   const [booking, setBooking] = useState(initial);
   const [flight, setFlight] = useState<Flight | null>(null);
+  // Every segment's flight, keyed by flight id - a round trip has two legs.
+  const [segmentFlights, setSegmentFlights] = useState<Record<number, Flight>>({});
+  // Premium per-segment date change: which segment is being changed, the
+  // picked date, and the flights found for it.
+  const [rebooking, setRebooking] = useState<{ segmentIndex: number; date: string } | null>(null);
+  const [rebookFlights, setRebookFlights] = useState<Flight[] | null>(null);
+  const [rebookBusy, setRebookBusy] = useState(false);
   const [checkIns, setCheckIns] = useState<CheckIn[] | null>(null);
   const [passes, setPasses] = useState<Record<number, BoardingPass>>({});
   const [error, setError] = useState<ApiError | null>(null);
@@ -62,9 +69,15 @@ export function BookingDetailPage({
       setBooking(fresh);
       setCheckIns(records);
 
-      // The flight is public data; fetch it so the trip can be shown properly
-      // (booking only carries a flightId). A miss here just hides the trip card.
+      // The flights are public data; fetch every segment's leg so the trip
+      // can be shown properly. A miss here just hides that leg's card.
       flightsApi.byId(fresh.flightId, signal).then(setFlight).catch(() => {});
+      for (const segment of fresh.segments ?? []) {
+        flightsApi
+          .byId(segment.flightId, signal)
+          .then((f) => setSegmentFlights((current) => ({ ...current, [f.id]: f })))
+          .catch(() => {});
+      }
 
       const issued: Record<number, BoardingPass> = {};
       await Promise.all(
@@ -126,6 +139,58 @@ export function BookingDetailPage({
       setError(cause instanceof ApiError ? cause : null);
     } finally {
       setCancelling(false);
+    }
+  }
+
+  /** Drop just the return leg - outbound travels on, coupons refund. */
+  async function cancelReturnSegment(segmentIndex: number) {
+    setCancelling(true);
+    setError(null);
+    try {
+      const result = await bookingsApi.cancelSegment(booking.id, segmentIndex);
+      setBooking(result.booking);
+      setRefundNotice(
+        `Return cancelled. A refund of ${money(result.refundAmount, CURRENCY)} will be processed to your original payment method; your outbound is unchanged.`,
+      );
+      await load();
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause : null);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  async function searchRebookFlights(segmentIndex: number, date: string) {
+    const segFlight = segmentFlights[(booking.segments ?? [])[segmentIndex]?.flightId ?? -1];
+    if (!segFlight || !date) return;
+    setRebookFlights(null);
+    try {
+      const found = await flightsApi.search({
+        origin: segFlight.originAirportCode,
+        destination: segFlight.destinationAirportCode,
+        date,
+      });
+      setRebookFlights(found.filter((f) => f.id !== segFlight.id));
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause : null);
+    }
+  }
+
+  /** Premium entitlement: same booking, same tickets, fare difference only. */
+  async function confirmRebook(segmentIndex: number, newFlightId: number) {
+    setRebookBusy(true);
+    setError(null);
+    try {
+      const updated = await bookingsApi.rebookSegment(booking.id, segmentIndex, newFlightId);
+      setBooking(updated);
+      setRebooking(null);
+      setRebookFlights(null);
+      setRefundNotice('Flight date changed on the same booking — your tickets carry a fresh coupon for the new flight.');
+      await load();
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause : null);
+    } finally {
+      setRebookBusy(false);
     }
   }
 
@@ -236,43 +301,146 @@ export function BookingDetailPage({
         </div>
       </div>
 
-      {/* Trip */}
-      {flight ? (
-        <section className="card mt-6 p-5">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="grid h-6 w-8 place-items-center rounded bg-brand-600 text-[10px] font-bold text-white">
-              {flight.airlineCode}
-            </span>
-            <span className="tabular text-sm font-medium text-slate-600">{flight.flightNumber}</span>
-            {departed ? (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500 ring-1 ring-inset ring-slate-200">
-                Departed
+      {/* Trip - one card per segment (a single-PNR round trip has two legs). */}
+      {(booking.segments ?? []).map((seg) => {
+        const segFlight = segmentFlights[seg.flightId] ?? (seg.segmentIndex === 0 ? flight : null);
+        if (!segFlight) return null;
+        const multi = (booking.segments?.length ?? 0) > 1;
+        const segRows = booking.passengers.filter((p) => (p.segmentIndex ?? 0) === seg.segmentIndex);
+        const segActive = segRows.filter((p) => !p.cancelled);
+        const segDeparted = new Date(segFlight.departureTime) < new Date();
+        const segCheckedIn = segActive.some(checkedIn);
+        const segCancelled = seg.status === 'CANCELLED';
+        const statusLabel = segCancelled ? 'Cancelled' : segDeparted ? 'Flown' : segCheckedIn ? 'Checked in' : 'Upcoming';
+        const allPremium = segActive.length > 0 && segActive.every((p) => p.fareType === 'PREMIUM');
+        const changeable = !segCancelled && !segDeparted && !segCheckedIn && booking.bookingStatus !== 'CANCELLED';
+        return (
+          <section key={seg.id} className={'card mt-6 p-5' + (segCancelled ? ' opacity-60' : '')}>
+            <div className="mb-3 flex items-center gap-2">
+              {multi ? (
+                <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-700 ring-1 ring-inset ring-brand-100">
+                  {seg.segmentIndex === 0 ? 'Outbound' : 'Return'}
+                </span>
+              ) : null}
+              <span className="grid h-6 w-8 place-items-center rounded bg-brand-600 text-[10px] font-bold text-white">
+                {segFlight.airlineCode}
               </span>
-            ) : null}
-            <span className="ml-auto text-xs text-slate-400">{dayAndMonth(flight.departureTime)}</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="min-w-[4rem]">
-              <div className="tabular text-2xl font-semibold tracking-tight text-slate-900">{time(flight.departureTime)}</div>
-              <div className="text-xs font-medium tracking-wide text-slate-500">{flight.originAirportCode}</div>
+              <span className="tabular text-sm font-medium text-slate-600">{segFlight.flightNumber}</span>
+              <span
+                className={
+                  'rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ' +
+                  (segCancelled
+                    ? 'bg-red-50 text-red-600 ring-red-100'
+                    : segDeparted
+                      ? 'bg-slate-100 text-slate-500 ring-slate-200'
+                      : segCheckedIn
+                        ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+                        : 'bg-sky-50 text-sky-700 ring-sky-100')
+                }
+              >
+                {statusLabel}
+              </span>
+              <span className="ml-auto text-xs text-slate-400">{dayAndMonth(segFlight.departureTime)}</span>
             </div>
-            <div className="flex flex-1 flex-col items-center gap-1">
-              <span className="tabular text-[11px] font-medium text-slate-500">
-                {duration(flight.departureTime, flight.arrivalTime)}
-              </span>
-              <div className="flex w-full items-center gap-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
-                <span className="route-line" />
+            <div className="flex items-center gap-4">
+              <div className="min-w-[4rem]">
+                <div className="tabular text-2xl font-semibold tracking-tight text-slate-900">{time(segFlight.departureTime)}</div>
+                <div className="text-xs font-medium tracking-wide text-slate-500">{segFlight.originAirportCode}</div>
               </div>
-              <span className="text-[11px] text-slate-400">Direct</span>
+              <div className="flex flex-1 flex-col items-center gap-1">
+                <span className="tabular text-[11px] font-medium text-slate-500">
+                  {duration(segFlight.departureTime, segFlight.arrivalTime)}
+                </span>
+                <div className="flex w-full items-center gap-1">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                  <span className="route-line" />
+                </div>
+                <span className="text-[11px] text-slate-400">Direct</span>
+              </div>
+              <div className="min-w-[4rem] text-right">
+                <div className="tabular text-2xl font-semibold tracking-tight text-slate-900">{time(segFlight.arrivalTime)}</div>
+                <div className="text-xs font-medium tracking-wide text-slate-500">{segFlight.destinationAirportCode}</div>
+              </div>
             </div>
-            <div className="min-w-[4rem] text-right">
-              <div className="tabular text-2xl font-semibold tracking-tight text-slate-900">{time(flight.arrivalTime)}</div>
-              <div className="text-xs font-medium tracking-wide text-slate-500">{flight.destinationAirportCode}</div>
-            </div>
-          </div>
-        </section>
-      ) : null}
+
+            {/* Per-segment actions (ROUND_TRIP_MODULE.md §7/§11). */}
+            {changeable && multi && (seg.segmentIndex >= 1 || allPremium) ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                {allPremium ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRebooking(rebooking?.segmentIndex === seg.segmentIndex ? null : { segmentIndex: seg.segmentIndex, date: '' });
+                      setRebookFlights(null);
+                    }}
+                    className="rounded-xl border border-slate-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-brand-500 hover:text-brand-700"
+                  >
+                    Change date — free for Premium
+                  </button>
+                ) : null}
+                {seg.segmentIndex >= 1 ? (
+                  <button
+                    type="button"
+                    disabled={cancelling}
+                    onClick={() => void cancelReturnSegment(seg.segmentIndex)}
+                    className="rounded-xl border border-red-200 px-3.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Cancel this leg &amp; refund
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Premium date change: pick a date, pick a flight - same PNR. */}
+            {rebooking?.segmentIndex === seg.segmentIndex ? (
+              <div className="mt-3 rounded-xl bg-slate-50 p-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="date"
+                    value={rebooking.date}
+                    onChange={(e) => setRebooking({ segmentIndex: seg.segmentIndex, date: e.target.value })}
+                    className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+                  />
+                  <button
+                    type="button"
+                    disabled={!rebooking.date}
+                    onClick={() => void searchRebookFlights(seg.segmentIndex, rebooking.date)}
+                    className="rounded-lg bg-brand-900 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+                  >
+                    Find flights
+                  </button>
+                  <span className="text-xs text-slate-500">
+                    Same booking and tickets — you pay or get back only the fare difference.
+                  </span>
+                </div>
+                {rebookFlights !== null ? (
+                  rebookFlights.length === 0 ? (
+                    <p className="mt-2 text-xs text-slate-500">No flights on that date — try another.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-1.5">
+                      {rebookFlights.map((f) => (
+                        <li key={f.id} className="flex items-center justify-between rounded-lg bg-white px-3 py-2 ring-1 ring-slate-200">
+                          <span className="tabular text-xs text-slate-700">
+                            {f.flightNumber} · {time(f.departureTime)} → {time(f.arrivalTime)}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={rebookBusy}
+                            onClick={() => void confirmRebook(seg.segmentIndex, f.id)}
+                            className="rounded-lg bg-accent-500 px-3 py-1 text-xs font-bold text-white transition hover:bg-accent-600 disabled:opacity-50"
+                          >
+                            {rebookBusy ? 'Moving…' : 'Select'}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        );
+      })}
 
       {/* Passengers + fares */}
       <section className="card mt-5 overflow-hidden">
@@ -293,6 +461,11 @@ export function BookingDetailPage({
                     {p.firstName} {p.lastName}
                   </p>
                   <p className="mt-0.5 text-xs text-slate-500">
+                    {(booking.segments?.length ?? 0) > 1 ? (
+                      <span className="font-semibold text-brand-700">
+                        {(p.segmentIndex ?? 0) === 0 ? 'Outbound' : 'Return'} ·{' '}
+                      </span>
+                    ) : null}
                     {TRAVEL_CLASS_LABELS[p.travelClass]} · {FARE_TYPE_LABELS[p.fareType]}
                     {p.seatNumber ? (
                       <>
@@ -331,6 +504,48 @@ export function BookingDetailPage({
               <span className="text-slate-500">{booking.contact.contactPhone}</span>
             ) : null}
           </div>
+        </section>
+      ) : null}
+
+      {/* E-tickets: one per traveller, a coupon per leg (issued at confirmation). */}
+      {(booking.tickets?.length ?? 0) > 0 ? (
+        <section className="card mt-5 px-4 py-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">E-tickets</h2>
+          <ul className="mt-2 space-y-1.5 text-sm">
+            {booking.tickets!.map((ticket) => {
+              const owner = booking.passengers.find((p) => p.passengerId === ticket.passengerId);
+              return (
+                <li key={ticket.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-slate-700">
+                    {owner ? `${owner.firstName} ${owner.lastName}` : 'Traveller'}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <span className="tabular font-mono text-slate-900">
+                      {ticket.ticketNumber.slice(0, 3)}-{ticket.ticketNumber.slice(3)}
+                    </span>
+                    {ticket.coupons.map((coupon) => (
+                      <span
+                        key={coupon.couponNumber}
+                        title={`Coupon ${coupon.couponNumber}`}
+                        className={
+                          'rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ring-inset ' +
+                          (coupon.status === 'OPEN'
+                            ? 'bg-sky-50 text-sky-700 ring-sky-100'
+                            : coupon.status === 'CHECKED_IN'
+                              ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+                              : coupon.status === 'FLOWN'
+                                ? 'bg-slate-100 text-slate-500 ring-slate-200'
+                                : 'bg-red-50 text-red-600 ring-red-100')
+                        }
+                      >
+                        C{coupon.couponNumber} {coupon.status}
+                      </span>
+                    ))}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       ) : null}
 

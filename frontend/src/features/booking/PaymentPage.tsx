@@ -51,7 +51,7 @@ export function PaymentPage({
   onBooked,
 }: {
   flight: Flight;
-  /** Round trip: a second ticket (auto seats, same bags) on this flight. */
+  /** Round trip: the return books as segment 1 of the SAME booking - one PNR, one payment. */
   returnFlight?: Flight | null;
   cabin: TravelClass;
   fare: FareType;
@@ -64,7 +64,7 @@ export function PaymentPage({
   extras: SummaryExtra[];
   total: number;
   onBack: () => void;
-  onBooked: (booking: Booking, payment: Payment, returnBooking?: Booking) => void;
+  onBooked: (booking: Booking, payment: Payment) => void;
 }) {
   const [method, setMethod] = useState<PaymentMethod>('CARD');
   const [agreed, setAgreed] = useState(false);
@@ -79,8 +79,12 @@ export function PaymentPage({
     setError(null);
     try {
       setStage('booking');
+      // ONE booking whether one-way or round trip: returnFlightId books the
+      // return as segment 1 of the same PNR (seat picks apply to the
+      // outbound, return seats auto-assign; bags fly both directions).
       const booking = await bookingsApi.create({
         flightId: flight.id,
+        ...(returnFlight ? { returnFlightId: returnFlight.id } : {}),
         passengers: guests.map((g, i) =>
           toPassengerDetail(g, cabin, fare, seats[i]?.seatNumber ?? null, bags[i] ?? 0),
         ),
@@ -99,22 +103,6 @@ export function PaymentPage({
       const authorized = await paymentsApi.authorize(payment.id);
       const captured = await paymentsApi.capture(authorized.id);
 
-      if (returnFlight) {
-        // The return is its own ticket: auto-assigned seats, same bags.
-        const inbound = await bookingsApi.create({
-          flightId: returnFlight.id,
-          passengers: guests.map((g, i) => toPassengerDetail(g, cabin, fare, null, bags[i] ?? 0)),
-          contact: {
-            contactName: `${guests[0].firstName} ${guests[0].lastName}`.trim(),
-            contactEmail: contactEmail.trim(),
-          },
-        });
-        const inPay = await waitForPayment(inbound.id);
-        const inAuth = await paymentsApi.authorize(inPay.id);
-        await paymentsApi.capture(inAuth.id);
-        onBooked(booking, captured, inbound);
-        return;
-      }
       onBooked(booking, captured);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : null);
