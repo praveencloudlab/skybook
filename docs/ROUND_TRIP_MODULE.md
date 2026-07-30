@@ -1,8 +1,10 @@
-# Round Trip — Single-PNR Multi-Segment Bookings (Design)
+# Round Trip — Single-PNR Multi-Segment Bookings
 
-Status: **DESIGN — for review, not yet implemented.**
-The shipped interim is two separate tickets per direction (commit d635d5f);
-existing bookings become single-segment bookings under this design unchanged.
+Status: **IMPLEMENTED (build-order steps 1–7, live-verified 2026-07-30).**
+Step 8 (drop `bookings.flight_id` + the deprecated flat event fields) is BY
+DESIGN a follow-up release — the deprecated mirrors shipped in THIS release
+ARE the one-release compatibility window, so removing them in the same
+release would defeat it. See Implementation Notes at the end.
 
 ## 1. Goal
 
@@ -202,3 +204,37 @@ all cancelled ⇒ CANCELLED.
   not flown, nobody checked in on it). Mechanically each change is a
   segment rebook: cancel that segment's rows, recreate them on the new
   flight, refund/charge the fare difference.
+
+## 12. Implementation Notes (2026-07-30)
+
+Steps 1–7 landed on feature/frontend as one commit per step. Deviations
+and decisions made during the build:
+
+- **Row correlation**: draft rows are persisted segment-major (all outbound
+  rows, then all return rows) and `Booking.passengers` gained
+  `@OrderBy("id ASC")` so the facade's row `i` ↔ request detail
+  `i % travellerCount` correlation survives a reload.
+- **Ticket numbers are deterministic**, not random: `125` + 8-digit booking
+  id + 2-digit traveller index. A redelivered payment event re-derives the
+  identical number, making issuance idempotent with no uniqueness table.
+- **Premium seat waiver makes rebook money-simple**: only PREMIUM rows may
+  segment-rebook, and Premium seat picks charge 0 — so a rebook never moves
+  seat money, only the base-fare difference (totalFare + payment snapshot
+  adjust; BookingHistory records the delta; the processor is simulated).
+- **Exchanged rows ride the refreshed CONFIRMED event as CLOSED**:
+  checkin-service cancels their CheckIns and creates fresh ones for the
+  replacement rows — per-direction check-in needed zero checkin schema
+  change, exactly as designed (§3).
+- **Segment status FLOWN** is derived by the frontend from the departure
+  time it already fetches; the server derives CANCELLED/CHECKED_IN/UPCOMING.
+- **Live e2e (all 25 checks passed)**: booking SB4H2F on the compose stack —
+  one booking, two segments, rows on their own flights, both legs seated,
+  totalFare = Σ rows = payment amount (475.00); CONFIRMED issued ticket
+  125-0000018201 with coupons C1/C2 OPEN; Premium date change moved the
+  return (C2 CANCELLED, C3 OPEN, total → 465.00, old return CheckIn
+  CANCELLED, new one created); outbound check-in mirrored C1 → CHECKED_IN
+  and segment 0 → CHECKED_IN; cancel-return refunded 205.00, booking →
+  PARTIALLY_CANCELLED, final coupons C1 CHECKED_IN / C2 CANCELLED /
+  C3 REFUNDED, segment 1 → CANCELLED; cancelling segment 0 alone rejected.
+  V10+V11 migrated the live database (existing bookings backfilled as
+  single-segment) with zero errors.
