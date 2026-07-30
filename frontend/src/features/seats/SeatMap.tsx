@@ -17,6 +17,7 @@ export function SeatMap({
   cabin,
   currency,
   paxCount,
+  freeSeats = false,
   selected,
   initials,
   onToggle,
@@ -28,6 +29,8 @@ export function SeatMap({
   currency: string;
   /** How many travellers - the selection capacity, one seat each. */
   paxCount: number;
+  /** Flexi/Premium entitlement: every seat is free, surcharges waived. */
+  freeSeats?: boolean;
   /** Chosen seats in passenger order (index 0 = passenger 1). */
   selected: AircraftSeat[];
   /** Per-passenger initials ("PR") stamped on their chosen seat; falls back to P1/P2. */
@@ -105,6 +108,7 @@ export function SeatMap({
                             seat={seat}
                             currency={currency}
                             taken={map.taken.has(seat.seatNumber)}
+                            freeSeats={freeSeats}
                             passengerIndex={selected.findIndex((s) => s.seatNumber === seat.seatNumber)}
                             initials={initials}
                             multi={paxCount > 1}
@@ -180,6 +184,7 @@ function Seat({
   seat,
   currency,
   taken,
+  freeSeats = false,
   passengerIndex,
   initials,
   multi,
@@ -188,6 +193,7 @@ function Seat({
   seat: AircraftSeat;
   currency: string;
   taken: boolean;
+  freeSeats?: boolean;
   /** Which traveller holds this seat (0-based), or -1 when unselected. */
   passengerIndex: number;
   initials?: string[];
@@ -199,7 +205,7 @@ function Seat({
   // Both make a seat unpickable, but for different reasons.
   const unavailable = taken || seat.status !== 'ACTIVE';
   const selected = passengerIndex >= 0;
-  const surcharge = Number(seat.listedSurcharge) || 0;
+  const surcharge = freeSeats ? 0 : Number(seat.listedSurcharge) || 0;
 
   const label = [
     `Seat ${seat.seatNumber}`,

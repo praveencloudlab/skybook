@@ -443,7 +443,11 @@ function BookingJourney() {
       alignedSeats[guestIdx] = seat;
     }
   });
-  const seatTotal = seats.reduce((sum, s) => sum + (Number(s.listedSurcharge) || 0), 0);
+  // Flexi/Premium entitlement: seat surcharges are waived (server does the
+  // same at booking), so only Saver totals them.
+  const seatCharge = (s: AircraftSeat) =>
+    choice && choice.fare !== 'SAVER' ? 0 : Number(s.listedSurcharge) || 0;
+  const seatTotal = seats.reduce((sum, s) => sum + seatCharge(s), 0);
   const bagTotal = bags.reduce((sum, b) => sum + b, 0) * EXTRA_BAG_FEE;
   const total = (choice ? choice.baseFare * paxCount : 0) + seatTotal + bagTotal;
   const guestLabel = (index: number) =>
@@ -451,7 +455,7 @@ function BookingJourney() {
   const extras = [
     ...alignedSeats.flatMap((seat, index) =>
       seat
-        ? [{ label: `${guestLabel(index)} · Seat ${seat.seatNumber}`, amount: Number(seat.listedSurcharge) || 0 }]
+        ? [{ label: `${guestLabel(index)} · Seat ${seat.seatNumber}`, amount: seatCharge(seat) }]
         : [],
     ),
     ...bags.flatMap((count, index) =>

@@ -146,7 +146,10 @@ class BookingFacadeTest {
             List<SeatAssignmentResult> assignments = assignmentsCaptor.getValue();
             assertThat(assignments).hasSize(2);
             assertThat(assignments.get(0).seatNumber()).isEqualTo("12A");
-            assertThat(assignments.get(0).chargedSurcharge()).isEqualByComparingTo("12.00");
+            // Fare-family entitlement: the fixture passengers are FLEXI, whose
+            // seat picks are free - listed 12.00 stays on record, charged is 0.
+            assertThat(assignments.get(0).listedSurcharge()).isEqualByComparingTo("12.00");
+            assertThat(assignments.get(0).chargedSurcharge()).isEqualByComparingTo("0.00");
             assertThat(assignments.get(0).mode()).isEqualTo(SeatAssignmentMode.MANUAL);
             // The FINALIZED response is announced, never the draft.
             verify(bookingEventProducer).publishBookingCreated(created, flight);

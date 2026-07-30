@@ -146,6 +146,12 @@ public class BookingStateMachine {
 
     private void recordHistory(Booking booking, BookingHistoryField field, Object from, Object to, String reason, String changedBy) {
 
+        // The column is varchar(255); a long inventory error inside a
+        // compensation reason must trim, not blow up the compensation itself.
+        String bounded = reason != null && reason.length() > 250
+                ? reason.substring(0, 250) + "…"
+                : reason;
+
         booking.getHistory().add(BookingHistory.builder()
                 .booking(booking)
                 .fieldChanged(field)
@@ -153,7 +159,7 @@ public class BookingStateMachine {
                 .toValue(String.valueOf(to))
                 .changedAt(LocalDateTime.now())
                 .changedBy(changedBy)
-                .reason(reason)
+                .reason(bounded)
                 .build());
     }
 }

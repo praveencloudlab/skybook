@@ -101,7 +101,11 @@ export function SeatSelectionPage({
     return init || `P${index + 1}`;
   };
 
-  const surchargeTotal = selected.reduce((sum, s) => sum + (Number(s.listedSurcharge) || 0), 0);
+  // Flexi and Premium include free seat selection - the server waives the
+  // charge, so the page must never show one.
+  const freeSeats = fare !== 'SAVER';
+  const chargeOf = (seat: AircraftSeat) => (freeSeats ? 0 : Number(seat.listedSurcharge) || 0);
+  const surchargeTotal = selected.reduce((sum, s) => sum + chargeOf(s), 0);
   const total = baseFare * guests.length + surchargeTotal;
 
   return (
@@ -137,7 +141,7 @@ export function SeatSelectionPage({
                   <div>{nameOf(index)}</div>
                   <div className="tabular text-xs">
                     {seat
-                      ? `${seat.seatNumber} · ${Number(seat.listedSurcharge) > 0 ? money(Number(seat.listedSurcharge), currency) : 'Free'}`
+                      ? `${seat.seatNumber} · ${chargeOf(seat) > 0 ? money(chargeOf(seat), currency) : 'Free'}`
                       : '—'}
                   </div>
                 </div>
@@ -155,6 +159,7 @@ export function SeatSelectionPage({
                 map={map}
                 cabin={cabin}
                 currency={currency}
+                freeSeats={freeSeats}
                 paxCount={seatedCount}
                 selected={selected}
                 initials={seatedGuests.map((_, i) => initialsOf(i))}
@@ -198,7 +203,7 @@ export function SeatSelectionPage({
           guestNames={guests.map((g) => `${g.title} ${g.firstName} ${g.lastName}`.trim())}
           extras={selected.map((seat, i) => ({
             label: `${nameOf(i)} · Seat ${seat.seatNumber}`,
-            amount: Number(seat.listedSurcharge) || 0,
+            amount: chargeOf(seat),
           }))}
           total={total}
         />

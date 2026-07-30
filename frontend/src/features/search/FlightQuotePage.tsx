@@ -270,10 +270,20 @@ export function FlightQuotePage({
                                 : 'Highest refund — fully flexible'
                           }
                         />
-                        <FeatureRow ok text="Free auto-assigned seat at check-in" />
-                        <FeatureRow ok text="Pick any seat (listed surcharge)" />
+                        {fareType === 'SAVER' ? (
+                          <>
+                            <FeatureRow ok text="Free auto-assigned seat at check-in" />
+                            <FeatureRow ok text="Pick any seat (listed surcharge)" />
+                          </>
+                        ) : (
+                          <FeatureRow ok text="Choose ANY seat — free, surcharges waived" />
+                        )}
                         <FeatureRow ok text="Extra bags from $40 each" />
-                        <FeatureRow ok={false} text="Online date changes" />
+                        {fareType === 'PREMIUM' ? (
+                          <FeatureRow ok text="Unlimited online date changes — fare difference only" />
+                        ) : (
+                          <FeatureRow ok={false} text="Free online date changes" />
+                        )}
                       </ul>
                     </div>
                   </article>

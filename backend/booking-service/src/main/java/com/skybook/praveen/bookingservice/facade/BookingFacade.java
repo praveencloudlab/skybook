@@ -326,11 +326,17 @@ public class BookingFacade {
                 }
 
                 InventoryHoldDetails held = hold.get();
+                // Fare-family entitlement: Flexi and Premium include free seat
+                // selection - the listed surcharge stays on record, but the
+                // CHARGED amount is waived. Saver pays the listed price.
+                BigDecimal charged = passenger.fareType() == FareType.SAVER
+                        ? held.chargedSurcharge()
+                        : ZERO_MONEY;
                 assignments.add(new SeatAssignmentResult(
                         passenger.id(),
                         held.seatNumber(),
                         held.listedSurcharge(),
-                        held.chargedSurcharge(),
+                        charged,
                         SeatAssignmentMode.valueOf(held.assignmentMode())));
                 heldSeats.add(held.seatNumber());
             }
