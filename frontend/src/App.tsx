@@ -40,7 +40,7 @@ import type { Payment } from './api/payments';
 import type { FareType, TravelClass } from './api/quotes';
 import type { Flight } from './api/flights';
 import { session } from './lib/session';
-import { t, LANGUAGES, currentLanguage, setLanguage, type LanguageCode } from './lib/i18n';
+import { t, LANGUAGES, currentLanguage, setLanguage, useLocale, type LanguageCode } from './lib/i18n';
 import { DISPLAY_CURRENCIES, displayCurrency, setDisplayCurrency } from './lib/format';
 
 /**
@@ -113,7 +113,7 @@ function Header() {
               t()/price() call site repaints - a settings change, not a hot path. */}
           <select
             aria-label="Language"
-            value={currentLanguage}
+            value={currentLanguage()}
             onChange={(e) => setLanguage(e.target.value as LanguageCode)}
             className="rounded-lg border border-white/20 bg-transparent px-1.5 py-1 text-xs font-medium text-white/80 transition hover:bg-white/10 [&>option]:text-slate-900"
           >
@@ -749,6 +749,9 @@ function ChromeFooter() {
 }
 
 export default function App() {
+  // Root locale subscription: a language/currency switch re-renders the whole
+  // tree in place (no reload, no remount - journey state survives).
+  useLocale();
   return (
     <BrowserRouter>
       <SessionBootstrap>

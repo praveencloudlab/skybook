@@ -6,6 +6,8 @@
  * faster than almost anything else on the page.
  */
 
+import { notifyLocaleChanged } from './i18n';
+
 /**
  * Times are rendered as the server sent them - NOT converted to the viewer's
  * local zone.
@@ -155,9 +157,11 @@ export function setDisplayCurrency(code: string): void {
   try {
     localStorage.setItem(CURRENCY_KEY, code);
   } catch {
-    // Private mode etc - the switch simply won't stick.
+    // Private mode etc - the switch simply won't stick beyond this visit.
   }
-  window.location.reload();
+  // price() reads the stored choice on every call, so an in-place re-render
+  // from the locale store is all a currency switch needs - no reload.
+  notifyLocaleChanged();
 }
 
 /**

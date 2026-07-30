@@ -1,12 +1,15 @@
 /**
  * Lightweight i18n (no library): dictionaries for the chrome and the booking
  * journey's high-traffic strings. The chosen language persists in
- * localStorage and switching reloads the page - every t() call site then
- * renders in the new language without threading context through the tree.
+ * localStorage and switching applies IN PLACE (no reload): the locale store
+ * below notifies App's root subscription and the tree re-renders, so every
+ * t() call site renders in the new language without losing any state.
  *
  * Deep content (fare rules, long help copy) stays English for now; the keys
  * below cover what a traveller touches on every visit.
  */
+
+import { useSyncExternalStore } from 'react';
 
 export const LANGUAGES = [
   { code: 'en', name: 'English' },
@@ -356,11 +359,49 @@ function stored(): LanguageCode {
   }
 }
 
-/** Resolved once at module load - setLanguage() persists and reloads. */
-export const currentLanguage: LanguageCode = stored();
+// ---------------------------------------------------------------------
+// Live locale store. Language and display currency apply IN PLACE - no
+// page reload: setters mutate here and notify, App's root subscribes via
+// useLocale(), and the whole tree re-renders (never remounts, so journey
+// state survives a mid-booking switch). t()/price() read live values.
+// ---------------------------------------------------------------------
+
+let activeLanguage: LanguageCode = stored();
+let localeVersion = 0;
+const localeListeners = new Set<() => void>();
+
+if (typeof document !== 'undefined') {
+  document.documentElement.lang = activeLanguage;
+}
+
+/** The active language right now (live - do not cache across renders). */
+export function currentLanguage(): LanguageCode {
+  return activeLanguage;
+}
+
+/** Bump + notify subscribers; also used by setDisplayCurrency (format.ts). */
+export function notifyLocaleChanged(): void {
+  localeVersion += 1;
+  localeListeners.forEach((listener) => listener());
+}
+
+/**
+ * Subscribe a component to locale (language/currency) changes. Called once
+ * at the App ROOT: its re-render cascades down the whole unmemoized tree,
+ * re-evaluating every t() and price() in place.
+ */
+export function useLocale(): number {
+  return useSyncExternalStore(
+    (onChange) => {
+      localeListeners.add(onChange);
+      return () => localeListeners.delete(onChange);
+    },
+    () => localeVersion,
+  );
+}
 
 export function t(key: string, params?: Record<string, string>): string {
-  let text = DICTS[currentLanguage][key] ?? en[key] ?? key;
+  let text = DICTS[activeLanguage][key] ?? en[key] ?? key;
   if (params) {
     for (const [k, v] of Object.entries(params)) {
       text = text.replace(`{${k}}`, v);
@@ -373,7 +414,9 @@ export function setLanguage(code: LanguageCode): void {
   try {
     localStorage.setItem(LANG_KEY, code);
   } catch {
-    // Private mode etc - the switch simply won't stick.
+    // Private mode etc - the switch simply won't stick beyond this visit.
   }
-  window.location.reload();
+  activeLanguage = code;
+  document.documentElement.lang = code;
+  notifyLocaleChanged();
 }
