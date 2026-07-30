@@ -14,7 +14,9 @@ import { ErrorAlert } from '../../components/Alert';
 import { BookingStepper } from '../../components/BookingStepper';
 import { Button } from '../../components/Button';
 import { ApiError } from '../../lib/errors';
-import { money } from '../../lib/format';
+import { seatsApi, type FlightSeatMap } from '../../api/seats';
+import { dayAndMonth, duration, money, time } from '../../lib/format';
+import { useSession } from '../auth/useSession';
 
 /**
  * Choose your fare (carrier flow step 1b): the chosen cabin's fare families as
@@ -60,7 +62,9 @@ export function FlightQuotePage({
     currency: string;
   }) => void;
 }) {
+  const { signedIn } = useSession();
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [seatMap, setSeatMap] = useState<FlightSeatMap | null>(null);
   const [cabin, setCabin] = useState<TravelClass>(preferredCabin);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(true);
@@ -93,6 +97,29 @@ export function FlightQuotePage({
     return () => controller.abort();
   }, [flight.id, preferredCabin]);
 
+  useEffect(() => {
+    // Seat maps need a session (the global 401 handler would bounce an
+    // anonymous browser to sign-in mid-shopping); the seat-fact rows simply
+    // don't render until then.
+    if (!signedIn) {
+      return;
+    }
+    const controller = new AbortController();
+    seatsApi.forFlight(flight.id, controller.signal).then(setSeatMap).catch(() => {});
+    return () => controller.abort();
+  }, [flight.id, signedIn]);
+
+  /** REAL per-cabin facts from this flight's own seat map. */
+  function cabinFacts(travelClass: TravelClass): { free: number; paidMin: number; paidMax: number } {
+    const seats = seatMap?.aircraft.seats.filter((x) => x.seatType === travelClass) ?? [];
+    const paid = seats.map((x) => Number(x.listedSurcharge) || 0).filter((n) => n > 0);
+    return {
+      free: seats.filter((x) => (Number(x.listedSurcharge) || 0) === 0).length,
+      paidMin: paid.length ? Math.min(...paid) : 0,
+      paidMax: paid.length ? Math.max(...paid) : 0,
+    };
+  }
+
   const cabins = quote
     ? TRAVEL_CLASS_ORDER.map((tc) => quote.cabins.find((c) => c.travelClass === tc)).filter(
         (c): c is CabinQuote => c !== undefined,
@@ -109,7 +136,8 @@ export function FlightQuotePage({
         onModify={onBack}
       />
 
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <main className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[1fr_300px]">
+        <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Choose your fare</h1>
         <p className="mt-1 text-sm text-slate-500">
           Prices are for all guests ({paxCount}) including taxes. You'll pick seats and bags next.
@@ -208,6 +236,30 @@ export function FlightQuotePage({
                       <ul className="mt-4 space-y-2.5 border-t border-slate-100 pt-4 text-sm">
                         <FeatureRow ok text={bags.checked} />
                         <FeatureRow ok text={bags.cabin} />
+                        {selectedCabin.availableSeats !== null && selectedCabin.availableSeats !== undefined ? (
+                          <FeatureRow
+                            ok
+                            text={`${selectedCabin.availableSeats} seats available in ${TRAVEL_CLASS_LABELS[selectedCabin.travelClass]}`}
+                          />
+                        ) : null}
+                        {seatMap ? (
+                          (() => {
+                            const facts = cabinFacts(selectedCabin.travelClass);
+                            return (
+                              <>
+                                <FeatureRow ok text={`${facts.free} free-to-pick seats on this aircraft`} />
+                                {facts.paidMax > 0 ? (
+                                  <FeatureRow
+                                    ok
+                                    text={`Preferred seats ${money(facts.paidMin, quote.currency)}–${money(facts.paidMax, quote.currency)}`}
+                                  />
+                                ) : (
+                                  <FeatureRow ok text="Every seat in this cabin is free to pick" />
+                                )}
+                              </>
+                            );
+                          })()
+                        ) : null}
                         <FeatureRow
                           ok
                           text={
@@ -230,6 +282,37 @@ export function FlightQuotePage({
             </div>
           </>
         ) : null}
+        </div>
+
+        {/* Flight details rail. */}
+        <aside className="h-fit rounded-2xl bg-white p-5 shadow-[var(--shadow-card)] lg:sticky lg:top-20">
+          <h2 className="text-lg font-bold text-slate-900">Flight details</h2>
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-600 text-[10px] font-bold text-white">{flight.airlineCode}</span>
+              <span className="tabular font-semibold text-slate-900">{flight.flightNumber}</span>
+            </div>
+            <div className="tabular text-slate-600">{dayAndMonth(flight.departureTime)}</div>
+            <div className="flex items-center gap-3">
+              <div>
+                <div className="tabular text-xl font-bold text-slate-900">{time(flight.departureTime)}</div>
+                <div className="text-xs font-semibold text-slate-500">{flight.originAirportCode}</div>
+              </div>
+              <div className="flex flex-1 flex-col items-center">
+                <span className="tabular text-[10px] text-slate-400">{duration(flight.departureTime, flight.arrivalTime)}</span>
+                <span className="w-full border-t-2 border-dotted border-slate-300" />
+                <span className="text-[10px] text-slate-400">Direct</span>
+              </div>
+              <div className="text-right">
+                <div className="tabular text-xl font-bold text-slate-900">{time(flight.arrivalTime)}</div>
+                <div className="text-xs font-semibold text-slate-500">{flight.destinationAirportCode}</div>
+              </div>
+            </div>
+            <div className="border-t border-slate-100 pt-2 text-xs text-slate-500">
+              {paxCount} guest{paxCount === 1 ? '' : 's'} · fares include taxes
+            </div>
+          </div>
+        </aside>
       </main>
     </>
   );
