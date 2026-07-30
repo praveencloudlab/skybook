@@ -90,7 +90,7 @@ class BookingFacadeTest {
         return new BookingResponse(7L, "SBFACD", 1L, 10L,
                 List.of(new com.skybook.praveen.bookingservice.dto.response.BookingSegmentResponse(1L, 0, 10L, "UPCOMING")),
                 status, LocalDateTime.now(),
-                new BigDecimal("100.00"), null, null, passengers, null, null,
+                new BigDecimal("100.00"), null, null, passengers, null, null, List.of(),
                 "system", "system", 0L, LocalDateTime.now(), LocalDateTime.now());
     }
 
@@ -297,7 +297,7 @@ class BookingFacadeTest {
                     status, LocalDateTime.now(),
                     new BigDecimal("200.00"), null, null,
                     List.of(row(1L, 0, 10L, outboundSeat), row(2L, 1, 20L, returnSeat)),
-                    null, null, "system", "system", 0L, LocalDateTime.now(), LocalDateTime.now());
+                    null, null, List.of(), "system", "system", 0L, LocalDateTime.now(), LocalDateTime.now());
         }
 
         @Test

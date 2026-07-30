@@ -108,6 +108,11 @@ public class Booking extends Auditable {
     @OneToOne(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private BookingPayment payment;
 
+    // E-tickets, one per traveller, issued at CONFIRMED (ROUND_TRIP_MODULE.md).
+    @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<Ticket> tickets = new ArrayList<>();
+
     // Append-only audit trail, populated by BookingStateMachine - see that
     // class for why this is populated via cascade rather than a separate save.
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)

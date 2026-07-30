@@ -36,6 +36,10 @@ public record BookingResponse(
 
         BookingPaymentResponse payment,
 
+        // E-tickets, one per traveller with a coupon per segment - empty
+        // until the booking is CONFIRMED (issued on payment capture).
+        List<TicketResponse> tickets,
+
         String createdBy,
 
         String updatedBy,

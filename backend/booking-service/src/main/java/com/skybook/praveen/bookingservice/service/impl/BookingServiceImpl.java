@@ -17,7 +17,11 @@ import com.skybook.praveen.bookingservice.entity.BookingPassenger;
 import com.skybook.praveen.bookingservice.entity.BookingPayment;
 import com.skybook.praveen.bookingservice.entity.BookingSegment;
 import com.skybook.praveen.bookingservice.entity.Passenger;
+import com.skybook.praveen.bookingservice.entity.Ticket;
+import com.skybook.praveen.bookingservice.entity.TicketCoupon;
 import com.skybook.praveen.bookingservice.enums.BookingStatus;
+import com.skybook.praveen.bookingservice.enums.CouponStatus;
+import com.skybook.praveen.bookingservice.enums.TicketStatus;
 import com.skybook.praveen.bookingservice.enums.CheckInStatus;
 import com.skybook.praveen.bookingservice.enums.SeatAssignmentMode;
 import com.skybook.praveen.bookingservice.enums.PaymentStatus;
@@ -38,7 +42,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -344,6 +350,8 @@ public class BookingServiceImpl implements BookingService {
         bookingStateMachine.transitionBookingStatus(booking, BookingStatus.CONFIRMED,
                 "manual confirmation (back-office override, simulated payment)", "system");
 
+        issueTicketsIfAbsent(booking);
+
         return BookingMapper.toResponse(bookingRepository.save(booking));
     }
 
@@ -370,6 +378,8 @@ public class BookingServiceImpl implements BookingService {
         bookingStateMachine.transitionBookingStatus(booking, BookingStatus.CONFIRMED,
                 "payment " + paymentReference + " captured", "payment-service");
 
+        issueTicketsIfAbsent(booking);
+
         log.info("Booking {} confirmed by payment {}", booking.getBookingReference(), paymentReference);
 
         return new PaymentConfirmation(BookingMapper.toResponse(bookingRepository.save(booking)), true);
@@ -388,6 +398,8 @@ public class BookingServiceImpl implements BookingService {
             bookingValidator.validateRefundAllowed(booking);
             bookingStateMachine.transitionPaymentStatus(booking.getPayment(), PaymentStatus.REFUNDED, "system");
         }
+
+        refundCoupons(booking, row -> true);
 
         return BookingMapper.toResponse(bookingRepository.save(booking));
     }
@@ -442,6 +454,9 @@ public class BookingServiceImpl implements BookingService {
             bp.setCancelled(true);
             bp.setCheckInStatus(CheckInStatus.CLOSED);
         }
+        Set<Long> cancelledRowIds = toCancel.stream().map(BookingPassenger::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        refundCoupons(booking, row -> cancelledRowIds.contains(row.getId()));
 
         boolean bookingCancelled = remaining.isEmpty();
         if (bookingCancelled) {
@@ -501,6 +516,8 @@ public class BookingServiceImpl implements BookingService {
 
         bookingStateMachine.transitionCheckInStatus(passenger, CheckInStatus.CHECKED_IN, "system");
 
+        markCouponCheckedIn(booking, passenger);
+
         return BookingMapper.toResponse(bookingRepository.save(booking));
     }
 
@@ -548,7 +565,84 @@ public class BookingServiceImpl implements BookingService {
         }
 
         bookingStateMachine.transitionCheckInStatus(passenger, target, "checkin-service");
+        if (target == CheckInStatus.CHECKED_IN) {
+            markCouponCheckedIn(booking, passenger);
+        }
         bookingRepository.save(booking);
+    }
+
+    // ---------------------------------------------------------------
+    // Tickets & coupons (ROUND_TRIP_MODULE.md)
+    // ---------------------------------------------------------------
+
+    /**
+     * Issue e-tickets at CONFIRMED: one per traveller covering their whole
+     * journey, one coupon per per-segment row (coupon 1 = outbound).
+     * Idempotent - a redelivered confirmation finds tickets present and does
+     * nothing; the DETERMINISTIC number (125 + booking id + traveller index)
+     * would re-derive identically anyway.
+     */
+    private void issueTicketsIfAbsent(Booking booking) {
+        if (!booking.getTickets().isEmpty()) {
+            return;
+        }
+        Map<Long, List<BookingPassenger>> rowsByTraveller = new LinkedHashMap<>();
+        for (BookingPassenger row : booking.getPassengers()) {
+            rowsByTraveller.computeIfAbsent(row.getPassenger().getId(), k -> new ArrayList<>()).add(row);
+        }
+        int travellerIndex = 0;
+        for (List<BookingPassenger> rows : rowsByTraveller.values()) {
+            travellerIndex++;
+            Ticket ticket = Ticket.builder()
+                    .booking(booking)
+                    .passenger(rows.get(0).getPassenger())
+                    .ticketNumber(String.format("125%08d%02d", booking.getId(), travellerIndex))
+                    .status(TicketStatus.ISSUED)
+                    .issuedAt(LocalDateTime.now())
+                    .build();
+            int couponNumber = 1;
+            for (BookingPassenger row : rows) {
+                ticket.getCoupons().add(TicketCoupon.builder()
+                        .ticket(ticket)
+                        .bookingPassenger(row)
+                        .couponNumber(couponNumber++)
+                        .status(row.isCancelled() ? CouponStatus.CANCELLED : CouponStatus.OPEN)
+                        .build());
+            }
+            booking.getTickets().add(ticket);
+            log.info("Issued ticket {} for booking {} ({} coupon(s))",
+                    ticket.getTicketNumber(), booking.getBookingReference(), ticket.getCoupons().size());
+        }
+    }
+
+    /**
+     * Cancellation-side coupon lifecycle: every matching row's coupon goes
+     * REFUNDED (a FLOWN coupon is history and stays); a ticket with no
+     * live coupon left is itself REFUNDED. No tickets (pre-ticketing booking
+     * or an unconfirmed draft being compensated) = no-op.
+     */
+    private void refundCoupons(Booking booking, java.util.function.Predicate<BookingPassenger> affected) {
+        for (Ticket ticket : booking.getTickets()) {
+            for (TicketCoupon coupon : ticket.getCoupons()) {
+                if (affected.test(coupon.getBookingPassenger()) && coupon.getStatus() != CouponStatus.FLOWN) {
+                    coupon.setStatus(CouponStatus.REFUNDED);
+                }
+            }
+            boolean anyLive = ticket.getCoupons().stream()
+                    .anyMatch(c -> c.getStatus() == CouponStatus.OPEN || c.getStatus() == CouponStatus.CHECKED_IN);
+            if (!anyLive && ticket.getStatus() == TicketStatus.ISSUED) {
+                ticket.setStatus(TicketStatus.REFUNDED);
+            }
+        }
+    }
+
+    /** Check-in mirror onto the coupon: the row's coupon follows it to CHECKED_IN. */
+    private void markCouponCheckedIn(Booking booking, BookingPassenger row) {
+        booking.getTickets().stream()
+                .flatMap(ticket -> ticket.getCoupons().stream())
+                .filter(coupon -> coupon.getBookingPassenger().getId().equals(row.getId()))
+                .filter(coupon -> coupon.getStatus() == CouponStatus.OPEN)
+                .forEach(coupon -> coupon.setStatus(CouponStatus.CHECKED_IN));
     }
 
     /**

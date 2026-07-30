@@ -10,6 +10,8 @@ import com.skybook.praveen.bookingservice.entity.BookingContact;
 import com.skybook.praveen.bookingservice.entity.BookingPassenger;
 import com.skybook.praveen.bookingservice.entity.BookingPayment;
 import com.skybook.praveen.bookingservice.entity.BookingSegment;
+import com.skybook.praveen.bookingservice.entity.Ticket;
+import com.skybook.praveen.bookingservice.dto.response.TicketResponse;
 import com.skybook.praveen.bookingservice.enums.CheckInStatus;
 
 import java.util.List;
@@ -36,6 +38,7 @@ public final class BookingMapper {
                 booking.getPassengers().stream().map(BookingMapper::toPassengerResponse).toList(),
                 booking.getContact() != null ? toContactResponse(booking.getContact()) : null,
                 booking.getPayment() != null ? toPaymentResponse(booking.getPayment()) : null,
+                booking.getTickets().stream().map(BookingMapper::toTicketResponse).toList(),
                 booking.getCreatedBy(),
                 booking.getUpdatedBy(),
                 booking.getVersion(),
@@ -104,6 +107,24 @@ public final class BookingMapper {
                         .of(bookingPassenger.getPassenger().getDob(), java.time.LocalDate.now())
                         .name()
         );
+    }
+
+    public static TicketResponse toTicketResponse(Ticket ticket) {
+        return new TicketResponse(
+                ticket.getId(),
+                ticket.getTicketNumber(),
+                ticket.getPassenger().getId(),
+                ticket.getStatus(),
+                ticket.getIssuedAt(),
+                ticket.getCoupons().stream()
+                        .map(coupon -> new TicketResponse.TicketCouponResponse(
+                                coupon.getCouponNumber(),
+                                coupon.getBookingPassenger().getSegment() != null
+                                        ? coupon.getBookingPassenger().getSegment().getSegmentIndex()
+                                        : 0,
+                                coupon.getBookingPassenger().getId(),
+                                coupon.getStatus()))
+                        .toList());
     }
 
     public static BookingContactResponse toContactResponse(BookingContact contact) {
