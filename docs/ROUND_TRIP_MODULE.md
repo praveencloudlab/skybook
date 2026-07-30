@@ -145,6 +145,11 @@ all cancelled ⇒ CANCELLED.
 - Inventory holds across two flights double the compensation surface — the
   saga test matrix must cover "second flight's first hold fails".
 - Rebooking a single segment interacts with the Modify dialog's
-  cancel+rebook mechanics; keep segment-rebook out of v1 if it drags.
-- Open: should Premium's free-date-change apply per segment (change only the
-  return)? Proposed: yes — it falls out of segment cancel + rebook.
+  cancel+rebook mechanics; it cannot be deferred, since the Premium
+  both-way date-change decision below depends on it.
+- ~~Open~~ **Decided (user, 2026-07-30): Premium's free date change applies
+  to BOTH directions** — outbound and return are each independently
+  changeable online (fare difference only), guarded the usual way (segment
+  not flown, nobody checked in on it). Mechanically each change is a
+  segment rebook: cancel that segment's rows, recreate them on the new
+  flight, refund/charge the fare difference.
