@@ -57,6 +57,12 @@ export interface CreateBookingRequest {
    * the SAME booking - one reference, one payment, one confirmation.
    */
   returnFlightId?: number;
+  /**
+   * Same-carrier through-ticket: the onward connection legs after flightId,
+   * in travel order - all legs book as segments of ONE booking (bags
+   * checked through, one payment). Not combinable with returnFlightId.
+   */
+  connectionFlightIds?: number[];
   passengers: PassengerDetail[];
   contact: BookingContact;
   remarks?: string;

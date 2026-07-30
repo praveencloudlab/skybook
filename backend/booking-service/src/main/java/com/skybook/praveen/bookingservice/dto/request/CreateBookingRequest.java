@@ -38,6 +38,18 @@ public record CreateBookingRequest(
          */
         Long returnFlightId,
 
+        /**
+         * Present = same-carrier THROUGH-TICKET (ROUND_TRIP_MODULE.md,
+         * through-ticketing extension): the onward legs of a one-way
+         * connection, in travel order after flightId. All legs become
+         * segments of direction 0 in ONE booking - one payment, bags charged
+         * once, coupons per leg. Cannot be combined with returnFlightId in
+         * v1; mixed-carrier connections stay self-transfer (separate
+         * bookings per leg, built by the client).
+         */
+        @Size(max = 2, message = "At most 2 connection legs (a 2-stop itinerary)")
+        List<Long> connectionFlightIds,
+
         @NotEmpty(message = "At least one passenger is required")
         @Size(max = 9, message = "A single booking supports at most 9 passengers")
         @Valid

@@ -88,8 +88,8 @@ class SegmentOperationsTest {
 
         Passenger traveller = Passenger.builder().id(42L).firstName("Pax").lastName("Test")
                 .dob(LocalDate.of(1990, 1, 1)).build();
-        BookingSegment outbound = BookingSegment.builder().id(1L).booking(booking).segmentIndex(0).flightId(10L).build();
-        BookingSegment inbound = BookingSegment.builder().id(2L).booking(booking).segmentIndex(1).flightId(20L).build();
+        BookingSegment outbound = BookingSegment.builder().id(1L).booking(booking).segmentIndex(0).direction(0).flightId(10L).build();
+        BookingSegment inbound = BookingSegment.builder().id(2L).booking(booking).segmentIndex(1).direction(1).flightId(20L).build();
         booking.getSegments().addAll(List.of(outbound, inbound));
 
         BookingPassenger outRow = row(100L, booking, traveller, outbound, 10L, fareType, "12A");
@@ -146,7 +146,7 @@ class SegmentOperationsTest {
 
         assertThatThrownBy(() -> bookingService.cancelSegment(7L, 0))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("outbound");
+                .hasMessageContaining("on its own");
     }
 
     @Test

@@ -13,6 +13,7 @@ export function ItineraryCard({
   itinerary,
   fareForDate,
   onSelectLeg,
+  onSelectItinerary,
 }: {
   itinerary: Itinerary;
   /**
@@ -22,10 +23,15 @@ export function ItineraryCard({
    * the sum of its legs (each leg is its own ticket).
    */
   fareForDate?: (isoDate: string) => number | undefined;
-  /** Book a leg (direct = the only leg). */
+  /** Book a leg (direct = the only leg; self-transfer = one ticket per leg). */
   onSelectLeg?: (flight: Flight) => void;
+  /** Book a same-carrier connection as ONE through-ticket (all legs, one booking). */
+  onSelectItinerary?: (legs: Flight[]) => void;
 }) {
   const { legs, stops, totalDurationMinutes, layoverMinutes } = itinerary;
+  // A same-carrier connection sells as one protected through-ticket; mixed
+  // carriers are the self-transfer combination the search engine assembled.
+  const throughTicket = stops > 0 && itinerary.sameCarrier && onSelectItinerary !== undefined;
   const first = legs[0];
   const last = legs[legs.length - 1];
   const plusDays = dayOffset(first.departureTime, last.arrivalTime);
@@ -56,9 +62,15 @@ export function ItineraryCard({
             {stops === 0 ? 'Direct' : stops === 1 ? '1 stop' : `${stops} stops`}
           </span>
           {stops > 0 ? (
-            <span className="text-[11px] font-semibold text-slate-500">
-              Self-transfer · booked as {legs.length} tickets
-            </span>
+            throughTicket ? (
+              <span className="text-[11px] font-semibold text-emerald-700">
+                Through-ticket · bags checked through · one booking
+              </span>
+            ) : (
+              <span className="text-[11px] font-semibold text-slate-500">
+                Self-transfer · booked as {legs.length} tickets
+              </span>
+            )
           ) : null}
         </div>
         <span className="flex items-baseline gap-3">
@@ -114,7 +126,22 @@ export function ItineraryCard({
                 </div>
                 <div className="mt-1 text-xs font-semibold text-slate-500">{leg.destinationAirportCode}</div>
               </div>
-              {onSelectLeg ? (
+              {throughTicket ? (
+                // One booking covers every leg: a single Select on the first
+                // row, a spacer on the rest so the rows stay aligned.
+                index === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => onSelectItinerary(legs)}
+                    disabled={legs.some((l) => l.status === 'CANCELLED')}
+                    className="shrink-0 rounded-full bg-accent-500 px-4 py-1.5 text-xs font-bold text-white transition hover:bg-accent-600 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    Select
+                  </button>
+                ) : (
+                  <span className="w-[4.5rem] shrink-0" aria-hidden="true" />
+                )
+              ) : onSelectLeg ? (
                 <button
                   type="button"
                   onClick={() => onSelectLeg(leg)}
@@ -128,8 +155,19 @@ export function ItineraryCard({
 
             {/* Layover strip - the WAIT, made unmissable. */}
             {index < legs.length - 1 ? (
-              <div className="my-1 flex items-center gap-2 rounded-xl bg-amber-50 px-3.5 py-2 text-xs text-amber-900 ring-1 ring-inset ring-amber-200">
-                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0 fill-amber-600" aria-hidden="true">
+              <div
+                className={
+                  'my-1 flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs ring-1 ring-inset ' +
+                  (throughTicket
+                    ? 'bg-emerald-50 text-emerald-900 ring-emerald-200'
+                    : 'bg-amber-50 text-amber-900 ring-amber-200')
+                }
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  className={'h-3.5 w-3.5 shrink-0 ' + (throughTicket ? 'fill-emerald-600' : 'fill-amber-600')}
+                  aria-hidden="true"
+                >
                   <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm4.2 13.2-5-3V6h1.6v5.3l4.2 2.5z" />
                 </svg>
                 <span>
@@ -137,8 +175,10 @@ export function ItineraryCard({
                     Layover in {cityFor(leg.destinationAirportCode)} ({leg.destinationAirportCode})
                   </span>
                   {' · '}
-                  <span className="tabular font-bold">{fmt(layoverMinutes[index] ?? 0)}</span> waiting time ·
-                  collect and re-check your bags (self-transfer)
+                  <span className="tabular font-bold">{fmt(layoverMinutes[index] ?? 0)}</span> waiting time ·{' '}
+                  {throughTicket
+                    ? 'connection protected, bags checked through'
+                    : 'collect and re-check your bags (self-transfer)'}
                 </span>
               </div>
             ) : null}

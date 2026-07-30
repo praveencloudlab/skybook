@@ -23,20 +23,27 @@ public interface BookingService {
      * only, and NO BookingPayment row - the facade needs the committed
      * booking/passenger IDs before it can take inventory holds.
      *
-     * @param flightDepartureTime supplied by the caller (BookingFacade, after
-     *                            validating the flight with flight-service) -
-     *                            this service needs it for passport-validity
-     *                            checks but must not fetch it itself.
-     * @param returnDepartureTime the return leg's departure when the request
-     *                            carries returnFlightId (round trip,
-     *                            ROUND_TRIP_MODULE.md §5), null for one-way -
-     *                            each segment's rows are priced and
-     *                            passport-checked against ITS OWN departure.
-     * @param ownerSubject        the authenticated JWT subject captured as the
-     *                            booking owner (SECURITY_HARDENING_MODULE.md §4.2).
+     * @param journey      the journey's legs in segment order, one per flight,
+     *                      built by BookingFacade AFTER validating each flight
+     *                      with flight-service - this service needs departure
+     *                      times for pricing/passport/bookability checks but
+     *                      must not fetch flights itself. A one-way is one leg;
+     *                      a round trip adds a direction-1 leg; a same-carrier
+     *                      through-ticket adds direction-0 connection legs.
+     * @param ownerSubject the authenticated JWT subject captured as the
+     *                     booking owner (SECURITY_HARDENING_MODULE.md §4.2).
      */
-    BookingResponse createDraftBooking(CreateBookingRequest request, LocalDateTime flightDepartureTime,
-                                       LocalDateTime returnDepartureTime, String ownerSubject);
+    BookingResponse createDraftBooking(CreateBookingRequest request, List<JourneyLeg> journey,
+                                       String ownerSubject);
+
+    /**
+     * One leg of the journey being booked (ROUND_TRIP_MODULE.md §3 + the
+     * through-ticketing extension). directionStart marks the first leg of a
+     * direction: baggage fees charge once per DIRECTION, never per leg - a
+     * through-ticket checks bags through its connection.
+     */
+    record JourneyLeg(Long flightId, LocalDateTime departureTime, int direction, boolean directionStart) {
+    }
 
     /**
      * Stage 3 (§5.1): ONE transaction that synchronizes all money fields from

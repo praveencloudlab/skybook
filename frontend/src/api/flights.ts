@@ -46,6 +46,12 @@ export interface Itinerary {
   totalDurationMinutes: number;
   /** Waiting time at each stop, minutes, in leg order. */
   layoverMinutes: number[];
+  /**
+   * All legs on one carrier: sold as a single through-ticket booking (bags
+   * checked through, protected connection). False = self-transfer, one
+   * ticket per leg.
+   */
+  sameCarrier: boolean;
 }
 
 export const flightsApi = {

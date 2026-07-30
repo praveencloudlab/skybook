@@ -45,6 +45,7 @@ const CARD_BAR: Record<FareType, string> = {
 export function FlightQuotePage({
   flight,
   returnFlight = null,
+  connection = [],
   paxCount,
   preferredCabin = 'ECONOMY',
   onBack,
@@ -53,6 +54,8 @@ export function FlightQuotePage({
   flight: Flight;
   /** Round trip: prices below are outbound + return combined. */
   returnFlight?: Flight | null;
+  /** Same-carrier through-ticket: the onward connection legs after `flight` - priced in. */
+  connection?: Flight[];
   paxCount: number;
   preferredCabin?: TravelClass;
   onBack: () => void;
@@ -77,11 +80,13 @@ export function FlightQuotePage({
     setBusy(true);
     setError(null);
 
-    const load = returnFlight
-      ? Promise.all([
-          quotesApi.forFlight(flight.id, controller.signal),
-          quotesApi.forFlight(returnFlight.id, controller.signal),
-        ]).then(([out, ret]) => combineQuotes(out, ret))
+    // Every leg of the journey priced together: through-ticket connection
+    // legs and/or the return, folded pairwise into one combined quote.
+    const extraLegs = [...connection, ...(returnFlight ? [returnFlight] : [])];
+    const load = extraLegs.length
+      ? Promise.all(
+          [flight, ...extraLegs].map((leg) => quotesApi.forFlight(leg.id, controller.signal)),
+        ).then((quotes) => quotes.reduce((acc, q) => combineQuotes(acc, q)))
       : quotesApi.forFlight(flight.id, controller.signal);
     load
       .then((result) => {
@@ -103,7 +108,7 @@ export function FlightQuotePage({
       .finally(() => setBusy(false));
 
     return () => controller.abort();
-  }, [flight.id, returnFlight, preferredCabin]);
+  }, [flight.id, returnFlight, connection, preferredCabin]);
 
   useEffect(() => {
     // Seat maps need a session (the global 401 handler would bounce an
@@ -148,7 +153,7 @@ export function FlightQuotePage({
         <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Choose your fare</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Prices are for all guests ({paxCount}){returnFlight ? ', outbound + return combined,' : ''} including taxes. You'll pick seats and bags next.
+          Prices are for all guests ({paxCount}){returnFlight ? ', outbound + return combined,' : connection.length ? ', all connection legs combined,' : ''} including taxes. You'll pick seats and bags next.
         </p>
 
         <div className="mt-4">

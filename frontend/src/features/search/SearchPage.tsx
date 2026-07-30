@@ -42,8 +42,17 @@ function knownCabin(value: string | null): TravelClass {
 export function SearchPage({
   onSelectFlight,
 }: {
-  /** returnFlight present when a round trip was selected (two tickets). */
-  onSelectFlight?: (flight: Flight, travellers: Travellers, cabin: TravelClass, returnFlight?: Flight) => void;
+  /**
+   * returnFlight present when a round trip was selected; connection present
+   * when a same-carrier through-ticket (its onward legs after `flight`).
+   */
+  onSelectFlight?: (
+    flight: Flight,
+    travellers: Travellers,
+    cabin: TravelClass,
+    returnFlight?: Flight,
+    connection?: Flight[],
+  ) => void;
 }) {
   // Deep links from the landing page (its hero widget and destination cards)
   // arrive as ?from=&to=&date=&adults=&children=&infants=&cabin= and prefill
@@ -376,6 +385,21 @@ export function SearchPage({
                               }
                               onSelectFlight(leg, party.travellers, party.cabin);
                             }
+                          : undefined
+                      }
+                      onSelectItinerary={
+                        // Same-carrier through-ticket: all legs, ONE booking.
+                        // Round-trip two-phase keeps direct-or-per-leg picks,
+                        // so through selection is one-way only (v1).
+                        onSelectFlight && !returnDate
+                          ? (tripLegs) =>
+                              onSelectFlight(
+                                tripLegs[0],
+                                party.travellers,
+                                party.cabin,
+                                undefined,
+                                tripLegs.slice(1),
+                              )
                           : undefined
                       }
                     />

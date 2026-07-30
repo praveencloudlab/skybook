@@ -90,8 +90,8 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
-    public BookingResponse createDraftBooking(CreateBookingRequest request, LocalDateTime flightDepartureTime,
-                                              LocalDateTime returnDepartureTime, String ownerSubject) {
+    public BookingResponse createDraftBooking(CreateBookingRequest request, List<JourneyLeg> journey,
+                                              String ownerSubject) {
 
         Booking booking = Booking.builder()
                 .bookingReference(generateUniquePnr())
@@ -104,18 +104,6 @@ public class BookingServiceImpl implements BookingService {
                 .ownerSubject(ownerSubject)
                 .build();
 
-        // The journey's legs (ROUND_TRIP_MODULE.md §3/§5): segment 0 is the
-        // outbound; a returnFlightId makes this a single-PNR round trip with
-        // the return as segment 1. Each leg keeps its OWN departure time -
-        // fares are demand-priced and passports validity-checked per leg.
-        record SegmentSpec(int index, Long flightId, LocalDateTime departureTime) {
-        }
-        List<SegmentSpec> specs = new ArrayList<>();
-        specs.add(new SegmentSpec(0, request.flightId(), flightDepartureTime));
-        if (request.returnFlightId() != null) {
-            specs.add(new SegmentSpec(1, request.returnFlightId(), returnDepartureTime));
-        }
-
         // ONE Passenger identity per traveller, shared by their row on every
         // segment - the person flies both directions; only the per-leg
         // commercial data (seat, fare, bags, check-in) differs.
@@ -126,27 +114,29 @@ public class BookingServiceImpl implements BookingService {
         List<BookingPassenger> bookingPassengers = new ArrayList<>();
         BigDecimal totalFare = BigDecimal.ZERO;
 
-        // Segment-major row order (all outbound rows, then all return rows):
-        // the facade correlates row i with request detail i % travellerCount,
-        // which this ordering guarantees.
-        for (SegmentSpec spec : specs) {
+        // Segment-major row order (all direction-0 rows in leg order, then the
+        // return's): the facade correlates row i with request detail
+        // i % travellerCount, which this ordering guarantees.
+        for (int segmentIndex = 0; segmentIndex < journey.size(); segmentIndex++) {
+            JourneyLeg leg = journey.get(segmentIndex);
 
             // Authoritative bookability guard (not just UI hygiene): booking
             // closes 60 minutes before scheduled departure, so a departed or
             // imminently-departing flight is rejected here no matter what
             // client sent the request. Applies to every leg of the journey.
-            if (spec.departureTime() != null
-                    && !spec.departureTime().isAfter(LocalDateTime.now().plusMinutes(BOOKING_CLOSE_MINUTES))) {
+            if (leg.departureTime() != null
+                    && !leg.departureTime().isAfter(LocalDateTime.now().plusMinutes(BOOKING_CLOSE_MINUTES))) {
                 throw new IllegalArgumentException(
-                        "Booking for flight " + spec.flightId() + " is closed - it departs (or departed) at "
-                                + spec.departureTime() + ". Bookings close " + BOOKING_CLOSE_MINUTES
+                        "Booking for flight " + leg.flightId() + " is closed - it departs (or departed) at "
+                                + leg.departureTime() + ". Bookings close " + BOOKING_CLOSE_MINUTES
                                 + " minutes before departure.");
             }
 
             BookingSegment segment = BookingSegment.builder()
                     .booking(booking)
-                    .segmentIndex(spec.index())
-                    .flightId(spec.flightId())
+                    .segmentIndex(segmentIndex)
+                    .direction(leg.direction())
+                    .flightId(leg.flightId())
                     .build();
             booking.getSegments().add(segment);
 
@@ -154,7 +144,7 @@ public class BookingServiceImpl implements BookingService {
 
                 PassengerBookingDetail detail = request.passengers().get(i);
                 Passenger passenger = travellers.get(i);
-                bookingValidator.validatePassportValidForTravel(passenger, spec.departureTime());
+                bookingValidator.validatePassportValidForTravel(passenger, leg.departureTime());
 
                 // Draft stage (§5.1): fare = base fare only, seat NULL, surcharge 0.
                 // finalizeSeatAssignments writes the authoritative seat/surcharge/
@@ -162,19 +152,21 @@ public class BookingServiceImpl implements BookingService {
                 // exists only because the column is NOT NULL - it is meaningless
                 // until finalize overwrites it.
                 BigDecimal baseFare = fareCalculator.calculateFare(
-                        detail.travelClass(), detail.fareType(), spec.departureTime());
+                        detail.travelClass(), detail.fareType(), leg.departureTime());
 
                 // Ancillary bags priced here, once, into the immutable breakdown -
                 // refunds/invoices bill the stored fare, never a recomputation.
-                // Bags apply per segment: the same count flies each direction (v1).
-                int extraBags = detail.extraBags() != null ? detail.extraBags() : 0;
+                // Bags charge once per DIRECTION (a through-ticket checks bags
+                // through its connection), so only a direction's first leg
+                // carries the count and the fee.
+                int extraBags = leg.directionStart() && detail.extraBags() != null ? detail.extraBags() : 0;
                 BigDecimal baggageFee = EXTRA_BAG_FEE.multiply(BigDecimal.valueOf(extraBags));
 
                 BookingPassenger bookingPassenger = BookingPassenger.builder()
                         .booking(booking)
                         .passenger(passenger)
                         .segment(segment)
-                        .flightId(spec.flightId())
+                        .flightId(leg.flightId())
                         .travelClass(detail.travelClass())
                         .fareType(detail.fareType())
                         .baseFare(baseFare)
@@ -518,18 +510,21 @@ public class BookingServiceImpl implements BookingService {
     public CancelPassengersResponse cancelSegment(Long bookingId, int segmentIndex) {
         Booking booking = findBookingOrThrow(bookingId);
 
-        // §7: only the return may go alone - dropping the outbound while
-        // keeping the return is the no-show trap airlines void tickets over.
-        if (segmentIndex < 1) {
-            throw new IllegalStateException(
-                    "The outbound can't be cancelled on its own - cancel the whole booking, "
-                            + "or change the outbound flight instead.");
-        }
         BookingSegment segment = booking.getSegments().stream()
                 .filter(s -> s.getSegmentIndex() == segmentIndex)
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Booking " + booking.getBookingReference() + " has no segment " + segmentIndex));
+
+        // §7, keyed on DIRECTION since through-ticketing: only the return may
+        // go alone. Dropping the outbound while keeping the return is the
+        // no-show trap airlines void tickets over, and dropping ONE LEG of a
+        // through-ticketed outbound connection would strand the journey.
+        if (segment.getDirection() != 1) {
+            throw new IllegalStateException(
+                    "Only the return can be cancelled on its own - cancel the whole booking, "
+                            + "or change the flight instead.");
+        }
 
         List<BookingPassenger> toCancel = booking.getPassengers().stream()
                 .filter(bp -> !bp.isCancelled())

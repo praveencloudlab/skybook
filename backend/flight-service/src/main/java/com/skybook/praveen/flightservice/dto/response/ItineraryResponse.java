@@ -16,7 +16,15 @@ public record ItineraryResponse(
         long totalDurationMinutes,
 
         /** Waiting time at each stop, in leg order (empty for direct). */
-        List<Long> layoverMinutes
+        List<Long> layoverMinutes,
+
+        /**
+         * Every leg on the same carrier: sold as ONE through-ticket (single
+         * booking, bags checked through, protected connection). Mixed
+         * carriers = self-transfer, one ticket per leg. Trivially true for
+         * a direct.
+         */
+        boolean sameCarrier
 
 ) {
 }

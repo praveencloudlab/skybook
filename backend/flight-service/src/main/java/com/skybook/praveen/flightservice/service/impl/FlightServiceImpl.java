@@ -197,7 +197,11 @@ public class FlightServiceImpl implements FlightService {
             byOrigin.computeIfAbsent(f.getOriginAirportCode(), k -> new java.util.ArrayList<>()).add(f);
         }
 
-        long minLayover = 60;   // minutes - a self-transfer needs time to change planes
+        // A same-carrier junction is a PROTECTED connection (the airline owns
+        // the transfer and checks bags through), so it needs less slack than a
+        // self-transfer where the passenger collects and re-checks bags.
+        long minLayoverSameCarrier = 45;
+        long minLayoverSelfTransfer = 60;
         long maxLayover = 420;  // 7h - beyond this nobody calls it a connection
         long maxTotal = 40 * 60;
 
@@ -205,6 +209,8 @@ public class FlightServiceImpl implements FlightService {
 
         java.util.function.BiFunction<Flight, Flight, Long> layover = (a, b) ->
                 java.time.Duration.between(a.getArrivalTime(), b.getDepartureTime()).toMinutes();
+        java.util.function.BiFunction<Flight, Flight, Long> minLayover = (a, b) ->
+                a.getAirlineCode().equals(b.getAirlineCode()) ? minLayoverSameCarrier : minLayoverSelfTransfer;
 
         for (Flight first : byOrigin.getOrDefault(origin, List.of())) {
             if (!first.getDepartureTime().toLocalDate().equals(departureDate)) {
@@ -218,7 +224,7 @@ public class FlightServiceImpl implements FlightService {
             // 1 stop and 2 stops.
             for (Flight second : byOrigin.getOrDefault(first.getDestinationAirportCode(), List.of())) {
                 long wait1 = layover.apply(first, second);
-                if (wait1 < minLayover || wait1 > maxLayover) {
+                if (wait1 < minLayover.apply(first, second) || wait1 > maxLayover) {
                     continue;
                 }
                 if (second.getDestinationAirportCode().equals(destination)) {
@@ -233,7 +239,7 @@ public class FlightServiceImpl implements FlightService {
                         continue;
                     }
                     long wait2 = layover.apply(second, third);
-                    if (wait2 < minLayover || wait2 > maxLayover) {
+                    if (wait2 < minLayover.apply(second, third) || wait2 > maxLayover) {
                         continue;
                     }
                     results.add(itinerary(List.of(first, second, third), List.of(wait1, wait2)));
@@ -258,7 +264,8 @@ public class FlightServiceImpl implements FlightService {
                 legs.stream().map(FlightMapper::toResponse).toList(),
                 legs.size() - 1,
                 total,
-                layovers);
+                layovers,
+                legs.stream().map(Flight::getAirlineCode).distinct().count() == 1);
     }
 
     @Override

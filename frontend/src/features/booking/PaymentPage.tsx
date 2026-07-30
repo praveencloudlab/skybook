@@ -38,6 +38,7 @@ const METHOD_BLURB: Partial<Record<PaymentMethod, string>> = {
 export function PaymentPage({
   flight,
   returnFlight = null,
+  connection = [],
   cabin,
   fare,
   currency,
@@ -55,6 +56,8 @@ export function PaymentPage({
   flight: Flight;
   /** Round trip: the return books as segment 1 of the SAME booking - one PNR, one payment. */
   returnFlight?: Flight | null;
+  /** Same-carrier through-ticket: the onward connection legs after `flight`. */
+  connection?: Flight[];
   cabin: TravelClass;
   fare: FareType;
   currency: string;
@@ -89,6 +92,7 @@ export function PaymentPage({
       const booking = await bookingsApi.create({
         flightId: flight.id,
         ...(returnFlight ? { returnFlightId: returnFlight.id } : {}),
+        ...(connection.length ? { connectionFlightIds: connection.map((leg) => leg.id) } : {}),
         passengers: guests.map((g, i) =>
           toPassengerDetail(g, cabin, fare, seats[i]?.seatNumber ?? null, bags[i] ?? 0,
             returnSeats[i]?.seatNumber ?? null),

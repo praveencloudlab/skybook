@@ -85,6 +85,31 @@ public class BookingFacade {
             throw new IllegalArgumentException("Cannot book a cancelled flight");
         }
 
+        // Through-ticket connection legs (same-carrier, one direction): every
+        // leg validated up front - bookable and chronological after the
+        // previous leg's arrival - before any row or hold exists.
+        List<FlightDetails> outboundLegs = new ArrayList<>(List.of(flight));
+        if (request.connectionFlightIds() != null && !request.connectionFlightIds().isEmpty()) {
+            if (request.returnFlightId() != null) {
+                throw new IllegalArgumentException(
+                        "A through-ticket connection can't be combined with a return in one booking yet"
+                                + " - book the return separately.");
+            }
+            for (Long legId : request.connectionFlightIds()) {
+                FlightDetails legFlight = flightServiceClient.getFlight(legId);
+                if (legFlight.status() == FlightBookingStatus.CANCELLED) {
+                    throw new IllegalArgumentException("Cannot book a cancelled connection flight");
+                }
+                FlightDetails previous = outboundLegs.get(outboundLegs.size() - 1);
+                if (previous.arrivalTime() != null
+                        && !legFlight.departureTime().isAfter(previous.arrivalTime())) {
+                    throw new IllegalArgumentException(
+                            "Connection flight " + legId + " departs before the previous leg arrives");
+                }
+                outboundLegs.add(legFlight);
+            }
+        }
+
         // Round trip (ROUND_TRIP_MODULE.md §5): validate the return leg up
         // front - both flights bookable and the chronology sane - before any
         // row or hold exists, so a bad pair fails cheap.
@@ -101,19 +126,32 @@ public class BookingFacade {
             }
         }
 
-        BookingResponse draft = bookingService.createDraftBooking(
-                request, flight.departureTime(),
-                returnFlight != null ? returnFlight.departureTime() : null,
-                currentSubject());
+        // The journey in segment order: direction-0 legs (outbound + any
+        // through-connection), then the direction-1 return. Bags charge once
+        // per direction, so only each direction's first leg is a start.
+        List<BookingService.JourneyLeg> journey = new ArrayList<>();
+        for (int i = 0; i < outboundLegs.size(); i++) {
+            journey.add(new BookingService.JourneyLeg(
+                    outboundLegs.get(i).id(), outboundLegs.get(i).departureTime(), 0, i == 0));
+        }
+        if (returnFlight != null) {
+            journey.add(new BookingService.JourneyLeg(
+                    returnFlight.id(), returnFlight.departureTime(), 1, true));
+        }
+
+        BookingResponse draft = bookingService.createDraftBooking(request, journey, currentSubject());
 
         List<SeatAssignmentResult> assignments = holdSeatsOrCompensate(draft, request);
 
         BookingResponse booking = finalizeOrCompensate(draft, assignments);
 
         // Only a finalized (DRAFT -> CREATED) booking is announced (§5.1a).
-        // Both legs' flight details ride the event (already fetched above).
-        bookingEventProducer.publishBookingCreated(booking,
-                returnFlight != null ? List.of(flight, returnFlight) : List.of(flight));
+        // Every leg's flight details ride the event (already fetched above).
+        List<FlightDetails> journeyFlights = new ArrayList<>(outboundLegs);
+        if (returnFlight != null) {
+            journeyFlights.add(returnFlight);
+        }
+        bookingEventProducer.publishBookingCreated(booking, journeyFlights);
 
         return booking;
     }

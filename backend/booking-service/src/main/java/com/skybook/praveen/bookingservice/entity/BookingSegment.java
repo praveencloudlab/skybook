@@ -47,6 +47,12 @@ public class BookingSegment extends Auditable {
     @Column(name = "segment_index", nullable = false)
     private int segmentIndex;
 
+    // 0 = outbound, 1 = return. A same-carrier through-ticket's connection
+    // legs are multiple segments of direction 0; the cancellation matrix and
+    // per-direction baggage fees key on this, never on segment_index.
+    @Column(nullable = false)
+    private int direction;
+
     @Column(name = "flight_id", nullable = false)
     private Long flightId;
 }

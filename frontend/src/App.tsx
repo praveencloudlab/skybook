@@ -249,6 +249,8 @@ interface JourneyDraft {
   preferredCabin: TravelClass;
   choice: FareChoice | null;
   returnFlight?: Flight | null;
+  /** Same-carrier through-ticket: onward connection legs after `flight`. */
+  connection?: Flight[];
   seats: AircraftSeat[];
   returnSeats?: AircraftSeat[];
   guests: PassengerDraft[];
@@ -378,6 +380,7 @@ function BookingJourney() {
   const [step, setStep] = useState<Step>(draft?.step ?? 'search');
   const [flight, setFlight] = useState<Flight | null>(draft?.flight ?? null);
   const [returnFlight, setReturnFlight] = useState<Flight | null>(draft?.returnFlight ?? null);
+  const [connection, setConnection] = useState<Flight[]>(draft?.connection ?? []);
   const [travellers, setTravellers] = useState<Travellers>(draft?.travellers ?? ONE_ADULT);
   // The cabin chosen in the search widget - preselects (never hides) a cabin
   // on the fare step.
@@ -435,6 +438,7 @@ function BookingJourney() {
       preferredCabin,
       choice,
       returnFlight,
+      connection,
       seats,
       returnSeats,
       bags,
@@ -447,13 +451,14 @@ function BookingJourney() {
       // Storage full/blocked: the journey still works, it just won't survive
       // a navigation - the pre-persistence behaviour.
     }
-  }, [step, flight, returnFlight, travellers, preferredCabin, choice, seats, returnSeats, guests, bags, contactEmail]);
+  }, [step, flight, returnFlight, connection, travellers, preferredCabin, choice, seats, returnSeats, guests, bags, contactEmail]);
 
   function restart() {
     sessionStorage.removeItem(JOURNEY_KEY);
     setStep('search');
     setFlight(null);
     setReturnFlight(null);
+    setConnection([]);
     setTravellers(ONE_ADULT);
     setChoice(null);
     setSeats([]);
@@ -562,6 +567,7 @@ function BookingJourney() {
         seats={alignedSeats as AircraftSeat[]}
         returnSeats={alignedReturnSeats as AircraftSeat[]}
         returnFlight={returnFlight}
+        connection={connection}
         bags={bags}
         contactEmail={contactEmail}
         extras={extras}
@@ -681,6 +687,7 @@ function BookingJourney() {
       <FlightQuotePage
         flight={flight}
         returnFlight={returnFlight}
+        connection={connection}
         paxCount={paxCount}
         preferredCabin={preferredCabin}
         onBack={() => setStep('search')}
@@ -695,9 +702,10 @@ function BookingJourney() {
 
   return (
     <SearchPage
-      onSelectFlight={(chosen, party, cabin, inbound) => {
+      onSelectFlight={(chosen, party, cabin, inbound, throughLegs) => {
         setFlight(chosen);
         setReturnFlight(inbound ?? null);
+        setConnection(throughLegs ?? []);
         setTravellers(party);
         setPreferredCabin(cabin);
         setSeats([]);
