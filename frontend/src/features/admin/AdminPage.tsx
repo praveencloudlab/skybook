@@ -102,7 +102,7 @@ function Overview() {
       </div>
       <div className="card p-5">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Confirmed revenue</p>
-        <p className="tabular mt-1 text-3xl font-semibold text-slate-900">{money(revenue, 'USD')}</p>
+        <p className="tabular mt-1 text-3xl font-semibold text-slate-900">{money(revenue, 'GBP')}</p>
         <p className="mt-1 text-xs text-slate-400">Across confirmed and completed bookings.</p>
       </div>
     </div>
@@ -332,7 +332,7 @@ function Bookings() {
                   <td className="tabular px-4 py-2.5 text-slate-600">{dayAndMonth(b.bookingDate)}</td>
                   <td className="tabular px-4 py-2.5 text-slate-600">{b.passengers.length}</td>
                   <td className="px-4 py-2.5"><StatusBadge status={b.bookingStatus} /></td>
-                  <td className="tabular px-4 py-2.5 text-right text-slate-900">{money(b.totalFare, 'USD')}</td>
+                  <td className="tabular px-4 py-2.5 text-right text-slate-900">{money(b.totalFare, 'GBP')}</td>
                   <td className="px-4 py-2.5">
                     <div className="flex items-center justify-end gap-2">
                       {b.bookingStatus === 'CREATED' ? (

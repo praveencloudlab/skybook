@@ -41,7 +41,7 @@ import java.util.List;
 public class PaymentServiceImpl implements PaymentService {
 
     private static final int MAX_REFERENCE_ATTEMPTS = 10;
-    private static final String DEFAULT_CURRENCY = "USD";
+    private static final String DEFAULT_CURRENCY = "GBP";
 
     private final PaymentRepository paymentRepository;
     private final PaymentTransactionRepository paymentTransactionRepository;

@@ -299,7 +299,7 @@ const BAGGAGE: Record<string, string> = {
 export function printETicket(
   booking: Booking,
   flightsById: Record<number, Flight>,
-  _currency = 'USD',
+  _currency = 'GBP',
 ): void {
   const MAROON = '#5a1836';
   const p0 = booking.passengers[0];
@@ -388,7 +388,10 @@ export function printETicket(
   // monospace FARE CALCULATION box with dotted leaders, built from the
   // booking's real per-row fare breakdown.
   // ------------------------------------------------------------------
-  const usd = (n: number) => `USD ${n.toFixed(2)}`;
+  // Ledger amounts honour the booking's own currency: £ for GBP (the
+  // platform default), US$ for older USD-stamped bookings.
+  const ledgerSymbol = booking.payment?.currency === 'USD' || _currency === 'USD' ? 'US$' : '£';
+  const usd = (n: number) => `${ledgerSymbol}${n.toFixed(2)}`;
   const typeCode = (t?: string) => (t === 'CHILD' ? 'CHD' : t === 'INFANT' ? 'INF' : 'ADT');
   const titleOf = (p: (typeof booking.passengers)[number]) => (p.title ?? '').toUpperCase();
   const travellers = booking.passengers.filter((p) => (p.segmentIndex ?? 0) === 0);

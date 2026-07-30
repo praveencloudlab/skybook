@@ -19,7 +19,7 @@ import { printETicket } from './printable';
 import { ModifyBookingDialog } from './ModifyBookingDialog';
 
 // Seeded fares are USD; the booking doesn't carry a currency of its own.
-const CURRENCY = 'USD';
+const CURRENCY = 'GBP';
 
 /**
  * One booking, laid out like a real itinerary (FRONTEND_MODULE.md §5 screens 8-9):

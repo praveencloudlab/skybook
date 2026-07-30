@@ -9,7 +9,7 @@ import { ApiError } from '../../lib/errors';
 import { addDaysIso, dayAndMonth, money, time, todayIso } from '../../lib/format';
 
 const EXTRA_BAG_FEE = 40;
-const CURRENCY = 'USD';
+const CURRENCY = 'GBP';
 
 /**
  * Modify a booking: change flight/date and/or bags, as a guided REBOOK - the

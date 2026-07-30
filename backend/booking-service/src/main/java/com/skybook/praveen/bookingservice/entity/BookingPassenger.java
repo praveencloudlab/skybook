@@ -155,7 +155,7 @@ public class BookingPassenger extends Auditable {
             baseFare = fare;
         }
         if (currency == null) {
-            currency = "USD";
+            currency = "GBP";
         }
     }
 }

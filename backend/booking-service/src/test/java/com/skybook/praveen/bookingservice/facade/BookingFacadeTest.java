@@ -431,7 +431,7 @@ class BookingFacadeTest {
 
             var quote = facade.quoteFares(10L);
 
-            assertThat(quote.currency()).isEqualTo("USD");
+            assertThat(quote.currency()).isEqualTo("GBP");
             // Only the cabins the flight sells - FIRST absent IS the answer (§7).
             assertThat(quote.cabins()).hasSize(2);
             var economy = quote.cabins().get(0);

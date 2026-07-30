@@ -232,7 +232,8 @@ public class TicketPdfTemplate {
 
     private static String money(BigDecimal amount, String currency) {
         if (amount == null) return "-";
-        return (currency != null ? currency + " " : "") + amount;
+        String symbol = "GBP".equals(currency) ? "&#163;" : "USD".equals(currency) ? "US$" : (currency != null ? currency + " " : "");
+        return symbol + amount;
     }
 
     private static String pretty(String enumName) {

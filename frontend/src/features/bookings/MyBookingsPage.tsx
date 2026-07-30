@@ -9,7 +9,7 @@ import { dayAndMonth, money, time } from '../../lib/format';
 import { StatusBadge } from './StatusBadge';
 
 // Seeded fares are USD; the booking doesn't carry a currency of its own.
-const CURRENCY = 'USD';
+const CURRENCY = 'GBP';
 
 /**
  * My trips (FRONTEND_MODULE.md §5 screen 8).

@@ -69,7 +69,7 @@ import java.util.Optional;
 public class BookingFacade {
 
     private static final BigDecimal ZERO_MONEY = new BigDecimal("0.00");
-    private static final String QUOTE_CURRENCY = "USD";
+    private static final String QUOTE_CURRENCY = "GBP";
 
     private final FlightServiceClient flightServiceClient;
     private final InventoryServiceClient inventoryServiceClient;

@@ -322,7 +322,8 @@ public class BookingEmailTemplate {
 
     private static String money(BigDecimal amount, String currency) {
         if (amount == null) return "—";
-        return (currency != null ? currency + " " : "") + amount;
+        String symbol = "GBP".equals(currency) ? "&#163;" : "USD".equals(currency) ? "US$" : (currency != null ? currency + " " : "");
+        return symbol + amount;
     }
 
     /** "PREMIUM_ECONOMY" -> "Premium economy", "NOT_OPEN" -> "Not open" */

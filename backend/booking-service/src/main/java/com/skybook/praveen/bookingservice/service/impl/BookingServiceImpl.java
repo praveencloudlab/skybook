@@ -53,7 +53,7 @@ import java.util.stream.Collectors;
 public class BookingServiceImpl implements BookingService {
 
     private static final int MAX_PNR_GENERATION_ATTEMPTS = 10;
-    private static final String DEFAULT_CURRENCY = "USD";
+    private static final String DEFAULT_CURRENCY = "GBP";
 
     /** Flat price per extra checked bag (ancillary), per passenger. */
     private static final BigDecimal EXTRA_BAG_FEE = new BigDecimal("40.00");

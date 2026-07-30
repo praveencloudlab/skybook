@@ -16,7 +16,7 @@ export function DateStrip({
   destination,
   date,
   cabin,
-  currency = 'USD',
+  currency = 'GBP',
   onPickDate,
 }: {
   origin: string;
