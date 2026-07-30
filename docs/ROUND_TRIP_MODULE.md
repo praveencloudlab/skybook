@@ -41,6 +41,11 @@ New table `booking_segments`:
 | segment_index | 0 = outbound, 1 = return |
 | flight_id | flight-service id (no route snapshot — events enrich, as today) |
 
+Note on "flight instance": SkyBook's `flights` rows ARE dated instances —
+each row is a flight number on a concrete departure datetime (there is no
+separate route entity). `segment.flight_id` therefore already identifies
+"BA178 on 29 Jul 10:15", not a route; no rename needed.
+
 `BookingPassenger` becomes **per passenger per segment**: add
 `segment_id` FK. Everything the row already holds — fare breakdown, seat,
 check-in mirror, cancelled — is genuinely per-direction, so the existing
@@ -51,8 +56,36 @@ machinery transfers without semantic change:
   per-direction check-in and boarding passes for free.
 - `totalFare = Σ fare over ALL rows` — the standing invariant holds.
 - `PARTIALLY_CANCELLED` derivation (any active + any cancelled row) holds.
-- `bookings.flight_id` is kept, documented as segment 0's flight
-  (denormalized for the reader paths that only need "the trip's flight").
+- `bookings.flight_id` is kept **for one release only** as segment 0's
+  flight, marked deprecated; once every reader (responses, events, rebook,
+  admin queries) goes through segments, a follow-up migration drops it.
+  Long-term shape is strictly Booking → BookingSegment → BookingPassenger.
+
+### Tickets and coupons (IATA-style)
+
+New tables, issued when the booking reaches CONFIRMED:
+
+- `tickets` — one per (booking × passenger): id, booking_id, ticket number
+  (13-digit, `125-` prefix style), status (ISSUED/VOID/REFUNDED), issued_at.
+- `ticket_coupons` — one per segment of that passenger's journey, 1:1 with
+  the per-segment `booking_passengers` row: id, ticket_id,
+  booking_passenger_id (unique), coupon_number, status
+  (OPEN/CHECKED_IN/FLOWN/CANCELLED/REFUNDED).
+
+Coupon status follows the row's lifecycle (check-in mirror, cancellation,
+departure passed). The e-ticket document renders ticket number + one coupon
+line per segment; a later "Coupon 2 CANCELLED / Coupon 1 FLOWN" state is
+first-class. Boarding passes stay where they live today — generated off the
+CheckIn record in checkin-service (Ticket → CheckIn → BoardingPass), never
+attached to BookingPassenger directly.
+
+### Derived segment status
+
+`BookingResponse.segments[]` gains a **computed** (never stored) status —
+CANCELLED (all rows cancelled) / FLOWN (departure passed) / CHECKED_IN (any
+active row checked in) / UPCOMING — same derivation philosophy as booking
+status, so the UI shows "Outbound — Completed / Return — Upcoming" without
+client-side date math.
 
 ## 4. API contract
 
@@ -85,18 +118,27 @@ the combined total. One CREATED→CONFIRMED lifecycle, as today.
 
 ## 6. Events and cross-service impact
 
-`BookingEventPassenger` gains the per-row flight fields (flightId,
-flightNumber, origin, destination, departureTime, arrivalTime) instead of
-relying on the event's single top-level flight; the top-level flight stays
-(segment 0) for consumer compatibility.
+The event nests passengers under segments instead of flattening flight
+fields onto every passenger entry (three passengers would otherwise repeat
+identical flight data three times):
 
-- checkin-service: iterate passenger entries, snapshot each entry's OWN
-  flight fields → per-segment CheckIn rows. Consumer change only.
+```
+BookingEvent
+├── (top-level flight + flat passengers — DEPRECATED, segment 0 mirror,
+│    kept one release for old consumers and replayed old events)
+└── segments[]: {segmentIndex, flightId, flightNumber, origin,
+                 destination, departureTime, arrivalTime,
+                 passengers[]: per-row entries (seat, fare, ids…)}
+```
+
+- checkin-service: iterate segments × their passenger entries, snapshot
+  the SEGMENT's flight fields → per-segment CheckIn rows. Consumer change
+  only.
 - notification-service: confirmation email + e-ticket render one coupon per
   segment (itinerary table already row-per-segment shaped).
 - payment-service: unchanged — one payment, combined amount.
-- Old events (no per-entry flight fields) must still parse: consumers fall
-  back to the top-level flight when entry fields are null.
+- Old events (no `segments` array) must still parse: consumers fall back
+  to the top-level flight + flat passenger list when `segments` is null.
 
 ## 7. Cancellation matrix (v1 rules)
 
@@ -132,11 +174,18 @@ all cancelled ⇒ CANCELLED.
 1. V10 migration + entities + mapper/response (backward-compatible reads).
 2. Saga: segment-aware draft/holds/finalize + unit tests (compensation
    across two flights is the critical test).
-3. Event enrichment + checkin/notification consumer updates (+ old-event
-   fallback tests).
-4. Cancellation matrix: segment cancel endpoint + guardian/agent guards.
-5. Frontend: single-call payment, confirmation, detail segments, cancel-return.
-6. Live e2e: round trip book→pay→check in outbound→cancel return→refund.
+3. Tickets + coupons: tables, issuance at CONFIRMED, coupon lifecycle
+   hooks, e-ticket rendering.
+4. Event enrichment (nested segments) + checkin/notification consumer
+   updates (+ old-event fallback tests).
+5. Cancellation matrix: segment cancel endpoint + guardian/agent guards +
+   per-segment rebook (Premium both-way date change).
+6. Frontend: single-call payment, confirmation, detail segments with
+   derived status, cancel-return, per-segment Modify.
+7. Live e2e: round trip book→pay→check in outbound→cancel return→refund,
+   verifying coupon states end up FLOWN/CANCELLED correctly.
+8. Follow-up release: drop `bookings.flight_id` + the deprecated flat
+   event fields once all readers are on segments.
 
 ## 11. Risks / open questions
 
