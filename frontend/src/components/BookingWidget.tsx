@@ -10,6 +10,8 @@ export interface BookingSearch {
   origin: string;
   destination: string;
   date: string;
+  /** Present = round trip: the inbound (destination -> origin) date. */
+  returnDate?: string;
   travellers: Travellers;
   cabin: TravelClass;
 }
@@ -34,6 +36,8 @@ export function BookingWidget({
   const [origin, setOrigin] = useState(initial?.origin ?? 'LHR');
   const [destination, setDestination] = useState(initial?.destination ?? 'DXB');
   const [date, setDate] = useState(initial?.date ?? defaultDate());
+  const [tripType, setTripType] = useState<'oneway' | 'round'>(initial?.returnDate ? 'round' : 'oneway');
+  const [returnDate, setReturnDate] = useState(initial?.returnDate ?? '');
   const [travellers, setTravellers] = useState<Travellers>(initial?.travellers ?? ONE_ADULT);
   const [cabin, setCabin] = useState<TravelClass>(initial?.cabin ?? 'ECONOMY');
 
@@ -44,7 +48,17 @@ export function BookingWidget({
     if (sameAirport) {
       return;
     }
-    onSearch({ origin, destination, date, travellers, cabin });
+    if (tripType === 'round' && (!returnDate || returnDate < date)) {
+      return;
+    }
+    onSearch({
+      origin,
+      destination,
+      date,
+      travellers,
+      cabin,
+      ...(tripType === 'round' ? { returnDate } : {}),
+    });
   }
 
   function swap() {
@@ -56,16 +70,31 @@ export function BookingWidget({
     <form onSubmit={submit} className="relative z-20">
       {/* Trip-type tabs: only one-way flying exists today. */}
       <div className="inline-flex items-center gap-1 rounded-t-2xl bg-white px-2 pt-2">
-        <span
-          aria-disabled="true"
-          title="Not available yet"
-          className="cursor-not-allowed rounded-full px-4 py-1.5 text-sm font-semibold text-slate-400"
+        <button
+          type="button"
+          onClick={() => {
+            setTripType('round');
+            setReturnDate((prev) => prev || plusDays(date, 7));
+          }}
+          aria-pressed={tripType === 'round'}
+          className={
+            'rounded-full px-4 py-1.5 text-sm font-semibold transition ' +
+            (tripType === 'round' ? 'bg-brand-900 text-white' : 'text-slate-500 hover:text-slate-800')
+          }
         >
           Round trip
-        </span>
-        <span className="rounded-full bg-brand-900 px-4 py-1.5 text-sm font-semibold text-white">
+        </button>
+        <button
+          type="button"
+          onClick={() => setTripType('oneway')}
+          aria-pressed={tripType === 'oneway'}
+          className={
+            'rounded-full px-4 py-1.5 text-sm font-semibold transition ' +
+            (tripType === 'oneway' ? 'bg-brand-900 text-white' : 'text-slate-500 hover:text-slate-800')
+          }
+        >
           One way
-        </span>
+        </button>
         <span
           aria-disabled="true"
           title="Not available yet"
@@ -77,7 +106,14 @@ export function BookingWidget({
 
       {/* The relative container both full-width panels resolve against. */}
       <div className="relative rounded-b-2xl rounded-tr-2xl bg-white p-4 shadow-[var(--shadow-float)]">
-        <div className="grid items-center gap-2 md:grid-cols-[1fr_auto_1fr_1fr_1fr_auto]">
+        <div
+          className={
+            'grid items-center gap-2 ' +
+            (tripType === 'round'
+              ? 'md:grid-cols-[1fr_auto_1fr_1fr_1fr_1fr_auto]'
+              : 'md:grid-cols-[1fr_auto_1fr_1fr_1fr_auto]')
+          }
+        >
           <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
 
           <button
@@ -105,8 +141,24 @@ export function BookingWidget({
             destination={destination}
             cabin={cabin}
             value={date}
-            onChange={setDate}
+            onChange={(d) => {
+              setDate(d);
+              if (returnDate && returnDate < d) {
+                setReturnDate(d);
+              }
+            }}
           />
+
+          {tripType === 'round' ? (
+            <FareCalendar
+              label="Return"
+              origin={destination}
+              destination={origin}
+              cabin={cabin}
+              value={returnDate || date}
+              onChange={setReturnDate}
+            />
+          ) : null}
 
           <button
             type="submit"
@@ -120,6 +172,11 @@ export function BookingWidget({
           </button>
         </div>
 
+        {tripType === 'round' && returnDate && returnDate < date ? (
+          <p className="mt-2 text-sm font-medium text-red-600">
+            The return date can't be before the outbound date.
+          </p>
+        ) : null}
         {sameAirport ? (
           <p className="mt-2 text-sm font-medium text-red-600">
             Origin and destination must be different.
@@ -128,6 +185,12 @@ export function BookingWidget({
       </div>
     </form>
   );
+}
+
+function plusDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function defaultDate(): string {

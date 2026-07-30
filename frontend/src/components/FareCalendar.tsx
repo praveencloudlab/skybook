@@ -24,12 +24,15 @@ export function FareCalendar({
   cabin,
   value,
   onChange,
+  label = 'Travelling when?',
 }: {
   origin: string;
   destination: string;
   cabin: TravelClass;
   value: string; // yyyy-MM-dd
   onChange: (date: string) => void;
+  /** Trigger caption - 'Return' for the inbound calendar. */
+  label?: string;
 }) {
   const [open, setOpen] = useState(false);
   // First visible month, as an offset from the current month.
@@ -108,7 +111,7 @@ export function FareCalendar({
           </svg>
         </span>
         <span className="min-w-0">
-          <span className="block text-xs font-semibold text-slate-500">Travelling when?</span>
+          <span className="block text-xs font-semibold text-slate-500">{label}</span>
           <span className="tabular block truncate text-[15px] font-bold text-slate-900">
             {displayDate(value)}
           </span>

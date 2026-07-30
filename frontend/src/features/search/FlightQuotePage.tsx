@@ -44,12 +44,15 @@ const CARD_BAR: Record<FareType, string> = {
 
 export function FlightQuotePage({
   flight,
+  returnFlight = null,
   paxCount,
   preferredCabin = 'ECONOMY',
   onBack,
   onChoose,
 }: {
   flight: Flight;
+  /** Round trip: prices below are outbound + return combined. */
+  returnFlight?: Flight | null;
   paxCount: number;
   preferredCabin?: TravelClass;
   onBack: () => void;
@@ -74,8 +77,13 @@ export function FlightQuotePage({
     setBusy(true);
     setError(null);
 
-    quotesApi
-      .forFlight(flight.id, controller.signal)
+    const load = returnFlight
+      ? Promise.all([
+          quotesApi.forFlight(flight.id, controller.signal),
+          quotesApi.forFlight(returnFlight.id, controller.signal),
+        ]).then(([out, ret]) => combineQuotes(out, ret))
+      : quotesApi.forFlight(flight.id, controller.signal);
+    load
       .then((result) => {
         setQuote(result);
         // If the aircraft has no such cabin, land on the first it does have.
@@ -95,7 +103,7 @@ export function FlightQuotePage({
       .finally(() => setBusy(false));
 
     return () => controller.abort();
-  }, [flight.id, preferredCabin]);
+  }, [flight.id, returnFlight, preferredCabin]);
 
   useEffect(() => {
     // Seat maps need a session (the global 401 handler would bounce an
@@ -140,7 +148,7 @@ export function FlightQuotePage({
         <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Choose your fare</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Prices are for all guests ({paxCount}) including taxes. You'll pick seats and bags next.
+          Prices are for all guests ({paxCount}){returnFlight ? ', outbound + return combined,' : ''} including taxes. You'll pick seats and bags next.
         </p>
 
         <div className="mt-4">
@@ -326,6 +334,35 @@ export function FlightQuotePage({
       </main>
     </>
   );
+}
+
+/** Round trip = two tickets: fares sum, availability is the tighter leg. */
+function combineQuotes(outbound: Quote, inbound: Quote): Quote {
+  const cabins: CabinQuote[] = [];
+  for (const cab of outbound.cabins) {
+    const ret = inbound.cabins.find((c) => c.travelClass === cab.travelClass);
+    if (!ret) {
+      continue;
+    }
+    const baseFares = Object.fromEntries(
+      Object.entries(cab.baseFares).map(([fareType, fare]) => [
+        fareType,
+        Number(fare) + Number(ret.baseFares[fareType as FareType] ?? 0),
+      ]),
+    ) as CabinQuote['baseFares'];
+    cabins.push({
+      ...cab,
+      baseFares,
+      fromFare: Math.min(...Object.values(baseFares).map(Number)),
+      availableSeats:
+        cab.availableSeats === null || cab.availableSeats === undefined
+          ? ret.availableSeats
+          : ret.availableSeats === null || ret.availableSeats === undefined
+            ? cab.availableSeats
+            : Math.min(cab.availableSeats, ret.availableSeats),
+    });
+  }
+  return { ...outbound, cabins };
 }
 
 function FeatureRow({ ok, text }: { ok: boolean; text: string }) {

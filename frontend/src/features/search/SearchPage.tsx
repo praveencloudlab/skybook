@@ -42,7 +42,8 @@ function knownCabin(value: string | null): TravelClass {
 export function SearchPage({
   onSelectFlight,
 }: {
-  onSelectFlight?: (flight: Flight, travellers: Travellers, cabin: TravelClass) => void;
+  /** returnFlight present when a round trip was selected (two tickets). */
+  onSelectFlight?: (flight: Flight, travellers: Travellers, cabin: TravelClass, returnFlight?: Flight) => void;
 }) {
   // Deep links from the landing page (its hero widget and destination cards)
   // arrive as ?from=&to=&date=&adults=&children=&infants=&cabin= and prefill
@@ -65,6 +66,9 @@ export function SearchPage({
   }));
   const [widgetKey, setWidgetKey] = useState(0);
   const [widgetInitial, setWidgetInitial] = useState<BookingSearch>(initial);
+  // Round trip: the outbound picked in phase one, awaiting the return pick.
+  const [returnDate, setReturnDate] = useState<string | undefined>(undefined);
+  const [outbound, setOutbound] = useState<Flight | null>(null);
   const [party, setParty] = useState<{ travellers: Travellers; cabin: TravelClass }>({
     travellers: initial.travellers,
     cabin: initial.cabin,
@@ -117,6 +121,8 @@ export function SearchPage({
 
   function handleSearch(search: BookingSearch) {
     setParty({ travellers: search.travellers, cabin: search.cabin });
+    setReturnDate(search.returnDate);
+    setOutbound(null);
     void runSearch({ origin: search.origin, destination: search.destination, date: search.date });
   }
 
@@ -218,6 +224,28 @@ export function SearchPage({
           <ErrorAlert error={error} />
         </div>
 
+        {outbound ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900 ring-1 ring-inset ring-emerald-200">
+            <span>
+              <span className="font-bold">Outbound selected:</span> {outbound.flightNumber}{' '}
+              {outbound.originAirportCode} → {outbound.destinationAirportCode} — now choose your{' '}
+              <span className="font-bold">return</span> flight.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setOutbound(null);
+                if (searched) {
+                  void runSearch({ origin: searched.destination, destination: searched.origin, date: widgetInitial.date });
+                }
+              }}
+              className="font-bold text-emerald-700 underline-offset-2 hover:underline"
+            >
+              Change outbound
+            </button>
+          </div>
+        ) : null}
+
         {/* Date-price strip: the same route day by day, cheapest per-guest
             fare each - tap a day to re-search it. */}
         {searched ? (
@@ -298,7 +326,24 @@ export function SearchPage({
                       itinerary={trip}
                       onSelectLeg={
                         onSelectFlight
-                          ? (leg) => onSelectFlight(leg, party.travellers, party.cabin)
+                          ? (leg) => {
+                              if (returnDate && !outbound && searched) {
+                                // Phase one of a round trip: hold the outbound,
+                                // search the inbound (route swapped).
+                                setOutbound(leg);
+                                void runSearch({
+                                  origin: searched.destination,
+                                  destination: searched.origin,
+                                  date: returnDate,
+                                });
+                                return;
+                              }
+                              if (outbound) {
+                                onSelectFlight(outbound, party.travellers, party.cabin, leg);
+                                return;
+                              }
+                              onSelectFlight(leg, party.travellers, party.cabin);
+                            }
                           : undefined
                       }
                     />

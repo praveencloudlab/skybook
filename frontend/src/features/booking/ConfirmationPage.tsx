@@ -21,10 +21,13 @@ import { usePolledResource } from '../../lib/usePolledResource';
 export function ConfirmationPage({
   booking,
   payment,
+  returnBooking,
   onDone,
 }: {
   booking: Booking;
   payment: Payment;
+  /** Round trip: the separately-ticketed return booking. */
+  returnBooking?: Booking;
   onDone: () => void;
 }) {
   const fetchBooking = useCallback(
@@ -63,6 +66,11 @@ export function ConfirmationPage({
         <p className="tabular mt-4 inline-block rounded-2xl bg-brand-50 px-5 py-3 font-mono text-3xl font-bold tracking-[0.2em] text-brand-700 ring-1 ring-inset ring-brand-100">
           {booking.bookingReference}
         </p>
+      {returnBooking ? (
+        <p className="tabular mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-200">
+          Return ticket booked separately — reference {returnBooking.bookingReference} · {money(returnBooking.totalFare, 'USD')}
+        </p>
+      ) : null}
 
         <dl className="mt-6 space-y-2 text-sm">
           <div className="flex justify-between">

@@ -224,6 +224,7 @@ interface JourneyDraft {
   travellers: Travellers;
   preferredCabin: TravelClass;
   choice: FareChoice | null;
+  returnFlight?: Flight | null;
   seats: AircraftSeat[];
   guests: PassengerDraft[];
   bags: number[];
@@ -350,6 +351,7 @@ function BookingJourney() {
   // every back-navigation.
   const [step, setStep] = useState<Step>(draft?.step ?? 'search');
   const [flight, setFlight] = useState<Flight | null>(draft?.flight ?? null);
+  const [returnFlight, setReturnFlight] = useState<Flight | null>(draft?.returnFlight ?? null);
   const [travellers, setTravellers] = useState<Travellers>(draft?.travellers ?? ONE_ADULT);
   // The cabin chosen in the search widget - preselects (never hides) a cabin
   // on the fare step.
@@ -364,7 +366,7 @@ function BookingJourney() {
   const [guests, setGuests] = useState<PassengerDraft[]>(draft?.guests ?? [emptyPassenger()]);
   const [bags, setBags] = useState<number[]>(draft?.bags ?? [0]);
   const [contactEmail, setContactEmail] = useState(draft?.contactEmail ?? '');
-  const [result, setResult] = useState<{ booking: Booking; payment: Payment } | null>(null);
+  const [result, setResult] = useState<{ booking: Booking; payment: Payment; returnBooking?: Booking } | null>(null);
 
   const paxCount = totalTravellers(travellers);
   // Adults first, then children, then infants - the order checkout renders
@@ -404,6 +406,7 @@ function BookingJourney() {
       travellers,
       preferredCabin,
       choice,
+      returnFlight,
       seats,
       bags,
       contactEmail,
@@ -415,12 +418,13 @@ function BookingJourney() {
       // Storage full/blocked: the journey still works, it just won't survive
       // a navigation - the pre-persistence behaviour.
     }
-  }, [step, flight, travellers, preferredCabin, choice, seats, guests, bags, contactEmail]);
+  }, [step, flight, returnFlight, travellers, preferredCabin, choice, seats, guests, bags, contactEmail]);
 
   function restart() {
     sessionStorage.removeItem(JOURNEY_KEY);
     setStep('search');
     setFlight(null);
+    setReturnFlight(null);
     setTravellers(ONE_ADULT);
     setChoice(null);
     setSeats([]);
@@ -448,7 +452,9 @@ function BookingJourney() {
   const seatCharge = (s: AircraftSeat) =>
     choice && choice.fare !== 'SAVER' ? 0 : Number(s.listedSurcharge) || 0;
   const seatTotal = seats.reduce((sum, s) => sum + seatCharge(s), 0);
-  const bagTotal = bags.reduce((sum, b) => sum + b, 0) * EXTRA_BAG_FEE;
+  const tripLegs = returnFlight ? 2 : 1;
+  // Each direction is its own ticket, so bags are charged per ticket.
+  const bagTotal = bags.reduce((sum, b) => sum + b, 0) * EXTRA_BAG_FEE * tripLegs;
   const total = (choice ? choice.baseFare * paxCount : 0) + seatTotal + bagTotal;
   const guestLabel = (index: number) =>
     `${guests[index]?.firstName ?? ''} ${guests[index]?.lastName ?? ''}`.trim() || `Guest ${index + 1}`;
@@ -460,7 +466,7 @@ function BookingJourney() {
     ),
     ...bags.flatMap((count, index) =>
       count > 0
-        ? [{ label: `${guestLabel(index)} · ${count} extra bag${count > 1 ? 's' : ''}`, amount: count * EXTRA_BAG_FEE }]
+        ? [{ label: `${guestLabel(index)} · ${count} extra bag${count > 1 ? 's' : ''}${tripLegs > 1 ? ' × 2 tickets' : ''}`, amount: count * EXTRA_BAG_FEE * tripLegs }]
         : [],
     ),
   ];
@@ -494,7 +500,7 @@ function BookingJourney() {
 
   if (step === 'confirmed' && result) {
     return (
-      <ConfirmationPage booking={result.booking} payment={result.payment} onDone={restart} />
+      <ConfirmationPage booking={result.booking} payment={result.payment} returnBooking={result.returnBooking} onDone={restart} />
     );
   }
 
@@ -510,13 +516,14 @@ function BookingJourney() {
         travellers={travellers}
         guests={guests}
         seats={alignedSeats as AircraftSeat[]}
+        returnFlight={returnFlight}
         bags={bags}
         contactEmail={contactEmail}
         extras={extras}
         total={total}
         onBack={() => setStep('bags')}
-        onBooked={(booking, payment) => {
-          setResult({ booking, payment });
+        onBooked={(booking, payment, returnBooking) => {
+          setResult({ booking, payment, returnBooking });
           setStep('confirmed');
         }}
       />
@@ -542,7 +549,7 @@ function BookingJourney() {
         }
         extras={extras}
         total={total}
-        onBack={() => setStep('seat')}
+        onBack={() => setStep(returnFlight ? 'guests' : 'seat')}
         onContinue={() => setStep('payment')}
       />
       </>
@@ -589,7 +596,7 @@ function BookingJourney() {
         onContactEmailChange={setContactEmail}
         total={total}
         onBack={() => setStep('fares')}
-        onContinue={() => setStep('seat')}
+        onContinue={() => setStep(returnFlight ? 'bags' : 'seat')}
       />
       </>
     );
@@ -601,6 +608,7 @@ function BookingJourney() {
       {newSearchBar}
       <FlightQuotePage
         flight={flight}
+        returnFlight={returnFlight}
         paxCount={paxCount}
         preferredCabin={preferredCabin}
         onBack={() => setStep('search')}
@@ -615,8 +623,9 @@ function BookingJourney() {
 
   return (
     <SearchPage
-      onSelectFlight={(chosen, party, cabin) => {
+      onSelectFlight={(chosen, party, cabin, inbound) => {
         setFlight(chosen);
+        setReturnFlight(inbound ?? null);
         setTravellers(party);
         setPreferredCabin(cabin);
         setSeats([]);
