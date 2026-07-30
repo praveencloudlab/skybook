@@ -70,12 +70,34 @@ function open(title: string, body: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-function bars(token: string): string {
-  return (
-    '<div class="bars" role="img" aria-label="barcode">' +
-    [...token.slice(0, 140)].map((c) => `<span style="height:${40 + (c.charCodeAt(0) % 60)}%"></span>`).join('') +
-    '</div>'
-  );
+/**
+ * A crisp Code-128-style barcode as inline SVG: uniform height, variable bar
+ * widths derived deterministically from the text, quiet zones, and the
+ * human-readable value beneath - the way a printed airline receipt looks.
+ */
+function barcodeSvg(text: string, height = 46): string {
+  const widths: number[] = [2, 1, 1, 2]; // start pattern
+  for (const ch of text) {
+    const c = ch.charCodeAt(0);
+    widths.push(1 + (c % 3), 1 + ((c >> 2) % 2), 2 + (c % 2), 1 + ((c >> 3) % 2));
+  }
+  widths.push(2, 1, 2); // stop pattern
+  let x = 4; // leading quiet zone
+  const rects: string[] = [];
+  widths.forEach((w, i) => {
+    if (i % 2 === 0) {
+      rects.push(`<rect x="${x}" y="0" width="${w}" height="${height}" fill="#0f172a"/>`);
+    }
+    x += w;
+  });
+  const total = x + 4;
+  return `
+    <div style="text-align:center;">
+      <svg viewBox="0 0 ${total} ${height}" preserveAspectRatio="none"
+           style="width:100%;max-width:300px;height:${height}px;display:block;margin:0 auto;"
+           role="img" aria-label="barcode ${text}">${rects.join('')}</svg>
+      <div style="font-family:'Courier New',monospace;font-size:12px;letter-spacing:6px;color:#334155;margin-top:6px;">${text}</div>
+    </div>`;
 }
 
 
@@ -311,33 +333,33 @@ export function printETicket(
   const segmentRows = (flight: Flight, index: number, cancelled: boolean) => `
       ${multi ? `
       <tr>
-        <td colspan="6" style="padding:8px 12px;background:#f3eef1;color:${MAROON};font-weight:800;font-size:12px;letter-spacing:1px;">
+        <td colspan="6" style="padding:11px 14px;background:#f3eef1;color:${MAROON};font-weight:800;font-size:12px;letter-spacing:1px;">
           ${legLabel(index)} &middot; ${flight.originAirportCode} &rarr; ${flight.destinationAirportCode}
           ${cancelled ? ' &mdash; <span style="color:#b42318;">CANCELLED</span>' : ''}
         </td>
       </tr>` : ''}
       <tr${cancelled ? ' style="opacity:.55;"' : ''}>
-        <td style="padding:10px 12px;vertical-align:top;">
+        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">
           <div><b style="font-size:15px;">${flight.originAirportCode}</b> ${cityFor(flight.originAirportCode).toUpperCase()}</div>
           <div style="color:#333;">Terminal: M</div>
         </td>
-        <td style="padding:10px 12px;vertical-align:top;">
+        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">
           <div><b style="font-size:15px;">${flight.destinationAirportCode}</b> ${cityFor(flight.destinationAirportCode).toUpperCase()}</div>
           <div style="color:#333;">Terminal: 4</div>
         </td>
-        <td style="padding:10px 12px;vertical-align:top;">${flight.airlineCode}${flight.flightNumber.replace(/\D/g, '') || flight.flightNumber}</td>
-        <td style="padding:10px 12px;vertical-align:top;"><b>${time(flight.departureTime)}</b><br>${ddMon(flight.departureTime)}</td>
-        <td style="padding:10px 12px;vertical-align:top;"><b>${time(flight.arrivalTime)}</b><br>${ddMon(flight.arrivalTime)}</td>
-        <td style="padding:10px 12px;vertical-align:top;">${timeShift(flight.departureTime, -60)}</td>
+        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">${flight.airlineCode}${flight.flightNumber.replace(/\D/g, '') || flight.flightNumber}</td>
+        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;"><b>${time(flight.departureTime)}</b><br>${ddMon(flight.departureTime)}</td>
+        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;"><b>${time(flight.arrivalTime)}</b><br>${ddMon(flight.arrivalTime)}</td>
+        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">${timeShift(flight.departureTime, -60)}</td>
       </tr>
       <tr style="background:#ececec;font-size:12px;color:#222;${cancelled ? 'opacity:.55;' : ''}">
-        <td colspan="2" style="padding:10px 12px;vertical-align:top;">
+        <td colspan="2" style="padding:14px 14px;vertical-align:top;line-height:1.85;">
           <div>Class: <b>${classCode}</b></div>
           <div>Cabin: ${cabin}</div>
           <div>Max baggage (4): ${baggage}</div>
           <div>Fare basis: ${fareBasis}</div>
         </td>
-        <td colspan="2" style="padding:10px 12px;vertical-align:top;">
+        <td colspan="2" style="padding:14px 14px;vertical-align:top;line-height:1.85;">
           <div>Operated by: SKYBOOK</div>
           <div>Marketed by: SKYBOOK</div>
           <div>Booking status (1): ${cancelled ? 'CANCELLED' : 'OK'}</div>
@@ -347,7 +369,7 @@ export function printETicket(
               .map((p) => p.seatNumber ?? '&mdash;')
               .join(', ') || '&mdash;'}</div>
         </td>
-        <td colspan="2" style="padding:10px 12px;vertical-align:top;">
+        <td colspan="2" style="padding:14px 14px;vertical-align:top;line-height:1.85;">
           <div>NVB (2): ${ddMon(flight.departureTime)}</div>
           <div>NVA (3): ${addDaysMon(flight.departureTime, 120)}</div>
           <div>Duration: ${durationHM(flight.departureTime, flight.arrivalTime)}</div>
@@ -376,36 +398,43 @@ export function printETicket(
         </div>
       </div>
 
-      <!-- Passenger + barcode block -->
-      <table style="width:100%;border-collapse:collapse;margin-top:18px;">
+      <!-- Passenger + barcode block: labelled rows with real breathing room. -->
+      <table style="width:100%;border-collapse:collapse;margin-top:26px;">
         <tr>
-          <td style="vertical-align:top;padding:0 16px;">
-            <div style="margin-bottom:8px;"><b>Passenger:</b> ${paxLines}</div>
-            <div style="margin-bottom:8px;"><b>Booking ref:</b> ${booking.bookingReference}</div>
-            <div><b>Ticket number:</b> ${ticketNo}</div>
+          <td style="vertical-align:top;padding:0 20px;">
+            <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#8a93a3;margin-bottom:4px;">Passenger</div>
+            <div style="font-size:16px;font-weight:700;line-height:1.6;margin-bottom:14px;">${paxLines}</div>
+            <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#8a93a3;margin-bottom:4px;">Booking reference</div>
+            <div style="font-family:'Courier New',monospace;font-size:18px;font-weight:700;letter-spacing:3px;color:${MAROON};margin-bottom:14px;">${booking.bookingReference}</div>
+            <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#8a93a3;margin-bottom:4px;">E-ticket number${(booking.tickets?.length ?? 0) > 1 ? 's' : ''}</div>
+            <div style="font-family:'Courier New',monospace;font-size:14px;font-weight:700;line-height:1.7;">${ticketNo}</div>
           </td>
-          <td style="vertical-align:top;padding:0 16px;width:48%;">
-            <div style="height:52px;">${bars(booking.bookingReference.repeat(8))}</div>
-            <div style="margin-top:6px;"><b>Itinerary Printing Office:</b></div>
-            <div>SKYBOOK DIGITAL, DIGITAL OFFICE</div>
-            <div><b>Date:</b> ${ddMon(booking.bookingDate)}</div>
+          <td style="vertical-align:top;padding:0 20px;width:46%;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px 12px;">
+              ${barcodeSvg(booking.bookingReference)}
+            </div>
+            <div style="margin-top:12px;font-size:12px;color:#475569;line-height:1.8;">
+              <div><b style="color:#1a1a1a;">Itinerary Printing Office</b></div>
+              <div>SKYBOOK DIGITAL, DIGITAL OFFICE</div>
+              <div><b style="color:#1a1a1a;">Date of issue:</b> ${ddMon(booking.bookingDate)}</div>
+            </div>
           </td>
         </tr>
       </table>
 
       <!-- ETR band -->
-      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:18px;letter-spacing:.5px;padding:11px 16px;margin-top:16px;">ELECTRONIC TICKET RECEIPT</div>
+      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:18px;letter-spacing:.5px;padding:14px 20px;margin-top:24px;border-radius:6px;">ELECTRONIC TICKET RECEIPT</div>
 
       <!-- Itinerary -->
       <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;">
         <thead>
           <tr style="background:#d9d9d9;color:#333;text-align:left;font-size:12px;">
-            <th style="padding:7px 12px;font-weight:700;">From</th>
-            <th style="padding:7px 12px;font-weight:700;">To</th>
-            <th style="padding:7px 12px;font-weight:700;">Flight</th>
-            <th style="padding:7px 12px;font-weight:700;">Departure</th>
-            <th style="padding:7px 12px;font-weight:700;">Arrival</th>
-            <th style="padding:7px 12px;font-weight:700;">Last check-in</th>
+            <th style="padding:11px 14px;font-weight:700;">From</th>
+            <th style="padding:11px 14px;font-weight:700;">To</th>
+            <th style="padding:11px 14px;font-weight:700;">Flight</th>
+            <th style="padding:11px 14px;font-weight:700;">Departure</th>
+            <th style="padding:11px 14px;font-weight:700;">Arrival</th>
+            <th style="padding:11px 14px;font-weight:700;">Last check-in</th>
           </tr>
         </thead>
         <tbody>${segment}</tbody>
@@ -413,13 +442,13 @@ export function printETicket(
       <div style="border-top:2px solid #333;margin-top:0;"></div>
 
       <!-- Footnotes -->
-      <div style="font-size:11px;color:#333;margin-top:12px;padding:0 4px;line-height:1.5;">
+      <div style="font-size:11.5px;color:#333;margin-top:20px;padding:0 6px;line-height:1.9;">
         <b>(1)</b> OK = Confirmed &nbsp; <b>(2)</b> NVB = Not valid before &nbsp; <b>(3)</b> NVA = Not valid after &nbsp;
         <b>(4)</b> Each passenger can check in a specific amount of baggage at no extra cost as indicated in the column baggage.
         For more information on baggage rules and restrictions, please visit
         <span style="color:#1d4ed8;text-decoration:underline;">skybook.example/baggage</span>.
       </div>
-      <div style="font-size:11px;color:#666;margin-top:10px;padding:0 4px;">
+      <div style="font-size:12px;color:#555;margin-top:14px;padding:12px 6px 0;border-top:1px solid #e2e8f0;line-height:1.8;">
         Total paid: <b>${money(booking.totalFare, _currency)}</b> &nbsp;·&nbsp; Status: ${booking.bookingStatus}
         ${booking.contact ? ' &nbsp;·&nbsp; Contact: ' + booking.contact.contactEmail : ''}
       </div>
