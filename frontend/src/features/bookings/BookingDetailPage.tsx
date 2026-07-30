@@ -289,7 +289,13 @@ export function BookingDetailPage({
             <p className="tabular text-2xl font-bold">{money(booking.totalFare, CURRENCY)}</p>
             <button
               type="button"
-              onClick={() => printETicket(booking, flight, CURRENCY)}
+              onClick={() =>
+                printETicket(
+                  booking,
+                  { ...(flight ? { [flight.id]: flight } : {}), ...segmentFlights },
+                  CURRENCY,
+                )
+              }
               className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 px-3.5 py-2 text-xs font-semibold text-white ring-1 ring-inset ring-white/20 transition hover:bg-white/20"
             >
               <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 fill-current" aria-hidden="true">

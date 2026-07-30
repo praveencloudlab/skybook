@@ -274,22 +274,49 @@ const BAGGAGE: Record<string, string> = {
  * an "ELECTRONIC TICKET RECEIPT" band, the grey itinerary table with per-segment
  * detail rows, and the fare-condition footnotes.
  */
-export function printETicket(booking: Booking, flight: Flight | null, _currency = 'USD'): void {
+export function printETicket(
+  booking: Booking,
+  flightsById: Record<number, Flight>,
+  _currency = 'USD',
+): void {
   const MAROON = '#5a1836';
   const p0 = booking.passengers[0];
   const paxLines = booking.passengers
+    // One line per TRAVELLER, not per per-segment row.
+    .filter((p) => (p.segmentIndex ?? 0) === 0)
     .map((p) => `${p.firstName} ${p.lastName} (ADT)`)
     .join('<br>');
-  const ticketNo = `157 ${2100000000 + booking.id}`;
+  // Real e-ticket numbers once issued (125-XXXXXXXXXX, one per traveller);
+  // the legacy derived number only for pre-ticketing bookings.
+  const ticketNo = booking.tickets?.length
+    ? booking.tickets
+        .map((t) => `${t.ticketNumber.slice(0, 3)}-${t.ticketNumber.slice(3)}`)
+        .join('<br>')
+    : `157 ${2100000000 + booking.id}`;
 
   const cabin = p0 ? TRAVEL_CLASS_LABELS[p0.travelClass].toUpperCase() : 'ECONOMY';
   const fareBasis = p0 ? `${p0.travelClass[0]}${p0.fareType.slice(0, 3)}${booking.bookingReference}`.toUpperCase() : '';
   const classCode = p0 ? p0.fareType[0] : '';
   const baggage = (p0 && BAGGAGE[p0.travelClass]) || '25 kg checked + 7 kg cabin';
 
-  const segment = flight
-    ? `
+  // Every leg of the journey - a round trip prints BOTH directions, each as
+  // its own coupon rows. Legacy bookings without segments fall back to the
+  // booking-level flight.
+  const multi = (booking.segments?.length ?? 0) > 1;
+  const segs = booking.segments?.length
+    ? booking.segments
+    : [{ id: 0, segmentIndex: 0, flightId: booking.flightId, status: 'UPCOMING' as const }];
+
+  const legLabel = (i: number) => (i === 0 ? 'OUTBOUND' : i === 1 ? 'RETURN' : `LEG ${i + 1}`);
+  const segmentRows = (flight: Flight, index: number, cancelled: boolean) => `
+      ${multi ? `
       <tr>
+        <td colspan="6" style="padding:8px 12px;background:#f3eef1;color:${MAROON};font-weight:800;font-size:12px;letter-spacing:1px;">
+          ${legLabel(index)} &middot; ${flight.originAirportCode} &rarr; ${flight.destinationAirportCode}
+          ${cancelled ? ' &mdash; <span style="color:#b42318;">CANCELLED</span>' : ''}
+        </td>
+      </tr>` : ''}
+      <tr${cancelled ? ' style="opacity:.55;"' : ''}>
         <td style="padding:10px 12px;vertical-align:top;">
           <div><b style="font-size:15px;">${flight.originAirportCode}</b> ${cityFor(flight.originAirportCode).toUpperCase()}</div>
           <div style="color:#333;">Terminal: M</div>
@@ -303,7 +330,7 @@ export function printETicket(booking: Booking, flight: Flight | null, _currency 
         <td style="padding:10px 12px;vertical-align:top;"><b>${time(flight.arrivalTime)}</b><br>${ddMon(flight.arrivalTime)}</td>
         <td style="padding:10px 12px;vertical-align:top;">${timeShift(flight.departureTime, -60)}</td>
       </tr>
-      <tr style="background:#ececec;font-size:12px;color:#222;">
+      <tr style="background:#ececec;font-size:12px;color:#222;${cancelled ? 'opacity:.55;' : ''}">
         <td colspan="2" style="padding:10px 12px;vertical-align:top;">
           <div>Class: <b>${classCode}</b></div>
           <div>Cabin: ${cabin}</div>
@@ -313,16 +340,26 @@ export function printETicket(booking: Booking, flight: Flight | null, _currency 
         <td colspan="2" style="padding:10px 12px;vertical-align:top;">
           <div>Operated by: SKYBOOK</div>
           <div>Marketed by: SKYBOOK</div>
-          <div>Booking status (1): OK</div>
-          <div>Frequent flyer number &nbsp;&mdash;</div>
+          <div>Booking status (1): ${cancelled ? 'CANCELLED' : 'OK'}</div>
+          <div>Seat${booking.passengers.filter((p) => (p.segmentIndex ?? 0) === index && !p.cancelled && p.seatNumber).length === 1 ? '' : 's'}:
+            ${booking.passengers
+              .filter((p) => (p.segmentIndex ?? 0) === index && !p.cancelled)
+              .map((p) => p.seatNumber ?? '&mdash;')
+              .join(', ') || '&mdash;'}</div>
         </td>
         <td colspan="2" style="padding:10px 12px;vertical-align:top;">
           <div>NVB (2): ${ddMon(flight.departureTime)}</div>
           <div>NVA (3): ${addDaysMon(flight.departureTime, 120)}</div>
           <div>Duration: ${durationHM(flight.departureTime, flight.arrivalTime)}</div>
         </td>
-      </tr>`
-    : '';
+      </tr>`;
+
+  const segment = segs
+    .map((seg) => {
+      const flight = flightsById[seg.flightId];
+      return flight ? segmentRows(flight, seg.segmentIndex, seg.status === 'CANCELLED') : '';
+    })
+    .join('');
 
   const body = `
     <div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:13px;">
