@@ -201,6 +201,112 @@ public class BookingFacade {
     }
 
     /**
+     * Cancel just one segment - "drop the return" (ROUND_TRIP_MODULE.md §7).
+     * Releases only that leg's seats; the event fires only if the booking
+     * as a whole ended up cancelled, mirroring cancelPassengers.
+     */
+    public CancelPassengersResponse cancelSegment(Long bookingId, int segmentIndex) {
+
+        CancelPassengersResponse result = bookingService.cancelSegment(bookingId, segmentIndex);
+        BookingResponse booking = result.booking();
+
+        for (BookingPassengerResponse passenger : booking.passengers()) {
+            if (passenger.cancelled() && passenger.segmentIndex() == segmentIndex
+                    && passenger.seatNumber() != null && !passenger.seatNumber().isBlank()) {
+                inventoryServiceClient.releaseHoldQuietly(passenger.flightId(),
+                        passenger.seatNumber(), booking.id(), "segment cancelled");
+                inventoryServiceClient.cancelReservationQuietly(passenger.flightId(),
+                        passenger.seatNumber(), booking.id(), "segment cancelled");
+            }
+        }
+
+        if (result.bookingCancelled()) {
+            bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking));
+        }
+
+        return result;
+    }
+
+    /**
+     * Premium date change (ROUND_TRIP_MODULE.md §11): move one segment to a
+     * new flight on the SAME booking. Old seats release; replacement rows
+     * auto-hold + reserve on the new flight (Premium seats are free, so the
+     * charged surcharge is always 0 and no money moves for seats); the
+     * refreshed CONFIRMED event lets checkin-service open per-direction
+     * check-in for the new rows and close the exchanged ones.
+     */
+    public BookingResponse rebookSegment(Long bookingId, int segmentIndex, Long newFlightId) {
+
+        FlightDetails newFlight = flightServiceClient.getFlight(newFlightId);
+        if (newFlight.status() == FlightBookingStatus.CANCELLED) {
+            throw new IllegalArgumentException("Cannot move the booking onto a cancelled flight");
+        }
+
+        // Chronology stays sane against the OTHER segment, best-effort.
+        BookingResponse current = bookingService.getBookingById(bookingId);
+        for (var other : current.segments()) {
+            if (other.segmentIndex() == segmentIndex) {
+                continue;
+            }
+            FlightDetails otherFlight = flightOrNull(other.flightId());
+            if (otherFlight == null) {
+                continue;
+            }
+            boolean ok = other.segmentIndex() < segmentIndex
+                    ? newFlight.departureTime().isAfter(otherFlight.arrivalTime())
+                    : otherFlight.departureTime().isAfter(newFlight.arrivalTime());
+            if (!ok) {
+                throw new IllegalArgumentException(
+                        "The new flight clashes with the other leg of this trip - pick a date that keeps "
+                                + "the outbound before the return.");
+            }
+        }
+
+        // Seats to release AFTER the exchange commits - captured up front.
+        List<BookingPassengerResponse> oldRows = current.passengers().stream()
+                .filter(p -> !p.cancelled() && p.segmentIndex() == segmentIndex)
+                .toList();
+
+        BookingResponse rebooked = bookingService.rebookSegment(
+                bookingId, segmentIndex, newFlightId, newFlight.departureTime());
+
+        for (BookingPassengerResponse old : oldRows) {
+            if (old.seatNumber() != null && !old.seatNumber().isBlank()) {
+                inventoryServiceClient.releaseHoldQuietly(old.flightId(), old.seatNumber(),
+                        bookingId, "segment rebooked");
+                inventoryServiceClient.cancelReservationQuietly(old.flightId(), old.seatNumber(),
+                        bookingId, "segment rebooked");
+            }
+        }
+
+        // Auto-seat the replacement rows on the new flight - quiet, best
+        // effort (a seatless row picks a seat at check-in instead).
+        Map<Long, String> seatByRow = new java.util.HashMap<>();
+        for (BookingPassengerResponse row : rebooked.passengers()) {
+            if (row.cancelled() || row.segmentIndex() != segmentIndex || row.seatNumber() != null) {
+                continue;
+            }
+            try {
+                Optional<InventoryHoldDetails> hold = inventoryServiceClient.autoHoldSeat(
+                        newFlightId, bookingId, row.id(), row.travelClass());
+                if (hold.isPresent()) {
+                    inventoryServiceClient.reserveSeat(newFlightId, hold.get().seatNumber(), bookingId, row.id());
+                    seatByRow.put(row.id(), hold.get().seatNumber());
+                }
+            } catch (RuntimeException e) {
+                log.warn("Could not auto-seat rebooked row {} on flight {}: {}", row.id(), newFlightId, e.getMessage());
+            }
+        }
+        BookingResponse finalBooking = seatByRow.isEmpty()
+                ? rebooked
+                : bookingService.applySeatNumbers(bookingId, seatByRow);
+
+        bookingEventProducer.publishBookingConfirmed(finalBooking, flightsOrNull(finalBooking));
+
+        return finalBooking;
+    }
+
+    /**
      * Fare options for a flight (§11): the ONLY place inventory's cabin
      * availability and FareCalculator's base fares are combined - neither
      * service ever computes the other's numbers. Cabins the aircraft doesn't

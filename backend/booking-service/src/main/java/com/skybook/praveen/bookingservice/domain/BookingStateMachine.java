@@ -144,6 +144,12 @@ public class BookingStateMachine {
         recordHistory(passenger.getBooking(), BookingHistoryField.CHECK_IN_STATUS, from, to, null, changedBy);
     }
 
+    /** Free-form audit entry for changes that aren't a status transition (e.g. a Premium date change). */
+    public void recordCustomHistory(Booking booking, String reason, String changedBy) {
+        recordHistory(booking, BookingHistoryField.BOOKING_STATUS,
+                booking.getBookingStatus(), booking.getBookingStatus(), reason, changedBy);
+    }
+
     private void recordHistory(Booking booking, BookingHistoryField field, Object from, Object to, String reason, String changedBy) {
 
         // The column is varchar(255); a long inventory error inside a

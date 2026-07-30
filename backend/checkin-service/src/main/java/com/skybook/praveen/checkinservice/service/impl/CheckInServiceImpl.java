@@ -213,6 +213,22 @@ public class CheckInServiceImpl implements CheckInService {
 
     @Override
     @Transactional
+    public java.util.Optional<CheckInResponse> cancelForBookingPassenger(Long bookingPassengerId, String reason) {
+
+        return checkInRepository.findByBookingPassengerId(bookingPassengerId)
+                .filter(checkIn -> stateMachine.canTransition(checkIn.getStatus(), CheckInStatus.CANCELLED))
+                .map(checkIn -> {
+                    stateMachine.transition(checkIn, CheckInStatus.CANCELLED, CheckInHistoryType.CANCELLED,
+                            "KAFKA", "BOOKING_EVENT", null, reason);
+                    checkInRepository.save(checkIn);
+                    log.info("Cancelled check-in {} for booking passenger {} ({})",
+                            checkIn.getId(), bookingPassengerId, reason);
+                    return CheckInMapper.toResponse(checkIn);
+                });
+    }
+
+    @Override
+    @Transactional
     public List<CheckInResponse> sweepNoShows(LocalDateTime departureCutoff) {
 
         List<CheckIn> overdue = checkInRepository.findByStatusInAndDepartureTimeBefore(SWEEPABLE, departureCutoff);

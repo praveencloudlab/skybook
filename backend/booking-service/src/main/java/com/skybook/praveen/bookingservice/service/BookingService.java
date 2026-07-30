@@ -50,6 +50,31 @@ public interface BookingService {
     /** Cancels DRAFT bookings older than the configured TTL (stale-draft sweep, §5.1a). Returns how many. */
     int cancelStaleDrafts();
 
+    /**
+     * Cancel one whole segment - "drop the return" (ROUND_TRIP_MODULE.md §7).
+     * Only segmentIndex >= 1 may be cancelled alone: dropping the outbound
+     * while flying the return is the no-show pattern airlines void tickets
+     * over. All the segment's active rows cancel, their coupons go REFUNDED,
+     * and the booking derives PARTIALLY_CANCELLED (or CANCELLED if nothing
+     * remains).
+     */
+    CancelPassengersResponse cancelSegment(Long bookingId, int segmentIndex);
+
+    /**
+     * Premium date change (ROUND_TRIP_MODULE.md §11): move ONE segment to a
+     * new flight, keeping the same booking and tickets. Old rows cancel with
+     * coupons CANCELLED (exchanged, not refunded); replacement rows are
+     * created seatless on the new flight priced at ITS departure; each
+     * ticket gains a fresh OPEN coupon; totalFare and the payment snapshot
+     * adjust by the fare difference (simulated processor). Guarded to
+     * PREMIUM rows - other fare families change dates via cancel + rebook.
+     */
+    BookingResponse rebookSegment(Long bookingId, int segmentIndex, Long newFlightId,
+                                  LocalDateTime newDepartureTime);
+
+    /** Write the seats the facade holds+reserves for freshly rebooked rows (seat only - Premium seat picks are free). */
+    BookingResponse applySeatNumbers(Long bookingId, java.util.Map<Long, String> seatByRowId);
+
     BookingResponse getBookingById(Long id);
 
     BookingResponse getBookingByReference(String bookingReference);

@@ -177,6 +177,33 @@ public class BookingController {
         return bookingFacade.cancelPassengers(id, request.bookingPassengerIds());
     }
 
+    @Operation(summary = "Cancel Segment",
+            description = "Cancel one whole segment of a multi-segment booking - \"drop the return\" "
+                    + "(ROUND_TRIP_MODULE.md §7). Only segmentIndex >= 1 may be cancelled alone; the "
+                    + "segment's seats release, its coupons go REFUNDED and the booking derives "
+                    + "PARTIALLY_CANCELLED (or CANCELLED when nothing remains).")
+    @PostMapping("/{id}/segments/{segmentIndex}/cancel")
+    public CancelPassengersResponse cancelSegment(
+            @PathVariable Long id,
+            @PathVariable int segmentIndex) {
+        accessGuard.requireOwnerOfBooking(id);
+        return bookingFacade.cancelSegment(id, segmentIndex);
+    }
+
+    @Operation(summary = "Rebook Segment (Premium date change)",
+            description = "Move one segment onto a new flight, same booking and tickets "
+                    + "(ROUND_TRIP_MODULE.md §11): old rows exchange (coupons CANCELLED), replacement "
+                    + "rows price at the new departure, fare difference adjusts the payment snapshot. "
+                    + "Premium fares only - other families use cancel + rebook.")
+    @PostMapping("/{id}/segments/{segmentIndex}/rebook")
+    public BookingResponse rebookSegment(
+            @PathVariable Long id,
+            @PathVariable int segmentIndex,
+            @Valid @RequestBody com.skybook.praveen.bookingservice.dto.request.RebookSegmentRequest request) {
+        accessGuard.requireOwnerOfBooking(id);
+        return bookingFacade.rebookSegment(id, segmentIndex, request.newFlightId());
+    }
+
     @Operation(summary = "Complete Booking", description = "Marks the booking as COMPLETED once the flight has flown.")
     @PatchMapping("/{id}/complete")
     public BookingResponse completeBooking(@PathVariable Long id) {

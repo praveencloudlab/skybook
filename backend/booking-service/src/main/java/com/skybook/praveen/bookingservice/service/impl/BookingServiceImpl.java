@@ -414,8 +414,18 @@ public class BookingServiceImpl implements BookingService {
                 .toList();
         Set<Long> ids = new HashSet<>(bookingPassengerIds);
 
-        List<BookingPassenger> toCancel = active.stream()
+        // Cancelling a passenger cancels them off EVERY segment
+        // (ROUND_TRIP_MODULE.md §7): selecting any one of a traveller's
+        // per-segment rows expands to all their rows - you can't fly out and
+        // not exist on the return.
+        Set<Long> travellerIds = active.stream()
                 .filter(bp -> ids.contains(bp.getId()))
+                .map(bp -> bp.getPassenger().getId())
+                .collect(Collectors.toSet());
+
+        List<BookingPassenger> toCancel = active.stream()
+                .filter(bp -> ids.contains(bp.getId())
+                        || (bp.getPassenger().getId() != null && travellerIds.contains(bp.getPassenger().getId())))
                 .toList();
         if (toCancel.isEmpty()) {
             throw new IllegalStateException("None of the selected passengers are on this booking, or they are already cancelled.");
@@ -486,6 +496,211 @@ public class BookingServiceImpl implements BookingService {
 
         Booking saved = bookingRepository.save(booking);
         return new CancelPassengersResponse(BookingMapper.toResponse(saved), refundAmount, bookingCancelled);
+    }
+
+    @Override
+    @Transactional
+    public CancelPassengersResponse cancelSegment(Long bookingId, int segmentIndex) {
+        Booking booking = findBookingOrThrow(bookingId);
+
+        // §7: only the return may go alone - dropping the outbound while
+        // keeping the return is the no-show trap airlines void tickets over.
+        if (segmentIndex < 1) {
+            throw new IllegalStateException(
+                    "The outbound can't be cancelled on its own - cancel the whole booking, "
+                            + "or change the outbound flight instead.");
+        }
+        BookingSegment segment = booking.getSegments().stream()
+                .filter(s -> s.getSegmentIndex() == segmentIndex)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Booking " + booking.getBookingReference() + " has no segment " + segmentIndex));
+
+        List<BookingPassenger> toCancel = booking.getPassengers().stream()
+                .filter(bp -> !bp.isCancelled())
+                .filter(bp -> bp.getSegment() != null && segment.getId() != null
+                        ? segment.getId().equals(bp.getSegment().getId())
+                        : bp.getSegment() == segment)
+                .toList();
+        if (toCancel.isEmpty()) {
+            throw new IllegalStateException("This segment is already fully cancelled.");
+        }
+        for (BookingPassenger bp : toCancel) {
+            if (bp.getCheckInStatus() == CheckInStatus.CHECKED_IN || bp.getCheckInStatus() == CheckInStatus.BOARDED) {
+                throw new IllegalStateException(bp.getPassenger().getFirstName()
+                        + " has already checked in on this flight - the segment can no longer be cancelled online.");
+            }
+        }
+
+        BigDecimal refundAmount = toCancel.stream()
+                .map(BookingPassenger::getFare)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        for (BookingPassenger bp : toCancel) {
+            bp.setCancelled(true);
+            bp.setCheckInStatus(CheckInStatus.CLOSED);
+        }
+        Set<Long> cancelledRows = toCancel.stream().map(BookingPassenger::getId).collect(Collectors.toSet());
+        refundCoupons(booking, row -> cancelledRows.contains(row.getId()));
+
+        List<BookingPassenger> remaining = booking.getPassengers().stream()
+                .filter(bp -> !bp.isCancelled())
+                .toList();
+        boolean bookingCancelled = remaining.isEmpty();
+        if (bookingCancelled) {
+            bookingStateMachine.transitionBookingStatus(booking, BookingStatus.CANCELLED,
+                    "segment " + segmentIndex + " was the last active segment", "system");
+            if (booking.getPayment() != null && booking.getPayment().getPaymentStatus() == PaymentStatus.PAID) {
+                bookingValidator.validateRefundAllowed(booking);
+                bookingStateMachine.transitionPaymentStatus(booking.getPayment(), PaymentStatus.REFUNDED, "system");
+            }
+        } else {
+            if (booking.getBookingStatus() != BookingStatus.PARTIALLY_CANCELLED) {
+                bookingStateMachine.transitionBookingStatus(booking, BookingStatus.PARTIALLY_CANCELLED,
+                        "segment " + segmentIndex + " cancelled", "system");
+            }
+            booking.setTotalFare(remaining.stream()
+                    .map(BookingPassenger::getFare)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
+        }
+
+        Booking saved = bookingRepository.save(booking);
+        log.info("Cancelled segment {} of booking {} - {} row(s), refund {}",
+                segmentIndex, saved.getBookingReference(), toCancel.size(), refundAmount);
+        return new CancelPassengersResponse(BookingMapper.toResponse(saved), refundAmount, bookingCancelled);
+    }
+
+    @Override
+    @Transactional
+    public BookingResponse rebookSegment(Long bookingId, int segmentIndex, Long newFlightId,
+                                         LocalDateTime newDepartureTime) {
+        Booking booking = findBookingOrThrow(bookingId);
+
+        if (booking.getBookingStatus() != BookingStatus.CONFIRMED
+                && booking.getBookingStatus() != BookingStatus.PARTIALLY_CANCELLED) {
+            throw new IllegalStateException("Only a confirmed booking can change flight dates online.");
+        }
+        BookingSegment segment = booking.getSegments().stream()
+                .filter(s -> s.getSegmentIndex() == segmentIndex)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Booking " + booking.getBookingReference() + " has no segment " + segmentIndex));
+
+        List<BookingPassenger> oldRows = booking.getPassengers().stream()
+                .filter(bp -> !bp.isCancelled())
+                .filter(bp -> bp.getSegment() != null && segment.getId() != null
+                        ? segment.getId().equals(bp.getSegment().getId())
+                        : bp.getSegment() == segment)
+                .toList();
+        if (oldRows.isEmpty()) {
+            throw new IllegalStateException("This segment is cancelled - there is nothing to rebook.");
+        }
+        for (BookingPassenger bp : oldRows) {
+            if (bp.getCheckInStatus() == CheckInStatus.CHECKED_IN || bp.getCheckInStatus() == CheckInStatus.BOARDED) {
+                throw new IllegalStateException(bp.getPassenger().getFirstName()
+                        + " has already checked in on this flight - the date can no longer be changed online.");
+            }
+            // The entitlement with teeth (ROUND_TRIP_MODULE.md §11): Premium
+            // changes dates online for just the fare difference; other fare
+            // families go through cancel + rebook.
+            if (bp.getFareType() != com.skybook.praveen.bookingservice.enums.FareType.PREMIUM) {
+                throw new IllegalStateException(
+                        "Online date changes are a Premium fare benefit - use Change flight (cancel and rebook) instead.");
+            }
+        }
+
+        BigDecimal oldFares = BigDecimal.ZERO;
+        BigDecimal newFares = BigDecimal.ZERO;
+        List<BookingPassenger> newRows = new ArrayList<>();
+        for (BookingPassenger old : oldRows) {
+            old.setCancelled(true);
+            old.setCheckInStatus(CheckInStatus.CLOSED);
+            oldFares = oldFares.add(old.getFare());
+
+            BigDecimal baseFare = fareCalculator.calculateFare(old.getTravelClass(), old.getFareType(),
+                    newDepartureTime);
+            BigDecimal baggageFee = old.getBaggageFee() != null ? old.getBaggageFee() : BigDecimal.ZERO;
+            BookingPassenger replacement = BookingPassenger.builder()
+                    .booking(booking)
+                    .passenger(old.getPassenger())
+                    .segment(segment)
+                    .flightId(newFlightId)
+                    .travelClass(old.getTravelClass())
+                    .fareType(old.getFareType())
+                    .baseFare(baseFare)
+                    .seatSurcharge(BigDecimal.ZERO)
+                    .extraBags(old.getExtraBags())
+                    .baggageFee(baggageFee)
+                    .chargedSeatAssignmentMode(SeatAssignmentMode.AUTO)
+                    .currency(old.getCurrency())
+                    .fare(baseFare.add(baggageFee))
+                    .checkInStatus(CheckInStatus.NOT_OPEN)
+                    .build();
+            newRows.add(replacement);
+            newFares = newFares.add(replacement.getFare());
+        }
+        booking.getPassengers().addAll(newRows);
+        segment.setFlightId(newFlightId);
+
+        // Exchange, not refund: old coupons go CANCELLED; each ticket gains a
+        // fresh OPEN coupon for its traveller's replacement row.
+        Set<Long> exchangedRows = oldRows.stream().map(BookingPassenger::getId).collect(Collectors.toSet());
+        for (Ticket ticket : booking.getTickets()) {
+            int nextCoupon = ticket.getCoupons().stream()
+                    .mapToInt(TicketCoupon::getCouponNumber).max().orElse(0) + 1;
+            for (TicketCoupon coupon : ticket.getCoupons()) {
+                if (exchangedRows.contains(coupon.getBookingPassenger().getId())
+                        && coupon.getStatus() != CouponStatus.FLOWN) {
+                    coupon.setStatus(CouponStatus.CANCELLED);
+                }
+            }
+            for (BookingPassenger replacement : newRows) {
+                if (replacement.getPassenger() == ticket.getPassenger()
+                        || (ticket.getPassenger().getId() != null
+                            && ticket.getPassenger().getId().equals(replacement.getPassenger().getId()))) {
+                    ticket.getCoupons().add(TicketCoupon.builder()
+                            .ticket(ticket)
+                            .bookingPassenger(replacement)
+                            .couponNumber(nextCoupon++)
+                            .status(CouponStatus.OPEN)
+                            .build());
+                }
+            }
+        }
+
+        // Fare difference (simulated processor): totalFare and the payment
+        // snapshot move to the new total; history records the delta.
+        BigDecimal newTotal = booking.getPassengers().stream()
+                .filter(bp -> !bp.isCancelled())
+                .map(BookingPassenger::getFare)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        booking.setTotalFare(newTotal);
+        if (booking.getPayment() != null) {
+            booking.getPayment().setAmount(newTotal);
+        }
+        BigDecimal difference = newFares.subtract(oldFares);
+        bookingStateMachine.recordCustomHistory(booking,
+                "Premium date change: segment " + segmentIndex + " moved to flight " + newFlightId
+                        + " (fare difference " + (difference.signum() >= 0 ? "+" : "") + difference + ")",
+                "system");
+
+        Booking saved = bookingRepository.save(booking);
+        log.info("Rebooked segment {} of booking {} onto flight {} (fare difference {})",
+                segmentIndex, saved.getBookingReference(), newFlightId, difference);
+        return BookingMapper.toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public BookingResponse applySeatNumbers(Long bookingId, Map<Long, String> seatByRowId) {
+        Booking booking = findBookingOrThrow(bookingId);
+        for (BookingPassenger bp : booking.getPassengers()) {
+            String seat = seatByRowId.get(bp.getId());
+            if (seat != null && !seat.isBlank()) {
+                bp.setSeatNumber(seat);
+            }
+        }
+        return BookingMapper.toResponse(bookingRepository.save(booking));
     }
 
     @Override

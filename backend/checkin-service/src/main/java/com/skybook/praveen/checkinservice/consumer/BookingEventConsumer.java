@@ -103,6 +103,15 @@ public class BookingEventConsumer {
             return;
         }
 
+        // A CLOSED row on a refreshed CONFIRMED event is one that was
+        // exchanged away (Premium date change, ROUND_TRIP_MODULE.md §11) -
+        // its old CheckIn must cancel, never be (re)created.
+        if ("CLOSED".equals(passenger.getCheckInStatus())) {
+            checkInService.cancelForBookingPassenger(passenger.getBookingPassengerId(),
+                    "Row exchanged off booking " + event.getBookingReference());
+            return;
+        }
+
         CreateCheckInRequest request = new CreateCheckInRequest(
                 event.getBookingId(),
                 event.getBookingReference(),

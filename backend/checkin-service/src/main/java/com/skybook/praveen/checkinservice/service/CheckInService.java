@@ -58,6 +58,15 @@ public interface CheckInService {
     List<CheckInResponse> cancelAllForBooking(Long bookingId, String reason);
 
     /**
+     * Cancel one passenger-row's CheckIn if it exists and is still
+     * cancellable (ROUND_TRIP_MODULE.md §11: a rebooked segment's exchanged
+     * rows arrive on the refreshed CONFIRMED event as CLOSED - their old
+     * CheckIns must die while the rest of the booking's live on). Returns
+     * empty when there is nothing to cancel - replays are normal.
+     */
+    java.util.Optional<CheckInResponse> cancelForBookingPassenger(Long bookingPassengerId, String reason);
+
+    /**
      * No-show sweep (design doc section 5.7/10) - sweeps every SWEEPABLE
      * row whose departureTime is before departureCutoff. The caller (the
      * scheduler) computes departureCutoff as now + gate-close offset, since
