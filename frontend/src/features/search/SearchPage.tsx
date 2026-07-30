@@ -11,6 +11,7 @@ import {
 import type { TravelClass } from '../../api/quotes';
 import { ErrorAlert } from '../../components/Alert';
 import { BookingWidget, type BookingSearch } from '../../components/BookingWidget';
+import { DateStrip } from '../../components/DateStrip';
 import { ItineraryCard } from '../../components/ItineraryCard';
 import type { Travellers } from '../../components/TravellersPicker';
 import { ApiError } from '../../lib/errors';
@@ -71,8 +72,8 @@ export function SearchPage({
 
   const [results, setResults] = useState<Flight[] | null>(null);
   const [itins, setItins] = useState<Itinerary[] | null>(null);
-  // null = all; 0/1/2 = exactly that many stops.
-  const [stopFilter, setStopFilter] = useState<number | null>(null);
+  // Multi-select: which stop counts are shown (checkboxes in the rail).
+  const [stopsChecked, setStopsChecked] = useState<boolean[]>([true, true, true]);
   const [searched, setSearched] = useState<SearchCriteria | null>(null);
   const [filters, setFilters] = useState<FilterState | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -90,8 +91,8 @@ export function SearchPage({
     const firstLegOk = new Set(visible.map((f) => f.id));
     return itins
       .filter((t) => firstLegOk.has(t.legs[0].id))
-      .filter((t) => stopFilter === null || t.stops === stopFilter);
-  }, [itins, visible, stopFilter]);
+      .filter((t) => stopsChecked[t.stops] ?? true);
+  }, [itins, visible, stopsChecked]);
 
   async function runSearch(criteria: SearchCriteria) {
     setBusy(true);
@@ -102,7 +103,7 @@ export function SearchPage({
       setItins(trips);
       setResults(firstLegs);
       setFilters(initialFilters(firstLegs));
-      setStopFilter(null);
+      setStopsChecked([true, true, true]);
       setSearched(criteria);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : null);
@@ -217,6 +218,25 @@ export function SearchPage({
           <ErrorAlert error={error} />
         </div>
 
+        {/* Date-price strip: the same route day by day, cheapest per-guest
+            fare each - tap a day to re-search it. */}
+        {searched ? (
+          <div className="mt-4">
+            <DateStrip
+              origin={searched.origin}
+              destination={searched.destination}
+              date={searched.date}
+              cabin={party.cabin}
+              onPickDate={(day) => {
+                const next = { ...widgetInitial, date: day };
+                setWidgetInitial(next);
+                setWidgetKey((k) => k + 1);
+                void runSearch({ origin: searched.origin, destination: searched.destination, date: day });
+              }}
+            />
+          </div>
+        ) : null}
+
         {/* Results: left filter rail + right list. */}
         {results && searched && filters ? (
           results.length === 0 ? (
@@ -247,8 +267,10 @@ export function SearchPage({
                     state={filters}
                     onChange={setFilters}
                     stopCounts={[0, 1, 2].map((n) => itins?.filter((t) => t.stops === n).length ?? 0)}
-                    stopFilter={stopFilter}
-                    onStopFilter={setStopFilter}
+                    stopsChecked={stopsChecked}
+                    onToggleStop={(n) =>
+                      setStopsChecked((prev) => prev.map((v, i) => (i === n ? !v : v)))
+                    }
                   />
                 </div>
               </aside>

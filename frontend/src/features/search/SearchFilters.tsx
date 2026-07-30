@@ -26,16 +26,17 @@ export function SearchFilters({
   state,
   onChange,
   stopCounts,
-  stopFilter,
-  onStopFilter,
+  stopsChecked,
+  onToggleStop,
 }: {
   results: Flight[];
   state: FilterState;
   onChange: (next: FilterState) => void;
   /** Trips per stop count [direct, 1 stop, 2 stops] - renders the Stops facet. */
   stopCounts?: number[];
-  stopFilter?: number | null;
-  onStopFilter?: (stops: number | null) => void;
+  /** Checkbox state per stop count - several can be on at once. */
+  stopsChecked?: boolean[];
+  onToggleStop?: (stops: number) => void;
 }) {
   const airlines = airlineCounts(results);
   const perBucket = bucketCounts(results);
@@ -44,29 +45,31 @@ export function SearchFilters({
     TIME_BUCKETS.some((bucket) => !state.buckets[bucket.id]) ||
     airlines.some((airline) => state.airlines[airline.code] === false);
 
-  const stopsSection = stopCounts && onStopFilter ? (
+  const stopsSection = stopCounts && stopsChecked && onToggleStop ? (
     <fieldset>
       <legend className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Stops</legend>
-      <div className="mt-2 space-y-1">
-        {[null, 0, 1, 2].map((stops) => {
-          const count = stops === null ? stopCounts.reduce((a, b) => a + b, 0) : stopCounts[stops];
-          const active = (stopFilter ?? null) === stops;
-          return (
-            <label key={String(stops)} className="flex cursor-pointer items-center justify-between gap-2 text-sm text-slate-700">
-              <span className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="stops"
-                  checked={active}
-                  onChange={() => onStopFilter(stops)}
-                  className="h-4 w-4 border-slate-300 text-brand-600 focus:ring-brand-500/40"
-                />
-                {stops === null ? 'All' : stops === 0 ? 'Direct' : stops === 1 ? '1 stop' : '2 stops'}
-              </span>
-              <span className="tabular text-xs text-slate-400">{count}</span>
-            </label>
-          );
-        })}
+      <div className="mt-2 space-y-1.5">
+        {[0, 1, 2].map((stops) => (
+          <label
+            key={stops}
+            className={
+              'flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-sm text-slate-700 ' +
+              (stopCounts[stops] === 0 ? 'opacity-40' : 'hover:bg-slate-50')
+            }
+          >
+            <span className="flex items-center gap-2.5 font-medium">
+              <input
+                type="checkbox"
+                checked={stopsChecked[stops]}
+                disabled={stopCounts[stops] === 0}
+                onChange={() => onToggleStop(stops)}
+                className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500/40"
+              />
+              {stops === 0 ? 'Direct' : stops === 1 ? '1 stop' : '2 stops'}
+            </span>
+            <span className="tabular text-xs text-slate-400">{stopCounts[stops]}</span>
+          </label>
+        ))}
       </div>
     </fieldset>
   ) : null;
