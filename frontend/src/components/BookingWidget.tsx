@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { useState, type FormEvent } from 'react';
 import type { TravelClass } from '../api/quotes';
 import { AirportField } from './AirportField';
@@ -82,7 +83,7 @@ export function BookingWidget({
             (tripType === 'round' ? 'bg-brand-900 text-white' : 'text-slate-500 hover:text-slate-800')
           }
         >
-          Round trip
+          {t('widget.roundtrip')}
         </button>
         <button
           type="button"
@@ -93,14 +94,14 @@ export function BookingWidget({
             (tripType === 'oneway' ? 'bg-brand-900 text-white' : 'text-slate-500 hover:text-slate-800')
           }
         >
-          One way
+          {t('widget.oneway')}
         </button>
         <span
           aria-disabled="true"
           title="Not available yet"
           className="cursor-not-allowed rounded-full px-4 py-1.5 text-sm font-semibold text-slate-400"
         >
-          Multi-city
+          {t('widget.multicity')}
         </span>
       </div>
 
@@ -114,7 +115,7 @@ export function BookingWidget({
               : 'md:grid-cols-[1fr_auto_1fr_1fr_1fr_auto]')
           }
         >
-          <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
+          <AirportField label={t('widget.from')} value={origin} onChange={setOrigin} exclude={destination} />
 
           <button
             type="button"
@@ -127,7 +128,7 @@ export function BookingWidget({
             </svg>
           </button>
 
-          <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} />
+          <AirportField label={t('widget.to')} value={destination} onChange={setDestination} exclude={origin} />
 
           <GuestsCabinPicker
             travellers={travellers}
@@ -151,7 +152,7 @@ export function BookingWidget({
 
           {tripType === 'round' ? (
             <FareCalendar
-              label="Return"
+              label={t('widget.return')}
               origin={destination}
               destination={origin}
               cabin={cabin}
@@ -168,7 +169,7 @@ export function BookingWidget({
             {busy ? (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/60 border-t-transparent" />
             ) : null}
-            Search
+            {t('widget.search')}
           </button>
         </div>
 

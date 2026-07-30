@@ -1,6 +1,6 @@
 import { toRows, type AircraftSeat, type FlightSeatMap } from '../../api/seats';
 import { TRAVEL_CLASS_LABELS, type TravelClass } from '../../api/quotes';
-import { money } from '../../lib/format';
+import { price } from '../../lib/format';
 
 /**
  * The cabin (FRONTEND_MODULE.md §5 screen 4, §10.2).
@@ -212,7 +212,7 @@ function Seat({
     seat.position.toLowerCase(),
     seat.exitRow ? 'exit row' : null,
     selected ? `passenger ${passengerIndex + 1}` : null,
-    unavailable ? 'unavailable' : surcharge > 0 ? `plus ${money(surcharge, currency)}` : 'no extra charge',
+    unavailable ? 'unavailable' : surcharge > 0 ? `plus ${price(surcharge, currency)}` : 'no extra charge',
   ]
     .filter(Boolean)
     .join(', ');

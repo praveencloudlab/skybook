@@ -10,7 +10,8 @@ import { BookingStepper } from '../../components/BookingStepper';
 import { SummaryRail, type SummaryExtra } from '../../components/SummaryRail';
 import { Alert, ErrorAlert } from '../../components/Alert';
 import { ApiError } from '../../lib/errors';
-import { money } from '../../lib/format';
+import { displayCurrency, money } from '../../lib/format';
+import { t } from '../../lib/i18n';
 import { toPassengerDetail, type PassengerDraft } from './PassengerForm';
 
 const METHOD_BLURB: Partial<Record<PaymentMethod, string>> = {
@@ -236,6 +237,11 @@ export function PaymentPage({
               <div className="text-right">
                 <div className="tabular text-lg font-bold text-slate-900">Total: {money(total, currency)}</div>
                 <div className="text-[11px] text-slate-400">(inclusive of all taxes)</div>
+                {displayCurrency() !== currency ? (
+                  <div className="mt-0.5 max-w-[220px] text-[11px] text-amber-600">
+                    {t('payment.chargedIn', { amount: money(total, currency) })}
+                  </div>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -243,7 +249,7 @@ export function PaymentPage({
                 disabled={!agreed || busy}
                 className="rounded-full bg-accent-500 px-8 py-3 text-sm font-bold text-white transition hover:bg-accent-600 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
-                {busy ? 'Working…' : 'Pay now'}
+                {busy ? 'Working…' : t('cta.paynow')}
               </button>
             </div>
           </div>

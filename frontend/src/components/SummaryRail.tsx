@@ -2,7 +2,7 @@ import type { Flight } from '../api/flights';
 import { AIRPORTS } from '../api/flights';
 import { FARE_TYPE_LABELS, TRAVEL_CLASS_LABELS, type FareType, type TravelClass } from '../api/quotes';
 import type { Travellers } from './TravellersPicker';
-import { dayOffset, duration, money, time } from '../lib/format';
+import { dayOffset, duration, price, time } from '../lib/format';
 
 /**
  * The right-hand Summary rail every booking step shares (carrier pattern):
@@ -121,7 +121,7 @@ export function SummaryRail({
               <li key={i} className="flex items-center justify-between gap-2 text-slate-600">
                 <span className="min-w-0 truncate">{extra.label}</span>
                 <span className="tabular shrink-0 font-semibold text-slate-800">
-                  {extra.amount > 0 ? money(extra.amount, currency) : 'Free'}
+                  {extra.amount > 0 ? price(extra.amount, currency) : 'Free'}
                 </span>
               </li>
             ))}
@@ -136,7 +136,7 @@ export function SummaryRail({
         </div>
         <div className="mt-1 flex items-baseline justify-between">
           <span className="text-sm text-slate-600">Total:</span>
-          <span className="tabular text-xl font-bold text-slate-900">{money(total, currency)}</span>
+          <span className="tabular text-xl font-bold text-slate-900">{price(total, currency)}</span>
         </div>
         <p className="text-[11px] text-slate-400">Including taxes</p>
       </div>

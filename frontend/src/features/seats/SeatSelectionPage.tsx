@@ -9,7 +9,7 @@ import { SummaryRail } from '../../components/SummaryRail';
 import { ErrorAlert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { ApiError } from '../../lib/errors';
-import { money } from '../../lib/format';
+import { price } from '../../lib/format';
 import type { PassengerDraft } from '../booking/PassengerForm';
 import { SeatMap } from './SeatMap';
 
@@ -151,7 +151,7 @@ export function SeatSelectionPage({
                   <div>{nameOf(index)}</div>
                   <div className="tabular text-xs">
                     {seat
-                      ? `${seat.seatNumber} · ${chargeOf(seat) > 0 ? money(chargeOf(seat), currency) : 'Free'}`
+                      ? `${seat.seatNumber} · ${chargeOf(seat) > 0 ? price(chargeOf(seat), currency) : 'Free'}`
                       : '—'}
                   </div>
                 </div>

@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { time } from '../lib/format';
 import type { Flight } from '../api/flights';
 
@@ -10,11 +11,11 @@ import type { Flight } from '../api/flights';
 export type BookingStage = 'flights' | 'guests' | 'seats' | 'bags' | 'payment';
 
 const STAGES: Array<{ id: BookingStage; label: string; icon: string }> = [
-  { id: 'flights', label: 'Flights', icon: 'M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z' },
-  { id: 'guests', label: 'Guests', icon: 'M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3.3 0-7 1.7-7 4v2h14v-2c0-2.3-3.7-4-7-4z' },
-  { id: 'seats', label: 'Seats', icon: 'M7 5a2 2 0 0 1 4 0v6h6a2 2 0 0 1 2 2v3h-2v-3H7a2 2 0 0 1-2-2V5h2zm-2 11h12v2H7a2 2 0 0 1-2-2z' },
-  { id: 'bags', label: 'Bags', icon: 'M9 6V4a3 3 0 0 1 6 0v2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2zm2 0h2V4a1 1 0 0 0-2 0v2z' },
-  { id: 'payment', label: 'Payment', icon: 'M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2H3V6zm0 4h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8zm3 4h5v2H6v-2z' },
+  { id: 'flights', label: t('stepper.flights'), icon: 'M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z' },
+  { id: 'guests', label: t('stepper.guests'), icon: 'M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3.3 0-7 1.7-7 4v2h14v-2c0-2.3-3.7-4-7-4z' },
+  { id: 'seats', label: t('stepper.seats'), icon: 'M7 5a2 2 0 0 1 4 0v6h6a2 2 0 0 1 2 2v3h-2v-3H7a2 2 0 0 1-2-2V5h2zm-2 11h12v2H7a2 2 0 0 1-2-2z' },
+  { id: 'bags', label: t('stepper.bags'), icon: 'M9 6V4a3 3 0 0 1 6 0v2h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2zm2 0h2V4a1 1 0 0 0-2 0v2z' },
+  { id: 'payment', label: t('stepper.payment'), icon: 'M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2H3V6zm0 4h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8zm3 4h5v2H6v-2z' },
 ];
 
 export function BookingStepper({
@@ -49,7 +50,7 @@ export function BookingStepper({
               onClick={onModify}
               className="inline-flex items-center gap-1 rounded-full border border-white/25 px-3 py-0.5 font-semibold text-white/85 transition hover:bg-white/10"
             >
-              ← Back
+              ← {t('stepper.back')}
             </button>
           ) : null}
         </div>

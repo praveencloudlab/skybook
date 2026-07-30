@@ -116,6 +116,69 @@ function formatterFor(currency: string): Intl.NumberFormat {
   return formatter;
 }
 
+/**
+ * Display-currency support (shopping surfaces only). Reference rates FROM
+ * GBP - fixed, clearly approximate; the platform always CHARGES in the
+ * booking's own currency, so receipts and paid amounts must keep using
+ * money() with the stored currency, never price().
+ */
+export const DISPLAY_CURRENCIES = [
+  { code: 'GBP', label: '£ GBP' },
+  { code: 'USD', label: '$ USD' },
+  { code: 'EUR', label: '€ EUR' },
+  { code: 'INR', label: '₹ INR' },
+  { code: 'AED', label: 'د.إ AED' },
+  { code: 'JPY', label: '¥ JPY' },
+] as const;
+
+const RATES_FROM_GBP: Record<string, number> = {
+  GBP: 1,
+  USD: 1.27,
+  EUR: 1.17,
+  INR: 106,
+  AED: 4.67,
+  JPY: 190,
+};
+
+const CURRENCY_KEY = 'skybook.currency';
+
+export function displayCurrency(): string {
+  try {
+    const raw = localStorage.getItem(CURRENCY_KEY);
+    return raw && RATES_FROM_GBP[raw] ? raw : 'GBP';
+  } catch {
+    return 'GBP';
+  }
+}
+
+export function setDisplayCurrency(code: string): void {
+  try {
+    localStorage.setItem(CURRENCY_KEY, code);
+  } catch {
+    // Private mode etc - the switch simply won't stick.
+  }
+  window.location.reload();
+}
+
+/**
+ * A SHOPPING price in the viewer's chosen display currency, converted from
+ * the source currency at the fixed reference rate. Falls back to exact
+ * money() when the source rate is unknown or no conversion is needed.
+ */
+export function price(
+  amount: number | string | null | undefined,
+  sourceCurrency = 'GBP',
+): string {
+  const display = displayCurrency();
+  const value = typeof amount === 'string' ? Number(amount) : amount;
+  if (value === null || value === undefined || !Number.isFinite(value)
+      || display === sourceCurrency || !RATES_FROM_GBP[sourceCurrency]) {
+    return money(amount, sourceCurrency);
+  }
+  const converted = (value / RATES_FROM_GBP[sourceCurrency]) * RATES_FROM_GBP[display];
+  return money(display === 'JPY' ? Math.round(converted) : Math.round(converted * 100) / 100, display);
+}
+
 export function money(
   amount: number | string | null | undefined,
   currency = 'GBP',

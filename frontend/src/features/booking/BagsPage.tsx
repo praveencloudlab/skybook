@@ -5,7 +5,7 @@ import type { Travellers } from '../../components/TravellersPicker';
 import { BookingStepper } from '../../components/BookingStepper';
 import { SummaryRail, type SummaryExtra } from '../../components/SummaryRail';
 import { Button } from '../../components/Button';
-import { money } from '../../lib/format';
+import { price } from '../../lib/format';
 import type { PassengerDraft } from './PassengerForm';
 
 /** Flat price per extra checked bag - mirrors booking-service's EXTRA_BAG_FEE. */
@@ -120,7 +120,7 @@ export function BagsPage({
                         <div className="flex items-center justify-between">
                           <h3 className="text-sm font-bold text-slate-900">Extra baggage</h3>
                           <span className="tabular text-xs text-slate-500">
-                            {money(EXTRA_BAG_FEE, currency)} / bag
+                            {price(EXTRA_BAG_FEE, currency)} / bag
                           </span>
                         </div>
                         <div className="mt-3 flex items-center justify-end gap-2">
@@ -148,7 +148,7 @@ export function BagsPage({
                         </div>
                         {bags[index] > 0 ? (
                           <p className="tabular mt-2 text-right text-xs font-semibold text-slate-700">
-                            + {money(bags[index] * EXTRA_BAG_FEE, currency)}
+                            + {price(bags[index] * EXTRA_BAG_FEE, currency)}
                           </p>
                         ) : null}
                       </div>

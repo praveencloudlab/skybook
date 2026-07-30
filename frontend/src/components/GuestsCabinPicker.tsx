@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { TRAVEL_CLASS_LABELS, TRAVEL_CLASS_ORDER, type TravelClass } from '../api/quotes';
 import { totalTravellers, type Travellers } from './TravellersPicker';
@@ -92,7 +93,7 @@ export function GuestsCabinPicker({
           </svg>
         </span>
         <span className="min-w-0">
-          <span className="block text-xs font-semibold text-slate-500">Guests and Cabin</span>
+          <span className="block text-xs font-semibold text-slate-500">{t('widget.guestsCabin')}</span>
           <span className="tabular block truncate text-[15px] font-bold text-slate-900">
             {total} Guest{total === 1 ? '' : 's'}, {TRAVEL_CLASS_LABELS[cabin]}
           </span>

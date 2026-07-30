@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { quotesApi, type TravelClass } from '../api/quotes';
-import { addDaysIso, money } from '../lib/format';
+import { addDaysIso, price } from '../lib/format';
 
 /**
  * The date-price strip above search results (carrier pattern): a pageable run
@@ -87,7 +87,7 @@ export function DateStrip({
             >
               <span className="tabular text-xs">{label(day)}</span>
               <span className={'tabular text-sm font-bold ' + (selected ? '' : 'text-slate-900')}>
-                {fare !== undefined ? money(fare, currency).replace('.00', '') : '—'}
+                {fare !== undefined ? price(fare, currency).replace('.00', '') : '—'}
               </span>
             </button>
           );

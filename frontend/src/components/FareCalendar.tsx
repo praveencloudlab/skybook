@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { quotesApi, type TravelClass } from '../api/quotes';
 import { addDaysIso, todayIso } from '../lib/format';
@@ -24,7 +25,7 @@ export function FareCalendar({
   cabin,
   value,
   onChange,
-  label = 'Travelling when?',
+  label = t('widget.when'),
 }: {
   origin: string;
   destination: string;

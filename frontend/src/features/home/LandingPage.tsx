@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { BookingWidget, type BookingSearch } from '../../components/BookingWidget';
+import { t } from '../../lib/i18n';
 
 /**
  * Home / landing (FRONTEND_MODULE.md Module 2).
@@ -119,13 +120,12 @@ export function LandingPage() {
             Real schedules · live fares · scannable boarding passes
           </span>
           <h1 className="display mt-6 max-w-2xl text-5xl leading-[1.05] text-white sm:text-6xl">
-            Where would you
+            {t('hero.titleLead')}
             <br />
-            like to <span className="gradient-text">fly?</span>
+            <span className="gradient-text">{t('hero.titleAccent')}</span>
           </h1>
           <p className="mt-5 max-w-lg text-lg text-white/60">
-            Search a year of departures across 30 routes, pick your seat from the actual cabin, and
-            carry a boarding pass you can scan. No account needed to look.
+            {t('hero.sub')}
           </p>
 
           {/* Embedded search - the shared premium-carrier booking widget

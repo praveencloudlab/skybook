@@ -40,6 +40,8 @@ import type { Payment } from './api/payments';
 import type { FareType, TravelClass } from './api/quotes';
 import type { Flight } from './api/flights';
 import { session } from './lib/session';
+import { t, LANGUAGES, currentLanguage, setLanguage, type LanguageCode } from './lib/i18n';
+import { DISPLAY_CURRENCIES, displayCurrency, setDisplayCurrency } from './lib/format';
 
 /**
  * App shell (FRONTEND_MODULE.md §2, §4).
@@ -107,6 +109,28 @@ function Header() {
         </Link>
 
         <nav className="flex items-center gap-1 text-sm sm:gap-2">
+          {/* Language + display currency. Both persist and reload so every
+              t()/price() call site repaints - a settings change, not a hot path. */}
+          <select
+            aria-label="Language"
+            value={currentLanguage}
+            onChange={(e) => setLanguage(e.target.value as LanguageCode)}
+            className="rounded-lg border border-white/20 bg-transparent px-1.5 py-1 text-xs font-medium text-white/80 transition hover:bg-white/10 [&>option]:text-slate-900"
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>{l.name}</option>
+            ))}
+          </select>
+          <select
+            aria-label="Currency"
+            value={displayCurrency()}
+            onChange={(e) => setDisplayCurrency(e.target.value)}
+            className="mr-1 rounded-lg border border-white/20 bg-transparent px-1.5 py-1 text-xs font-medium text-white/80 transition hover:bg-white/10 [&>option]:text-slate-900"
+          >
+            {DISPLAY_CURRENCIES.map((c) => (
+              <option key={c.code} value={c.code}>{c.label}</option>
+            ))}
+          </select>
           {/* Admins get an operations-only menu; passengers get the booking menu. */}
           {isAdmin ? (
             <Link
@@ -121,7 +145,7 @@ function Header() {
               onClick={() => sessionStorage.removeItem(JOURNEY_KEY)}
               className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
             >
-              Search flights
+              {t('nav.search')}
             </Link>
           )}
           {signedIn ? (
@@ -131,7 +155,7 @@ function Header() {
                   to="/bookings"
                   className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
                 >
-                  My trips
+                  {t('nav.trips')}
                 </Link>
               ) : null}
               <Link
@@ -146,7 +170,7 @@ function Header() {
                 onClick={signOut}
                 className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
               >
-                Sign out
+                {t('nav.signout')}
               </button>
             </>
           ) : (
@@ -154,7 +178,7 @@ function Header() {
               to="/sign-in"
               className="rounded-lg bg-white/10 px-3.5 py-1.5 font-semibold text-white ring-1 ring-white/20 transition hover:bg-white/20"
             >
-              Log in
+              {t('nav.signin')}
             </Link>
           )}
         </nav>

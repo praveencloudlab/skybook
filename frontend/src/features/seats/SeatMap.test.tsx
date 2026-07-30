@@ -103,10 +103,12 @@ describe('SeatMap', () => {
     );
 
     // Price and position must reach a screen-reader user too - colour alone
-    // cannot convey "this one costs extra".
+    // cannot convey "this one costs extra". Prices now render in the viewer's
+    // DISPLAY currency (GBP by default), converted from the source currency
+    // at the fixed reference rate - USD 15.00 / 1.27 = £11.81.
     const label = screen.getByLabelText(/Seat 12F/).getAttribute('aria-label');
     expect(label).toContain('aisle');
-    expect(label).toContain('$15.00');
+    expect(label).toContain('£11.81');
   });
 
   it('says a free seat is free rather than silently saying nothing', () => {

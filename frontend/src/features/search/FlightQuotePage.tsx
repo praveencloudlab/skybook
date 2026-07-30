@@ -15,7 +15,7 @@ import { BookingStepper } from '../../components/BookingStepper';
 import { Button } from '../../components/Button';
 import { ApiError } from '../../lib/errors';
 import { seatsApi, type FlightSeatMap } from '../../api/seats';
-import { dayAndMonth, duration, money, time } from '../../lib/format';
+import { dayAndMonth, duration, price, time } from '../../lib/format';
 import { useSession } from '../auth/useSession';
 
 /**
@@ -220,8 +220,8 @@ export function FlightQuotePage({
                       <h2 className="text-xl font-bold text-slate-900">{FARE_TYPE_LABELS[fareType]}</h2>
                       <div className="tabular mt-2 text-2xl font-bold text-slate-900">
                         {fareType === FARE_ORDER[0]
-                          ? money(partyPrice, quote.currency)
-                          : `+ ${money(increment, quote.currency)}`}
+                          ? price(partyPrice, quote.currency)
+                          : `+ ${price(increment, quote.currency)}`}
                       </div>
                       <p className="text-[11px] text-slate-400">for all guests</p>
 
@@ -259,7 +259,7 @@ export function FlightQuotePage({
                                 {facts.paidMax > 0 ? (
                                   <FeatureRow
                                     ok
-                                    text={`Preferred seats ${money(facts.paidMin, quote.currency)}–${money(facts.paidMax, quote.currency)}`}
+                                    text={`Preferred seats ${price(facts.paidMin, quote.currency)}–${price(facts.paidMax, quote.currency)}`}
                                   />
                                 ) : (
                                   <FeatureRow ok text="Every seat in this cabin is free to pick" />
