@@ -1,5 +1,10 @@
 import { useState } from 'react';
 
+// Remembered across mounts: filtering the results remounts every card, and a
+// per-mount failed flag would flash the fallback (or retry a dead URL) on
+// every toggle - which reads as the whole page "refreshing".
+const FAILED_CODES = new Set<string>();
+
 /**
  * Real airline logos on the results, the way a metasearch shows them. Logos
  * come from Kiwi's public airline-image CDN keyed by IATA code; anything
@@ -8,7 +13,8 @@ import { useState } from 'react';
  * has no real-world logo to show.
  */
 export function AirlineLogo({ code, className = 'h-8 w-8' }: { code: string; className?: string }) {
-  const [failed, setFailed] = useState(false);
+  const [, forceRender] = useState(0);
+  const failed = FAILED_CODES.has(code);
 
   // SkyBook Air's own mark - the brand roundel from the site header, so the
   // house carrier looks as designed as the real ones beside it.
@@ -38,8 +44,11 @@ export function AirlineLogo({ code, className = 'h-8 w-8' }: { code: string; cla
     <img
       src={`https://images.kiwi.com/airlines/64/${code}.png`}
       alt={`${code} logo`}
-      loading="lazy"
-      onError={() => setFailed(true)}
+      decoding="sync"
+      onError={() => {
+        FAILED_CODES.add(code);
+        forceRender((n) => n + 1);
+      }}
       className={`shrink-0 rounded-lg bg-white object-contain p-0.5 ring-1 ring-slate-200 ${className}`}
     />
   );

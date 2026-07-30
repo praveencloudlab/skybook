@@ -133,4 +133,8 @@ export const AIRPORTS: Array<{ code: string; city: string }> = [
   { code: 'JNB', city: 'Johannesburg' },
   { code: 'NBO', city: 'Nairobi' },
   { code: 'CDG', city: 'Paris' },
+  { code: 'FRA', city: 'Frankfurt' },
+  { code: 'IST', city: 'Istanbul' },
+  { code: 'SIN', city: 'Singapore' },
+  { code: 'SYD', city: 'Sydney' },
 ];
