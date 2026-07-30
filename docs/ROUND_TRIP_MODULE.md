@@ -189,6 +189,21 @@ all cancelled ⇒ CANCELLED.
 8. Follow-up release: drop `bookings.flight_id` + the deprecated flat
    event fields once all readers are on segments.
 
+## 10b. Implemented extension: same-carrier through-ticketing
+
+The segment machinery generalised past outbound+return (live-verified
+2026-07-31): a connection whose legs share a carrier sells as ONE booking
+via `CreateBookingRequest.connectionFlightIds` - the onward legs become
+additional direction-0 segments. `booking_segments.direction` (V12, 0 =
+outbound / 1 = return) now carries the rules that segment_index used to
+proxy: lone-segment cancellation is allowed only for direction 1, and
+baggage fees charge once per DIRECTION (bags check through). flight-service
+marks `ItineraryResponse.sameCarrier` and allows protected connections
+45-minute layovers (self-transfer keeps 60). Mixed-carrier connections stay
+self-transfer, one ticket per leg - that is what they are. Not combinable
+with returnFlightId in v1; a through-ticket + return in one PNR is the next
+natural step if wanted.
+
 ## 11. Risks / open questions
 
 - Event-shape drift is the sharpest edge: three consumers parse
