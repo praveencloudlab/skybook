@@ -158,8 +158,16 @@ public class BookingServiceImpl implements BookingService {
                 // refunds/invoices bill the stored fare, never a recomputation.
                 // Bags charge once per DIRECTION (a through-ticket checks bags
                 // through its connection), so only a direction's first leg
-                // carries the count and the fee.
-                int extraBags = leg.directionStart() && detail.extraBags() != null ? detail.extraBags() : 0;
+                // carries the count and the fee. The return direction reads its
+                // OWN count (per-direction bags), falling back to the outbound
+                // count when the client didn't send one.
+                int extraBags = 0;
+                if (leg.directionStart()) {
+                    Integer count = leg.direction() == 1 && detail.returnExtraBags() != null
+                            ? detail.returnExtraBags()
+                            : detail.extraBags();
+                    extraBags = count != null ? count : 0;
+                }
                 BigDecimal baggageFee = EXTRA_BAG_FEE.multiply(BigDecimal.valueOf(extraBags));
 
                 BookingPassenger bookingPassenger = BookingPassenger.builder()

@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { NATIONALITIES, bookingsApi } from '../../api/bookings';
 import { flightsApi } from '../../api/flights';
 import { LANGUAGES, setLanguage, type LanguageCode } from '../../lib/i18n';
-import { DISPLAY_CURRENCIES, setDisplayCurrency } from '../../lib/format';
+import { DISPLAY_CURRENCIES, price, setDisplayCurrency } from '../../lib/format';
+import { fareAlertsApi, type FareAlert } from '../../api/alerts';
 import { PASSWORD_RULES, passwordPolicyMet } from '../../api/auth';
 import { profileApi, type Profile, type SavedTraveller } from '../../api/profile';
 import { Alert, ErrorAlert } from '../../components/Alert';
@@ -53,6 +54,7 @@ export function ProfilePage() {
         {profile ? (
           <>
             <NextTripCard />
+            <FareWatchesCard />
             <AccountOverview profile={profile} />
             <PreferencesCard profile={profile} onSaved={setProfile} />
             <PersonalAndDocuments profile={profile} onSaved={setProfile} />
@@ -148,6 +150,46 @@ function NextTripCard() {
           </a>
         </div>
       </div>
+    </section>
+  );
+}
+
+/** The routes this account watches - repriced hourly server-side; emails on movement. */
+function FareWatchesCard() {
+  const [alerts, setAlerts] = useState<FareAlert[] | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fareAlertsApi.mine(controller.signal).then(setAlerts).catch(() => setAlerts([]));
+    return () => controller.abort();
+  }, []);
+
+  if (!alerts || alerts.length === 0) return null;
+
+  return (
+    <section className="rounded-2xl bg-white p-6 shadow-[var(--shadow-card)]">
+      <h2 className="text-sm font-bold text-slate-900">Fare watches</h2>
+      <p className="mt-0.5 text-xs text-slate-500">
+        Repriced hourly with the same fares checkout uses — you'll get an email when one moves.
+      </p>
+      <ul className="mt-3 divide-y divide-slate-100">
+        {alerts.map((a) => (
+          <li key={a.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+            <span>
+              <span className="font-bold text-slate-900">{a.originAirportCode} → {a.destinationAirportCode}</span>
+              <span className="ml-2 text-slate-500">{a.travelDate} · {a.travelClass.toLowerCase().replace('_', ' ')}</span>
+            </span>
+            <span className="flex items-center gap-3">
+              <span className="tabular font-bold text-slate-900">{price(a.currentFare, a.currency)}</span>
+              <button type="button"
+                onClick={() => fareAlertsApi.remove(a.id).then(() => setAlerts(alerts.filter((x) => x.id !== a.id)))}
+                className="text-xs font-medium text-slate-400 hover:text-red-600">
+                Stop watching
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

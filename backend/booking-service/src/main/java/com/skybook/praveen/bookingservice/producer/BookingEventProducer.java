@@ -161,6 +161,27 @@ public class BookingEventProducer {
         log.info("Published {} event for booking {}", type, booking.bookingReference());
     }
 
+    /**
+     * Fare-watch mail (passenger features): a plain-text notification with no
+     * booking behind it - notification-service's no-passengers fallback path
+     * renders it; every other consumer ignores FARE_ALERT by type.
+     */
+    public void publishFareAlert(String email, String subjectLine, String message) {
+        BookingEvent event = BookingEvent.builder()
+                .type(BookingEventType.FARE_ALERT)
+                .contactEmail(email)
+                .contactName("traveller")
+                .subject(subjectLine)
+                .message(message)
+                .build();
+        kafkaTemplate.send(KafkaTopics.BOOKING_EVENTS, event)
+                .whenComplete((result, ex) -> {
+                    if (ex != null) {
+                        log.error("Failed to publish FARE_ALERT for {}", email, ex);
+                    }
+                });
+    }
+
     private static BookingEventPassenger eventPassenger(
             com.skybook.praveen.bookingservice.dto.response.BookingPassengerResponse p,
             Map<Long, String> ticketByRow) {

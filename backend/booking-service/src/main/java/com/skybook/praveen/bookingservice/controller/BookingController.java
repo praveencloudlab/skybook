@@ -79,6 +79,31 @@ public class BookingController {
         return bookingFacade.fareCalendar(originAirportCode, destinationAirportCode, startDate, endDate, travelClass);
     }
 
+    @Operation(summary = "Watch a fare",
+            description = "Fare watch: route + date + cabin, repriced hourly with the checkout calculator; "
+                    + "the owner is mailed when the fare moves. Owner = the authenticated subject.")
+    @org.springframework.web.bind.annotation.PostMapping("/fare-alerts")
+    public com.skybook.praveen.bookingservice.dto.response.FareAlertResponse createFareAlert(
+            @jakarta.validation.Valid @org.springframework.web.bind.annotation.RequestBody
+            com.skybook.praveen.bookingservice.dto.request.FareAlertRequest request) {
+        return bookingFacade.createFareAlert(request.originAirportCode(), request.destinationAirportCode(),
+                request.travelDate(), request.travelClass());
+    }
+
+    @Operation(summary = "My fare watches")
+    @GetMapping("/fare-alerts")
+    public List<com.skybook.praveen.bookingservice.dto.response.FareAlertResponse> myFareAlerts() {
+        return bookingFacade.myFareAlerts();
+    }
+
+    @Operation(summary = "Stop watching a fare")
+    @org.springframework.web.bind.annotation.DeleteMapping("/fare-alerts/{id}")
+    public org.springframework.http.ResponseEntity<Void> deleteFareAlert(
+            @org.springframework.web.bind.annotation.PathVariable Long id) {
+        bookingFacade.deleteFareAlert(id);
+        return org.springframework.http.ResponseEntity.noContent().build();
+    }
+
     @Operation(
             summary = "My Bookings",
             description = "Every booking belonging to the authenticated caller, newest first. "

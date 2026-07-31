@@ -17,6 +17,8 @@ import type { Travellers } from '../../components/TravellersPicker';
 import { ApiError } from '../../lib/errors';
 import { addDaysIso, dayAndMonth, todayIso } from '../../lib/format';
 import { SearchFilters } from './SearchFilters';
+import { fareAlertsApi } from '../../api/alerts';
+import { useSession } from '../auth/useSession';
 import { applyFilters, initialFilters, type FilterState } from './filters';
 
 /**
@@ -124,6 +126,10 @@ export function SearchPage({
   // Same deterministic source the date strip and quote page use, so the card
   // price can never disagree with checkout.
   const [legFares, setLegFares] = useState<Map<string, number>>(new Map());
+  // Fare watch: one click on the results header creates a server-side alert
+  // for the searched route/date/cabin; reset whenever a new search runs.
+  const { signedIn } = useSession();
+  const [watchState, setWatchState] = useState<'idle' | 'busy' | 'watching'>('idle');
 
   async function runSearch(criteria: SearchCriteria, cabin: TravelClass = party.cabin) {
     setBusy(true);
@@ -140,6 +146,7 @@ export function SearchPage({
       setFilters(initialFilters(firstLegs));
       setStopsChecked([true, true, true]);
       setSearched(criteria);
+      setWatchState('idle');
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : null);
       setResults(null);
@@ -348,6 +355,29 @@ export function SearchPage({
                       <span className="ml-2 rounded-full bg-brand-50 px-2 py-0.5 text-xs font-semibold text-brand-700 ring-1 ring-inset ring-brand-100">
                         Round trip · pick your {outbound ? 'return' : 'outbound'} flight
                       </span>
+                    ) : null}
+                    {signedIn && searched ? (
+                      <button
+                        type="button"
+                        disabled={watchState === 'watching' || watchState === 'busy'}
+                        onClick={async () => {
+                          setWatchState('busy');
+                          try {
+                            await fareAlertsApi.create({
+                              originAirportCode: searched.origin,
+                              destinationAirportCode: searched.destination,
+                              travelDate: searched.date,
+                              travelClass: party.cabin,
+                            });
+                            setWatchState('watching');
+                          } catch {
+                            setWatchState('idle');
+                          }
+                        }}
+                        className="ml-2 rounded-full border border-accent-500 px-2.5 py-0.5 text-xs font-bold text-accent-600 transition hover:bg-accent-500 hover:text-white disabled:cursor-default disabled:border-emerald-500 disabled:bg-emerald-50 disabled:text-emerald-700"
+                      >
+                        {watchState === 'watching' ? '✓ Watching this fare' : '🔔 Watch this fare'}
+                      </button>
                     ) : null}
                   </p>
                   <p className="tabular text-xs text-slate-500">

@@ -53,6 +53,8 @@ class BookingFacadeTest {
     private BookingService bookingService;
     @Mock
     private BookingEventProducer bookingEventProducer;
+    @Mock
+    private com.skybook.praveen.bookingservice.repository.FareAlertRepository fareAlertRepository;
 
     @org.mockito.Captor
     private org.mockito.ArgumentCaptor<List<SeatAssignmentResult>> assignmentsCaptor;
@@ -69,7 +71,8 @@ class BookingFacadeTest {
         facade = new BookingFacade(flightServiceClient, inventoryServiceClient,
                 bookingService, bookingEventProducer,
                 new com.skybook.praveen.bookingservice.domain.FareCalculator(
-                        java.time.Clock.fixed(java.time.Instant.parse("2030-06-04T09:00:00Z"), java.time.ZoneOffset.UTC)));
+                        java.time.Clock.fixed(java.time.Instant.parse("2030-06-04T09:00:00Z"), java.time.ZoneOffset.UTC)),
+                fareAlertRepository);
     }
 
     private BookingPassengerResponse passenger(long id, String seat) {
@@ -106,7 +109,7 @@ class BookingFacadeTest {
                 java.time.LocalDate.of(1990, 1, 1), "MALE", "GBR",
                 "P1234567", java.time.LocalDate.of(2032, 1, 1),
                 "pax@example.com", "+441234567890",
-                TravelClass.ECONOMY, FareType.FLEXI, seatNumber, null, null, null);
+                TravelClass.ECONOMY, FareType.FLEXI, seatNumber, null, null, null, null);
     }
 
     private final FlightDetails flight = new FlightDetails(

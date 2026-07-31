@@ -77,7 +77,16 @@ public record PassengerBookingDetail(
         /** Extra checked bags to buy (ancillary). Null/absent means none. */
         @jakarta.validation.constraints.Min(value = 0, message = "extraBags cannot be negative")
         @jakarta.validation.constraints.Max(value = 5, message = "At most 5 extra bags per passenger")
-        Integer extraBags
+        Integer extraBags,
+
+        /**
+         * Extra bags for the RETURN direction of a round trip (per-direction
+         * bags). Null falls back to extraBags - the same count both ways,
+         * exactly the pre-feature behaviour - so old clients are unchanged.
+         */
+        @jakarta.validation.constraints.Min(value = 0, message = "returnExtraBags cannot be negative")
+        @jakarta.validation.constraints.Max(value = 5, message = "At most 5 extra bags per passenger")
+        Integer returnExtraBags
 
 ) {
 }

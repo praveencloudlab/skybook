@@ -12,7 +12,10 @@ import com.skybook.praveen.bookingservice.dto.request.PassengerBookingDetail;
 import com.skybook.praveen.bookingservice.dto.response.BookingPassengerResponse;
 import com.skybook.praveen.bookingservice.dto.response.BookingResponse;
 import com.skybook.praveen.bookingservice.dto.response.CancelPassengersResponse;
+import com.skybook.praveen.bookingservice.dto.response.FareAlertResponse;
 import com.skybook.praveen.bookingservice.dto.response.FareCalendarDayResponse;
+import com.skybook.praveen.bookingservice.entity.FareAlert;
+import com.skybook.praveen.bookingservice.repository.FareAlertRepository;
 import com.skybook.praveen.bookingservice.dto.response.QuoteResponse;
 import com.skybook.praveen.bookingservice.enums.FareType;
 import com.skybook.praveen.bookingservice.enums.SeatAssignmentMode;
@@ -76,6 +79,7 @@ public class BookingFacade {
     private final BookingService bookingService;
     private final BookingEventProducer bookingEventProducer;
     private final FareCalculator fareCalculator;
+    private final FareAlertRepository fareAlertRepository;
 
     public BookingResponse createBooking(CreateBookingRequest request) {
 
@@ -403,6 +407,67 @@ public class BookingFacade {
                     return new FareCalendarDayResponse(day.date(), day.flights(), cheapest, QUOTE_CURRENCY);
                 })
                 .toList();
+    }
+
+    // ---------------------------------------------------------------
+    // Fare watch (passenger features)
+    // ---------------------------------------------------------------
+
+    /** Watch a route+date+cabin; the subject IS the email alerts go to. */
+    public FareAlertResponse createFareAlert(String origin, String destination,
+                                             java.time.LocalDate travelDate, TravelClass travelClass) {
+        String subject = currentSubject();
+        if (subject == null) {
+            throw new IllegalStateException("A fare alert needs a signed-in owner");
+        }
+        if (travelDate.isBefore(java.time.LocalDate.now())) {
+            throw new IllegalArgumentException("Cannot watch a date in the past");
+        }
+        FareAlert alert = fareAlertRepository.save(FareAlert.builder()
+                .ownerSubject(subject)
+                .originAirportCode(origin.toUpperCase())
+                .destinationAirportCode(destination.toUpperCase())
+                .travelDate(travelDate)
+                .travelClass(travelClass)
+                // Baseline = today's fare: the first mail is a real CHANGE,
+                // never an echo of what the user just saw on screen.
+                .lastNotifiedFare(cheapestFare(travelClass, travelDate))
+                .active(true)
+                .build());
+        return toFareAlertResponse(alert);
+    }
+
+    public List<FareAlertResponse> myFareAlerts() {
+        String subject = currentSubject();
+        return subject == null ? List.of()
+                : fareAlertRepository.findByOwnerSubjectAndActiveTrueOrderByTravelDateAsc(subject)
+                        .stream().map(this::toFareAlertResponse).toList();
+    }
+
+    public void deleteFareAlert(Long id) {
+        String subject = currentSubject();
+        FareAlert alert = fareAlertRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("No such fare alert"));
+        if (subject == null || !subject.equals(alert.getOwnerSubject())) {
+            throw new org.springframework.security.access.AccessDeniedException("Not your alert");
+        }
+        alert.setActive(false);
+        fareAlertRepository.save(alert);
+    }
+
+    /** Cheapest fare across fare families - the calendar's own formula. */
+    public BigDecimal cheapestFare(TravelClass travelClass, java.time.LocalDate date) {
+        return Arrays.stream(FareType.values())
+                .map(fareType -> fareCalculator.calculateFare(travelClass, fareType, date.atStartOfDay()))
+                .min(BigDecimal::compareTo)
+                .orElseThrow();
+    }
+
+    private FareAlertResponse toFareAlertResponse(FareAlert alert) {
+        return new FareAlertResponse(alert.getId(), alert.getOriginAirportCode(),
+                alert.getDestinationAirportCode(), alert.getTravelDate(), alert.getTravelClass(),
+                cheapestFare(alert.getTravelClass(), alert.getTravelDate()),
+                alert.getLastNotifiedFare(), QUOTE_CURRENCY);
     }
 
     /**
