@@ -286,6 +286,7 @@ interface JourneyDraft {
   connectionSeats?: AircraftSeat[][];
   guests: PassengerDraft[];
   bags: number[];
+  returnBags?: number[];
   contactEmail: string;
 }
 
@@ -430,6 +431,8 @@ function BookingJourney() {
   // seats -> bags -> payment) and each later step reads what earlier ones set.
   const [guests, setGuests] = useState<PassengerDraft[]>(draft?.guests ?? [emptyPassenger()]);
   const [bags, setBags] = useState<number[]>(draft?.bags ?? [0]);
+  // Per-direction bags: the return direction has its OWN counts on a round trip.
+  const [returnBags, setReturnBags] = useState<number[]>(draft?.returnBags ?? [0]);
   const [contactEmail, setContactEmail] = useState(draft?.contactEmail ?? '');
   const [result, setResult] = useState<{ booking: Booking; payment: Payment } | null>(null);
 
@@ -477,6 +480,7 @@ function BookingJourney() {
       returnSeats,
       connectionSeats: connSeats,
       bags,
+      returnBags,
       contactEmail,
       guests: guests.map((g) => ({ ...g, passportNumber: '', passportExpiry: '' })),
     };
@@ -486,7 +490,7 @@ function BookingJourney() {
       // Storage full/blocked: the journey still works, it just won't survive
       // a navigation - the pre-persistence behaviour.
     }
-  }, [step, flight, returnFlight, connection, travellers, preferredCabin, choice, seats, returnSeats, guests, bags, contactEmail]);
+  }, [step, flight, returnFlight, connection, travellers, preferredCabin, choice, seats, returnSeats, guests, bags, returnBags, contactEmail]);
 
   function restart() {
     sessionStorage.removeItem(JOURNEY_KEY);
@@ -502,6 +506,7 @@ function BookingJourney() {
     setConnLeg(0);
     setGuests([emptyPassenger()]);
     setBags([0]);
+    setReturnBags([0]);
     setContactEmail('');
     setResult(null);
   }
@@ -536,7 +541,11 @@ function BookingJourney() {
     connSeats.flat().reduce((sum, s) => sum + seatCharge(s), 0);
   const tripLegs = returnFlight ? 2 : 1;
   // Bags fly both directions on a round trip, charged per leg.
-  const bagTotal = bags.reduce((sum, b) => sum + b, 0) * EXTRA_BAG_FEE * tripLegs;
+  // Per-direction bags: each direction's own counts, summed - never the
+  // outbound count silently doubled.
+  const bagTotal =
+    (bags.reduce((sum, b) => sum + b, 0) +
+      (returnFlight ? returnBags.reduce((sum, b) => sum + b, 0) : 0)) * EXTRA_BAG_FEE;
   const total = (choice ? choice.baseFare * paxCount : 0) + seatTotal + bagTotal;
   const guestLabel = (index: number) =>
     `${guests[index]?.firstName ?? ''} ${guests[index]?.lastName ?? ''}`.trim() || `Guest ${index + 1}`;
@@ -561,9 +570,16 @@ function BookingJourney() {
     ),
     ...bags.flatMap((count, index) =>
       count > 0
-        ? [{ label: `${guestLabel(index)} · ${count} extra bag${count > 1 ? 's' : ''}${tripLegs > 1 ? ' × 2 tickets' : ''}`, amount: count * EXTRA_BAG_FEE * tripLegs }]
+        ? [{ label: `${guestLabel(index)} · ${count} extra bag${count > 1 ? 's' : ''}${returnFlight ? ' (out)' : ''}`, amount: count * EXTRA_BAG_FEE }]
         : [],
     ),
+    ...(returnFlight
+      ? returnBags.flatMap((count, index) =>
+          count > 0
+            ? [{ label: `${guestLabel(index)} · ${count} extra bag${count > 1 ? 's' : ''} (return)`, amount: count * EXTRA_BAG_FEE }]
+            : [],
+        )
+      : []),
   ];
 
   // Any in-progress step carries an explicit exit: restart() clears the
@@ -625,6 +641,7 @@ function BookingJourney() {
           return aligned as AircraftSeat[];
         })}
         bags={bags}
+        returnBags={returnFlight ? returnBags : []}
         contactEmail={contactEmail}
         extras={extras}
         total={total}
@@ -653,6 +670,10 @@ function BookingJourney() {
         bags={bags}
         onAdjustBag={(index, delta) =>
           setBags((prev) => prev.map((b, i) => (i === index ? Math.max(0, Math.min(5, b + delta)) : b)))
+        }
+        returnBags={returnFlight ? returnBags : null}
+        onAdjustReturnBag={(index, delta) =>
+          setReturnBags((prev) => prev.map((b, i) => (i === index ? Math.max(0, Math.min(5, b + delta)) : b)))
         }
         extras={extras}
         total={total}
@@ -823,6 +844,7 @@ function BookingJourney() {
         // (adults, then children, then infants).
         setGuests(Array.from({ length: totalTravellers(party) }, emptyPassenger));
         setBags(Array.from({ length: totalTravellers(party) }, () => 0));
+        setReturnBags(Array.from({ length: totalTravellers(party) }, () => 0));
         setContactEmail('');
         setStep('fares');
       }}

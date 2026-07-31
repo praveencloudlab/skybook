@@ -65,6 +65,7 @@ export function toPassengerDetail(
   extraBags = 0,
   returnSeatNumber: string | null = null,
   connectionSeatNumbers: (string | null)[] = [],
+  returnExtraBags = 0,
 ): PassengerDetail {
   return {
     title: draft.title,
@@ -87,6 +88,9 @@ export function toPassengerDetail(
       ? { connectionSeatNumbers: connectionSeatNumbers.map((s) => s ?? '') }
       : {}),
     ...(extraBags > 0 ? { extraBags } : {}),
+    // Explicit even when 0: the server falls back to extraBags when this is
+    // ABSENT, and "0 bags on the way home" is a real choice, not an absence.
+    ...(returnExtraBags !== extraBags ? { returnExtraBags } : {}),
   };
 }
 

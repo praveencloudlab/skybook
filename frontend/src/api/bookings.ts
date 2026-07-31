@@ -47,6 +47,7 @@ export interface PassengerDetail {
   connectionSeatNumbers?: string[];
   /** Extra checked bags to buy (ancillary), charged per bag. */
   extraBags?: number;
+  returnExtraBags?: number;
 }
 
 export interface BookingContact {
@@ -127,6 +128,7 @@ export interface BookingPassenger {
   fare?: string | number;
   /** Ancillary bags bought at booking, and what they cost. */
   extraBags?: number;
+  returnExtraBags?: number;
   baggageFee?: string | number;
   /** This traveller has been cancelled off the booking (booking survives). */
   cancelled?: boolean;
