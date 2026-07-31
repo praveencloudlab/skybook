@@ -112,9 +112,9 @@ export function BoardingPassCard({
 
           {/* Route */}
           <div className="relative flex items-center gap-3 px-5 pb-3">
-            <AirportBox code={fromCode} name={cityFor(fromCode)} />
+            <AirportBox code={fromCode} name={cityFor(fromCode)} terminal={pass.departureTerminal} />
             <PlaneIcon className="h-5 w-6 shrink-0" style={{ fill: RED }} />
-            <AirportBox code={toCode} name={cityFor(toCode)} />
+            <AirportBox code={toCode} name={cityFor(toCode)} terminal={pass.arrivalTerminal} />
           </div>
 
           {/* Operational detail grid */}
@@ -200,11 +200,14 @@ function cabinLabel(travelClass?: string): string {
   return TRAVEL_CLASS_LABELS[travelClass as TravelClass] ?? travelClass;
 }
 
-function AirportBox({ code, name }: { code: string; name: string }) {
+function AirportBox({ code, name, terminal }: { code: string; name: string; terminal?: string | null }) {
   return (
     <div className="flex-1 rounded-lg px-3.5 py-2" style={{ background: BLUE }}>
       <div className="tabular text-2xl font-extrabold leading-none text-slate-900">{code}</div>
-      <div className="mt-1 truncate text-xs text-slate-600">{name}</div>
+      <div className="mt-1 truncate text-xs text-slate-600">
+        {name}
+        {terminal ? <span className="font-semibold text-slate-700"> · Terminal {terminal}</span> : null}
+      </div>
     </div>
   );
 }

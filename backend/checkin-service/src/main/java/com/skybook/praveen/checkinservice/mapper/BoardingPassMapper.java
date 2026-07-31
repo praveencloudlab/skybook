@@ -21,6 +21,7 @@ public final class BoardingPassMapper {
                 boardingPass.getDestinationAirportCode(),
                 boardingPass.getSeatNumber(),
                 boardingPass.getDepartureTerminal(),
+                boardingPass.getArrivalTerminal(),
                 boardingPass.getGate(),
                 boardingPass.getBoardingTime(),
                 boardingPass.getBoardingGroup(),

@@ -147,10 +147,10 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
        <div style="font-size:10px;font-weight:700;letter-spacing:.5px;color:#94a3b8;">${label}</div>
        <div style="font-size:15px;font-weight:800;color:${opts.accent ? RED : '#0f172a'};${opts.mono ? "font-family:'Courier New',monospace;" : ''}">${value}</div>
      </td>`;
-  const airport = (code: string, name: string) =>
+  const airport = (code: string, name: string, terminal?: string | null) =>
     `<td style="width:44%;background:${BLUE};border-radius:8px;padding:9px 13px;">
        <div style="font-size:24px;font-weight:800;line-height:1;color:#0f172a;font-family:'Courier New',monospace;">${code}</div>
-       <div style="margin-top:4px;font-size:12px;color:#334155;">${name}</div>
+       <div style="margin-top:4px;font-size:12px;color:#334155;">${name}${terminal ? ` &middot; <b>Terminal ${terminal}</b>` : ''}</div>
      </td>`;
   const stubFld = (label: string, value: string, opts: { mono?: boolean; accent?: boolean } = {}) =>
     `<td style="vertical-align:top;padding:0;">
@@ -201,9 +201,9 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
             <table style="width:100%;border-collapse:collapse;margin:6px 0;"><tr>
               <td style="padding:0 22px;">
                 <table style="width:100%;border-collapse:separate;border-spacing:0;"><tr>
-                  ${airport(fromCode, cityFor(fromCode))}
+                  ${airport(fromCode, cityFor(fromCode), pass.departureTerminal)}
                   <td style="text-align:center;color:${RED};font-size:22px;width:34px;">&#9992;</td>
-                  ${airport(toCode, cityFor(toCode))}
+                  ${airport(toCode, cityFor(toCode), pass.arrivalTerminal)}
                 </tr></table>
               </td>
             </tr></table>
