@@ -26,9 +26,23 @@ export interface Aircraft {
 export interface AircraftSeatRow {
   id?: number;
   seatNumber: string;
-  travelClass: string;
+  rowNumber?: number;
+  /** BUSINESS / PREMIUM_ECONOMY / ECONOMY / FIRST - inventory calls it seatType. */
+  seatType: string;
+  position?: string;
   status: string;
-  [key: string]: unknown;
+  exitRow?: boolean;
+  listedSurcharge?: string | number | null;
+}
+
+/** GET /api/aircraft/{id}/seat-map: the aircraft header with its seats nested. */
+export interface SeatMapResponse {
+  aircraftId: number;
+  registrationNumber: string;
+  model: string;
+  aircraftStatus: string;
+  totalSeats: number;
+  seats: AircraftSeatRow[];
 }
 
 export interface BookingSearch {
@@ -196,8 +210,8 @@ export const adminApi = {
   setAircraftStatus(id: number, status: string): Promise<Aircraft> {
     return api.patch<Aircraft>(`/api/aircraft/${id}/status`, { status });
   },
-  seatMap(aircraftId: number, signal?: AbortSignal): Promise<AircraftSeatRow[]> {
-    return api.get<AircraftSeatRow[]>(`/api/aircraft/${aircraftId}/seat-map`, { signal });
+  seatMap(aircraftId: number, signal?: AbortSignal): Promise<SeatMapResponse> {
+    return api.get<SeatMapResponse>(`/api/aircraft/${aircraftId}/seat-map`, { signal });
   },
   closeInventory(flightId: number): Promise<FlightInventorySummary> {
     return api.patch<FlightInventorySummary>(`/api/inventory/flight/${flightId}/close`);

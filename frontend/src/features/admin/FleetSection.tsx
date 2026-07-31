@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { adminApi, type Aircraft, type AircraftSeatRow } from '../../api/admin';
+import { adminApi, type Aircraft, type AircraftSeatRow, type SeatMapResponse } from '../../api/admin';
 import { ErrorAlert } from '../../components/Alert';
 import { ApiError } from '../../lib/errors';
 
@@ -13,7 +13,7 @@ const AIRCRAFT_STATUSES = ['ACTIVE', 'MAINTENANCE', 'RETIRED'];
 export function FleetSection() {
   const [rows, setRows] = useState<Aircraft[] | null>(null);
   const [seatMapFor, setSeatMapFor] = useState<Aircraft | null>(null);
-  const [seats, setSeats] = useState<AircraftSeatRow[] | null>(null);
+  const [seatMap, setSeatMap] = useState<SeatMapResponse | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -39,10 +39,10 @@ export function FleetSection() {
 
   async function openSeatMap(a: Aircraft) {
     setSeatMapFor(a);
-    setSeats(null);
+    setSeatMap(null);
     setError(null);
     try {
-      setSeats(await adminApi.seatMap(a.id));
+      setSeatMap(await adminApi.seatMap(a.id));
     } catch (e) {
       setError(e instanceof ApiError ? e : null);
     }
@@ -98,23 +98,24 @@ export function FleetSection() {
             <h3 className="text-sm font-bold text-slate-900">
               Seat map — {seatMapFor.registrationNumber} ({seatMapFor.manufacturer} {seatMapFor.model})
             </h3>
-            <button type="button" onClick={() => { setSeatMapFor(null); setSeats(null); }}
+            <button type="button" onClick={() => { setSeatMapFor(null); setSeatMap(null); }}
               className="text-xs font-medium text-slate-500 hover:text-slate-700">Close</button>
           </div>
-          {seats === null ? (
+          {seatMap === null ? (
             <p className="mt-2 text-sm text-slate-500">Loading…</p>
           ) : (
             <>
               <p className="mt-1 text-xs text-slate-500">
-                {seats.length} seats ·{' '}
-                {Object.entries(seats.reduce<Record<string, number>>((acc, s) => {
-                  acc[s.travelClass] = (acc[s.travelClass] ?? 0) + 1;
+                {seatMap.seats.length} seats ·{' '}
+                {Object.entries(seatMap.seats.reduce<Record<string, number>>((acc, s) => {
+                  acc[s.seatType] = (acc[s.seatType] ?? 0) + 1;
                   return acc;
                 }, {})).map(([k, v]) => `${v} ${k.toLowerCase().replace('_', ' ')}`).join(' · ')}
               </p>
               <div className="mt-3 flex flex-wrap gap-1">
-                {seats.map((s) => (
-                  <span key={s.seatNumber} title={`${s.seatNumber} · ${s.travelClass} · ${s.status}`}
+                {seatMap.seats.map((s) => (
+                  <span key={s.seatNumber}
+                    title={`${s.seatNumber} · ${s.seatType} · ${s.status}${s.listedSurcharge && Number(s.listedSurcharge) > 0 ? ` · £${s.listedSurcharge} surcharge` : ''}${s.exitRow ? ' · exit row' : ''}`}
                     className={'tabular grid h-7 w-9 place-items-center rounded text-[10px] font-bold ' + seatTone(s)}>
                     {s.seatNumber}
                   </span>
@@ -132,7 +133,7 @@ export function FleetSection() {
 
 function seatTone(s: AircraftSeatRow): string {
   if (s.status !== 'ACTIVE' && s.status !== 'AVAILABLE') return 'bg-slate-200 text-slate-400';
-  switch (s.travelClass) {
+  switch (s.seatType) {
     case 'FIRST': return 'bg-accent-100 text-accent-700';
     case 'BUSINESS': return 'bg-brand-100 text-brand-700';
     case 'PREMIUM_ECONOMY': return 'bg-emerald-100 text-emerald-700';
