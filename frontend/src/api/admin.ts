@@ -1,7 +1,7 @@
 import { api } from './client';
 import type { Flight, FlightStatus, SearchCriteria } from './flights';
 import type { Booking, BookingStatus } from './bookings';
-import type { BoardingPass, CheckIn } from './checkin';
+import type { CheckIn } from './checkin';
 
 /**
  * Admin surface (FRONTEND_MODULE.md Module 16).
@@ -74,12 +74,19 @@ export interface Manifest {
   [key: string]: unknown;
 }
 
+/**
+ * Success body of GET /api/boarding-passes/verify: the pass details, flat.
+ * A bad pass never reaches this shape - the server answers with an error
+ * (tampered / unknown / revoked / already boarded / not checked in), which
+ * surfaces as an ApiError carrying the reason.
+ */
 export interface BoardingPassVerification {
-  valid?: boolean;
-  status?: string;
-  reason?: string | null;
-  boardingPass?: BoardingPass | null;
-  [key: string]: unknown;
+  passengerName: string;
+  bookingReference: string;
+  flightNumber: string;
+  seatNumber: string;
+  gate?: string | null;
+  boardingGroup?: string | null;
 }
 
 export interface FlightInventorySummary {

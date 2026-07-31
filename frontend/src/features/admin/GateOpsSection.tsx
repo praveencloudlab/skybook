@@ -240,21 +240,28 @@ function VerifyBox() {
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [rejection, setRejection] = useState<string | null>(null);
+
   async function verify(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError(null);
     setResult(null);
+    setRejection(null);
     try {
+      // Success = VALID (the server answers with the pass details);
+      // a bad pass comes back as an error carrying the reason.
       setResult(await adminApi.verifyBoardingPass(token.trim()));
     } catch (e) {
-      setError(e instanceof ApiError ? e : null);
+      if (e instanceof ApiError) {
+        setRejection(e.message || 'rejected');
+      } else {
+        setError(null);
+      }
     } finally {
       setBusy(false);
     }
   }
-
-  const pass = result?.boardingPass;
   return (
     <div className="card p-4">
       <h3 className="text-sm font-bold text-slate-900">Verify a boarding pass</h3>
@@ -271,17 +278,20 @@ function VerifyBox() {
       </form>
       <ErrorAlert error={error} />
       {result ? (
-        <div className={'mt-3 rounded-xl px-4 py-3 text-sm ring-1 ring-inset ' +
-          (result.valid ? 'bg-emerald-50 text-emerald-900 ring-emerald-200' : 'bg-red-50 text-red-900 ring-red-200')}>
-          <span className="font-bold">{result.valid ? 'VALID' : 'NOT VALID'}</span>
-          {result.status ? <span className="ml-2 text-xs">({result.status})</span> : null}
-          {result.reason ? <span className="ml-2">{result.reason}</span> : null}
-          {pass ? (
-            <div className="tabular mt-1 text-xs">
-              {pass.boardingPassNumber} · {pass.passengerName} · {pass.flightNumber}{' '}
-              {pass.originAirportCode}→{pass.destinationAirportCode} · Seat {pass.seatNumber}
-            </div>
-          ) : null}
+        <div className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-900 ring-1 ring-inset ring-emerald-200">
+          <span className="font-bold">VALID — cleared to board</span>
+          <div className="tabular mt-1 text-xs">
+            {result.passengerName} · {result.bookingReference} · {result.flightNumber} · Seat{' '}
+            {result.seatNumber}
+            {result.gate ? ` · Gate ${result.gate}` : ''}
+            {result.boardingGroup ? ` · Group ${result.boardingGroup}` : ''}
+          </div>
+        </div>
+      ) : null}
+      {rejection ? (
+        <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-900 ring-1 ring-inset ring-red-200">
+          <span className="font-bold">NOT VALID</span>
+          <span className="ml-2">{rejection}</span>
         </div>
       ) : null}
     </div>
