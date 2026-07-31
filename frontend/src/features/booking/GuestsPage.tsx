@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { profileApi, type SavedTraveller } from '../../api/profile';
 import type { Flight } from '../../api/flights';
 import type { PassengerType } from '../../api/bookings';
 import type { FareType, TravelClass } from '../../api/quotes';
@@ -46,12 +47,39 @@ export function GuestsPage({
   onBack: () => void;
   onContinue: () => void;
 }) {
-  const { subject } = useSession();
+  const { subject, signedIn } = useSession();
   const [errors, setErrors] = useState<Record<string, string>[]>(() => paxTypes.map(() => ({})));
   const [contactError, setContactError] = useState<string | undefined>();
 
+  // Saved travellers (passenger features): one click fills the next empty
+  // guest form from the profile's address book - no retyping documents for
+  // the family. Loaded only for a signed-in booker; failure just hides chips.
+  const [saved, setSaved] = useState<SavedTraveller[]>([]);
+  useEffect(() => {
+    if (!signedIn) return;
+    const controller = new AbortController();
+    profileApi.travellers(controller.signal).then(setSaved).catch(() => {});
+    return () => controller.abort();
+  }, [signedIn]);
+
   function update(index: number, draft: PassengerDraft) {
     onGuestsChange(guests.map((g, i) => (i === index ? draft : g)));
+  }
+
+  function fillFromSaved(traveller: SavedTraveller) {
+    // Fill the first guest form still missing a name; if all are named,
+    // overwrite the last one (the user is correcting a pick).
+    const target = guests.findIndex((g) => !g.firstName.trim());
+    const index = target >= 0 ? target : guests.length - 1;
+    update(index, {
+      title: traveller.title ?? guests[index].title,
+      firstName: traveller.firstName,
+      lastName: traveller.lastName,
+      dob: traveller.dateOfBirth ?? '',
+      nationality: traveller.nationality ?? '',
+      passportNumber: traveller.passportNumber ?? '',
+      passportExpiry: traveller.passportExpiry ?? '',
+    });
   }
 
   // "Adult 1" / "Child 1" / "Infant 1" numbering within each category.
@@ -98,6 +126,25 @@ export function GuestsPage({
           </div>
 
           <h1 className="mt-5 text-2xl font-bold tracking-tight text-slate-900">Guest information</h1>
+
+          {saved.length > 0 ? (
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Fill from saved travellers
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {saved.map((t) => (
+                  <button key={t.id} type="button" onClick={() => fillFromSaved(t)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-accent-500 hover:text-accent-600">
+                    <span className="grid h-5 w-5 place-items-center rounded-full bg-brand-600 text-[9px] font-bold text-white">
+                      {(t.firstName[0] ?? '') + (t.lastName[0] ?? '')}
+                    </span>
+                    {t.firstName} {t.lastName}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {guests.map((draft, index) => (
             <section key={index} className="mt-6 border-t border-slate-100 pt-5 first:border-0">

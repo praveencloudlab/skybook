@@ -19,6 +19,12 @@ public record UpdateProfileRequest(
         String passportNumber,
         LocalDate passportExpiry,
         String emergencyContactName,
-        String emergencyContactPhone
+        String emergencyContactPhone,
+
+        @jakarta.validation.constraints.Size(max = 5)
+        String preferredLanguage,
+
+        @jakarta.validation.constraints.Size(min = 3, max = 3)
+        String preferredCurrency
 ) {
 }

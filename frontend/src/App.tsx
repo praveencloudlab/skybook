@@ -19,6 +19,7 @@ import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage';
 import { LandingPage } from './features/home/LandingPage';
 import { ProfilePage } from './features/profile/ProfilePage';
+import { profileApi } from './api/profile';
 import { AdminPage } from './features/admin/AdminPage';
 import { ErrorPage } from './features/errors/ErrorPage';
 import { RouteErrorBoundary } from './features/errors/RouteErrorBoundary';
@@ -87,6 +88,34 @@ function Header() {
   const { signedIn, subject, isAdmin } = useSession();
   const navigate = useNavigate();
 
+  // Account preferences (passenger features): on sign-in, the language and
+  // currency saved on the account win over this device's defaults - and a
+  // signed-in switch here is saved BACK to the account, so it follows the
+  // user to their next device. Anonymous visitors stay device-local.
+  const prefsApplied = useRef(false);
+  useEffect(() => {
+    if (!signedIn) {
+      prefsApplied.current = false;
+      return;
+    }
+    if (prefsApplied.current) return;
+    prefsApplied.current = true;
+    profileApi.get().then((p) => {
+      if (p.preferredLanguage) setLanguage(p.preferredLanguage as LanguageCode);
+      if (p.preferredCurrency) setDisplayCurrency(p.preferredCurrency);
+    }).catch(() => {});
+  }, [signedIn]);
+
+  function chooseLanguage(code: LanguageCode) {
+    setLanguage(code);
+    if (signedIn) profileApi.update({ preferredLanguage: code }).catch(() => {});
+  }
+
+  function chooseCurrency(code: string) {
+    setDisplayCurrency(code);
+    if (signedIn) profileApi.update({ preferredCurrency: code }).catch(() => {});
+  }
+
   async function signOut() {
     // Must be a server call: the cookie is httpOnly, so the browser cannot
     // delete it itself.
@@ -114,7 +143,7 @@ function Header() {
           <select
             aria-label="Language"
             value={currentLanguage()}
-            onChange={(e) => setLanguage(e.target.value as LanguageCode)}
+            onChange={(e) => chooseLanguage(e.target.value as LanguageCode)}
             className="rounded-lg border border-white/20 bg-transparent px-1.5 py-1 text-xs font-medium text-white/80 transition hover:bg-white/10 [&>option]:text-slate-900"
           >
             {LANGUAGES.map((l) => (
@@ -124,7 +153,7 @@ function Header() {
           <select
             aria-label="Currency"
             value={displayCurrency()}
-            onChange={(e) => setDisplayCurrency(e.target.value)}
+            onChange={(e) => chooseCurrency(e.target.value)}
             className="mr-1 rounded-lg border border-white/20 bg-transparent px-1.5 py-1 text-xs font-medium text-white/80 transition hover:bg-white/10 [&>option]:text-slate-900"
           >
             {DISPLAY_CURRENCIES.map((c) => (

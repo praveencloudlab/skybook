@@ -55,6 +55,11 @@ public class ProfileService {
         if (request.passportExpiry() != null) user.setPassportExpiry(request.passportExpiry());
         if (request.emergencyContactName() != null) user.setEmergencyContactName(blankToNull(request.emergencyContactName()));
         if (request.emergencyContactPhone() != null) user.setEmergencyContactPhone(blankToNull(request.emergencyContactPhone()));
+        if (request.preferredLanguage() != null) user.setPreferredLanguage(blankToNull(request.preferredLanguage()));
+        if (request.preferredCurrency() != null) {
+            String currency = blankToNull(request.preferredCurrency());
+            user.setPreferredCurrency(currency != null ? currency.toUpperCase() : null);
+        }
         return toProfile(userRepository.save(user));
     }
 
@@ -123,7 +128,8 @@ public class ProfileService {
                 user.getEmail(), user.getFullName(), user.getRole().name(),
                 user.getPhone(), user.getDateOfBirth(), user.getNationality(),
                 user.getPassportNumber(), user.getPassportExpiry(),
-                user.getEmergencyContactName(), user.getEmergencyContactPhone());
+                user.getEmergencyContactName(), user.getEmergencyContactPhone(),
+                user.getPreferredLanguage(), user.getPreferredCurrency());
     }
 
     private static SavedTravellerResponse toTraveller(SavedTraveller t) {

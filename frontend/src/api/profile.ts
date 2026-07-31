@@ -19,6 +19,9 @@ export interface Profile {
   passportExpiry: string | null;
   emergencyContactName: string | null;
   emergencyContactPhone: string | null;
+  /** Account-level preferences, applied on every sign-in; null = never chosen. */
+  preferredLanguage: string | null;
+  preferredCurrency: string | null;
 }
 
 export interface UpdateProfileRequest {
@@ -30,6 +33,8 @@ export interface UpdateProfileRequest {
   passportExpiry?: string | null;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
+  preferredLanguage?: string;
+  preferredCurrency?: string;
 }
 
 export interface SavedTraveller {

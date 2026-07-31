@@ -17,6 +17,9 @@ public record ProfileResponse(
         String passportNumber,
         LocalDate passportExpiry,
         String emergencyContactName,
-        String emergencyContactPhone
+        String emergencyContactPhone,
+        /** Account-level preferences, applied on every sign-in; null = never chosen. */
+        String preferredLanguage,
+        String preferredCurrency
 ) {
 }

@@ -54,6 +54,14 @@ public class User {
     @Column(name = "passport_expiry")
     private LocalDate passportExpiry;
 
+    // Account-level preferences (nullable = the user never chose; the client
+    // keeps its own default until they do).
+    @Column(name = "preferred_language", length = 5)
+    private String preferredLanguage;
+
+    @Column(name = "preferred_currency", length = 3)
+    private String preferredCurrency;
+
     @Column(name = "emergency_contact_name")
     private String emergencyContactName;
 
