@@ -160,10 +160,10 @@ function Header() {
               ) : null}
               <Link
                 to="/profile"
-                className="hidden max-w-[16ch] truncate rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white sm:inline-block"
+                className="hidden rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white sm:inline-block"
                 title={subject ?? ''}
               >
-                {subject}
+                {t('nav.profile')}
               </Link>
               <button
                 type="button"

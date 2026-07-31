@@ -114,23 +114,23 @@ export function LandingPage() {
           <circle cx="930" cy="118" r="4" fill="white" fillOpacity="0.55" />
         </svg>
 
-        <div className="relative mx-auto max-w-6xl px-6 pt-16 pb-14 sm:pt-20">
+        <div className="relative mx-auto max-w-6xl px-6 pt-8 pb-12 sm:pt-10">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs font-medium text-white/80 backdrop-blur">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
             Real schedules · live fares · scannable boarding passes
           </span>
-          <h1 className="display mt-6 max-w-2xl text-5xl leading-[1.05] text-white sm:text-6xl">
+          <h1 className="display mt-5 max-w-2xl text-4xl leading-[1.05] text-white sm:text-5xl">
             {t('hero.titleLead')}
             <br />
             <span className="gradient-text">{t('hero.titleAccent')}</span>
           </h1>
-          <p className="mt-5 max-w-lg text-lg text-white/60">
+          <p className="mt-4 max-w-lg text-base text-white/60 sm:text-lg">
             {t('hero.sub')}
           </p>
 
           {/* Embedded search - the shared premium-carrier booking widget
               (tabs, gold-disc tiles, Guests-and-Cabin panel, fare calendar). */}
-          <div className="mt-9">
+          <div className="mt-6">
             <BookingWidget onSearch={search} />
           </div>
 
