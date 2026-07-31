@@ -13,6 +13,12 @@ export interface BookingSearch {
   date: string;
   /** Present = round trip: the inbound (destination -> origin) date. */
   returnDate?: string;
+  /**
+   * Present = multi-city: ALL legs in travel order (the first mirrors
+   * origin/destination/date). Legs are picked one at a time on the results
+   * page and book as segments of ONE PNR.
+   */
+  legs?: { origin: string; destination: string; date: string }[];
   travellers: Travellers;
   cabin: TravelClass;
 }
@@ -37,12 +43,37 @@ export function BookingWidget({
   const [origin, setOrigin] = useState(initial?.origin ?? 'LHR');
   const [destination, setDestination] = useState(initial?.destination ?? 'DXB');
   const [date, setDate] = useState(initial?.date ?? defaultDate());
-  const [tripType, setTripType] = useState<'oneway' | 'round'>(initial?.returnDate ? 'round' : 'oneway');
+  const [tripType, setTripType] = useState<'oneway' | 'round' | 'multi'>(initial?.returnDate ? 'round' : 'oneway');
   const [returnDate, setReturnDate] = useState(initial?.returnDate ?? '');
+  // Multi-city onward legs (leg 1 is the From/To/date tiles above); each
+  // starts where the previous ended.
+  const [extraLegs, setExtraLegs] = useState<{ destination: string; date: string }[]>([]);
   const [travellers, setTravellers] = useState<Travellers>(initial?.travellers ?? ONE_ADULT);
   const [cabin, setCabin] = useState<TravelClass>(initial?.cabin ?? 'ECONOMY');
 
   const sameAirport = origin === destination;
+
+  /** Legs in travel order: leg n departs where leg n-1 landed. */
+  function buildLegs(): { origin: string; destination: string; date: string }[] {
+    const legs = [{ origin, destination, date }];
+    let from = destination;
+    for (const leg of extraLegs) {
+      legs.push({ origin: from, destination: leg.destination, date: leg.date });
+      from = leg.destination;
+    }
+    return legs;
+  }
+
+  const multiValid =
+    tripType !== 'multi' ||
+    (extraLegs.length > 0 &&
+      buildLegs().every(
+        (leg, i, all) =>
+          leg.destination !== '' &&
+          leg.origin !== leg.destination &&
+          leg.date !== '' &&
+          (i === 0 || leg.date >= all[i - 1].date),
+      ));
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -52,6 +83,9 @@ export function BookingWidget({
     if (tripType === 'round' && (!returnDate || returnDate < date)) {
       return;
     }
+    if (tripType === 'multi' && !multiValid) {
+      return;
+    }
     onSearch({
       origin,
       destination,
@@ -59,6 +93,7 @@ export function BookingWidget({
       travellers,
       cabin,
       ...(tripType === 'round' ? { returnDate } : {}),
+      ...(tripType === 'multi' ? { legs: buildLegs() } : {}),
     });
   }
 
@@ -96,13 +131,20 @@ export function BookingWidget({
         >
           {t('widget.oneway')}
         </button>
-        <span
-          aria-disabled="true"
-          title="Not available yet"
-          className="cursor-not-allowed rounded-full px-4 py-1.5 text-sm font-semibold text-slate-400"
+        <button
+          type="button"
+          onClick={() => {
+            setTripType('multi');
+            setExtraLegs((prev) => (prev.length ? prev : [{ destination: '', date: '' }]));
+          }}
+          aria-pressed={tripType === 'multi'}
+          className={
+            'rounded-full px-4 py-1.5 text-sm font-semibold transition ' +
+            (tripType === 'multi' ? 'bg-brand-900 text-white' : 'text-slate-500 hover:text-slate-800')
+          }
         >
           {t('widget.multicity')}
-        </span>
+        </button>
       </div>
 
       {/* The relative container both full-width panels resolve against. */}
@@ -173,9 +215,69 @@ export function BookingWidget({
           </button>
         </div>
 
+        {/* Multi-city onward legs: each departs where the previous landed. */}
+        {tripType === 'multi' ? (
+          <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+            {extraLegs.map((leg, i) => {
+              const from = i === 0 ? destination : extraLegs[i - 1].destination;
+              const minDate = i === 0 ? date : extraLegs[i - 1].date || date;
+              return (
+                <div key={i} className="grid items-center gap-2 md:grid-cols-[7rem_1fr_1fr_auto]">
+                  <span className="text-xs font-semibold text-slate-500">
+                    Leg {i + 2} · from <span className="tabular text-slate-800">{from || '—'}</span>
+                  </span>
+                  <AirportField
+                    label="To"
+                    value={leg.destination}
+                    onChange={(code) =>
+                      setExtraLegs((prev) => prev.map((l, j) => (j === i ? { ...l, destination: code } : l)))
+                    }
+                    exclude={from}
+                  />
+                  <label className="flex h-[52px] items-center gap-2 rounded-xl border border-slate-200 px-3">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Date</span>
+                    <input
+                      type="date"
+                      value={leg.date}
+                      min={minDate}
+                      onChange={(e) =>
+                        setExtraLegs((prev) => prev.map((l, j) => (j === i ? { ...l, date: e.target.value } : l)))
+                      }
+                      className="tabular w-full text-sm font-semibold text-slate-900 outline-none"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    aria-label={`Remove leg ${i + 2}`}
+                    disabled={extraLegs.length <= 1}
+                    onClick={() => setExtraLegs((prev) => prev.filter((_, j) => j !== i))}
+                    className="grid h-9 w-9 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-red-600 disabled:invisible"
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+            {extraLegs.length < 2 ? (
+              <button
+                type="button"
+                onClick={() => setExtraLegs((prev) => [...prev, { destination: '', date: '' }])}
+                className="text-sm font-semibold text-brand-700 hover:underline"
+              >
+                + Add another flight
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
         {tripType === 'round' && returnDate && returnDate < date ? (
           <p className="mt-2 text-sm font-medium text-red-600">
             The return date can't be before the outbound date.
+          </p>
+        ) : null}
+        {tripType === 'multi' && !multiValid && extraLegs.some((l) => l.destination || l.date) ? (
+          <p className="mt-2 text-sm font-medium text-red-600">
+            Each leg needs a destination and a date on or after the previous leg's.
           </p>
         ) : null}
         {sameAirport ? (

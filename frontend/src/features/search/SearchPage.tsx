@@ -95,6 +95,11 @@ export function SearchPage({
   // A through-ticketed outbound holds its onward legs too - the whole
   // connection joins the same PNR alongside the return.
   const [outboundConnection, setOutboundConnection] = useState<Flight[]>([]);
+  // Multi-city: the legs to fly (from the widget), which one is being picked,
+  // and the flights chosen so far - booked as segments of ONE PNR at the end.
+  const [multiLegs, setMultiLegs] = useState<SearchCriteria[] | null>(null);
+  const [legIndex, setLegIndex] = useState(0);
+  const [pickedLegs, setPickedLegs] = useState<Flight[]>([]);
   const [party, setParty] = useState<{ travellers: Travellers; cabin: TravelClass }>({
     travellers: initial.travellers,
     cabin: initial.cabin,
@@ -121,8 +126,11 @@ export function SearchPage({
     const firstLegOk = new Set(visible.map((f) => f.id));
     return itins
       .filter((t) => firstLegOk.has(t.legs[0].id))
-      .filter((t) => stopsChecked[t.stops] ?? true);
-  }, [itins, visible, stopsChecked]);
+      .filter((t) => stopsChecked[t.stops] ?? true)
+      // Multi-city legs join ONE booking, so a mixed-carrier self-transfer
+      // (which is separate tickets by definition) can't be a leg of it.
+      .filter((t) => !multiLegs || t.stops === 0 || t.sameCarrier);
+  }, [itins, visible, stopsChecked, multiLegs]);
 
   // Day-floor fares for pricing the result cards ("from £X pp"): keyed by
   // departure date, covering the searched day +2 (overnight connection legs).
@@ -162,14 +170,36 @@ export function SearchPage({
 
   function handleSearch(search: BookingSearch) {
     setParty({ travellers: search.travellers, cabin: search.cabin });
-    setReturnDate(search.returnDate);
+    setReturnDate(search.legs ? undefined : search.returnDate);
     setOutbound(null);
     setOutboundConnection([]);
+    setMultiLegs(search.legs ?? null);
+    setLegIndex(0);
+    setPickedLegs([]);
     // Cabin passed explicitly: setParty hasn't landed yet in this tick.
     void runSearch(
-      { origin: search.origin, destination: search.destination, date: search.date },
+      search.legs
+        ? search.legs[0]
+        : { origin: search.origin, destination: search.destination, date: search.date },
       search.cabin,
     );
+  }
+
+  /**
+   * Multi-city: bank this leg's flight(s) and move to the next leg's search;
+   * after the last leg the whole journey heads to fares as ONE booking
+   * (first flight + the rest as onward segments).
+   */
+  function advanceMultiCity(flights: Flight[]) {
+    if (!multiLegs || !onSelectFlight) return;
+    const picked = [...pickedLegs, ...flights];
+    if (legIndex + 1 < multiLegs.length) {
+      setPickedLegs(picked);
+      setLegIndex(legIndex + 1);
+      void runSearch(multiLegs[legIndex + 1]);
+    } else {
+      onSelectFlight(picked[0], party.travellers, party.cabin, undefined, picked.slice(1));
+    }
   }
 
   function pickRoute(route: { origin: string; destination: string }) {
@@ -269,6 +299,35 @@ export function SearchPage({
         <div className="mt-8">
           <ErrorAlert error={error} />
         </div>
+
+        {multiLegs ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-brand-50 px-4 py-2.5 text-sm text-brand-900 ring-1 ring-inset ring-brand-100">
+            <span>
+              <span className="font-bold">Multi-city · leg {legIndex + 1} of {multiLegs.length}:</span>{' '}
+              <span className="tabular font-semibold">
+                {multiLegs[legIndex].origin} → {multiLegs[legIndex].destination}
+              </span>
+              {pickedLegs.length ? (
+                <span className="ml-2 text-xs text-brand-700">
+                  picked: {pickedLegs.map((f) => f.flightNumber).join(' · ')}
+                </span>
+              ) : null}
+            </span>
+            {pickedLegs.length ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setLegIndex(0);
+                  setPickedLegs([]);
+                  void runSearch(multiLegs[0]);
+                }}
+                className="font-bold text-brand-700 underline-offset-2 hover:underline"
+              >
+                Start over
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {outbound ? (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900 ring-1 ring-inset ring-emerald-200">
@@ -406,6 +465,10 @@ export function SearchPage({
                       onSelectLeg={
                         onSelectFlight
                           ? (leg) => {
+                              if (multiLegs) {
+                                advanceMultiCity([leg]);
+                                return;
+                              }
                               if (returnDate && !outbound && searched) {
                                 // Phase one of a round trip: hold the outbound,
                                 // search the inbound (route swapped).
@@ -434,6 +497,10 @@ export function SearchPage({
                         // to per-leg booking there.
                         onSelectFlight && (!returnDate || !outbound)
                           ? (tripLegs) => {
+                              if (multiLegs) {
+                                advanceMultiCity(tripLegs);
+                                return;
+                              }
                               if (returnDate && !outbound && searched) {
                                 setOutbound(tripLegs[0]);
                                 setOutboundConnection(tripLegs.slice(1));
