@@ -35,3 +35,6 @@ echo "5/5  full-mesh densification (every pair, 3x daily, +1 year from today)"
 bash "$DIR/seed_mesh.sh"
 
 echo "done."
+
+echo "terminals: real per-carrier terminal assignments (08_terminals.sql)"
+docker exec -i "$C" psql -U postgres -d skybook_flight -v ON_ERROR_STOP=1 < "$DIR/08_terminals.sql"

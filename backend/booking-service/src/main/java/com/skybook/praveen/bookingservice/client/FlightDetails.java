@@ -20,6 +20,8 @@ public record FlightDetails(
         String destinationAirportCode,
         LocalDateTime departureTime,
         LocalDateTime arrivalTime,
+        String departureTerminal,
+        String arrivalTerminal,
         FlightBookingStatus status
 ) {
 }

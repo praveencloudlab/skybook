@@ -37,6 +37,11 @@ public class BookingEventSegment {
 
     private String arrivalTime;
 
+    /** The carrier's REAL terminal at each end (flight-service TerminalPolicy). Null on old events. */
+    private String departureTerminal;
+
+    private String arrivalTerminal;
+
     /** This leg's passenger rows (seat, fare, check-in state are per-leg facts). */
     private List<BookingEventPassenger> passengers;
 }

@@ -55,6 +55,15 @@ public class Flight extends Auditable {
     @Column(nullable = false)
     private LocalDateTime arrivalTime;
 
+    // Real terminal assignments (TerminalPolicy): the carrier's terminal at
+    // each end - e.g. EK at LHR = T3, at DXB = T3; BA at LHR = T5. Nullable
+    // for rows created before this column existed (backfilled by the seeds).
+    @Column(length = 4)
+    private String departureTerminal;
+
+    @Column(length = 4)
+    private String arrivalTerminal;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private FlightStatus status;

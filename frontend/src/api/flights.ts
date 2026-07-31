@@ -24,6 +24,9 @@ export interface Flight {
   destinationAirportCode: string;
   departureTime: string;
   arrivalTime: string;
+  /** The carrier's real terminal at each end (server TerminalPolicy); absent on old rows. */
+  departureTerminal?: string | null;
+  arrivalTerminal?: string | null;
   status: FlightStatus;
 }
 

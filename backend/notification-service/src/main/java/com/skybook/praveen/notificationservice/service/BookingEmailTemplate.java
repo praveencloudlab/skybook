@@ -187,23 +187,33 @@ public class BookingEmailTemplate {
                         event.getSegments().size() > 1 ? segmentLabel(segment.getSegmentIndex()) : "",
                         segment.getFlightNumber(),
                         segment.getOriginAirportCode(), segment.getDestinationAirportCode(),
-                        segment.getDepartureTime(), segment.getArrivalTime()));
+                        segment.getDepartureTime(), segment.getArrivalTime(),
+                        segment.getDepartureTerminal(), segment.getArrivalTerminal()));
             }
             return cards.toString();
         }
         return card("", event.getFlightNumber(),
                 event.getOriginAirportCode(), event.getDestinationAirportCode(),
-                event.getDepartureTime(), event.getArrivalTime());
+                event.getDepartureTime(), event.getArrivalTime(), null, null);
     }
 
     private static String card(String label, String flightNumber,
                                String origin, String destination,
-                               String departureTime, String arrivalTime) {
+                               String departureTime, String arrivalTime,
+                               String departureTerminal, String arrivalTerminal) {
         if (origin == null || destination == null) {
             return "";
         }
+        // Real terminals ride the event since the terminals feature; older
+        // events have none and simply show the city alone.
         String originCity = AirportCityLookup.cityFor(origin);
         String destinationCity = AirportCityLookup.cityFor(destination);
+        if (departureTerminal != null && !departureTerminal.isBlank()) {
+            originCity = nvl(originCity, "") + " &middot; Terminal " + departureTerminal;
+        }
+        if (arrivalTerminal != null && !arrivalTerminal.isBlank()) {
+            destinationCity = nvl(destinationCity, "") + " &middot; Terminal " + arrivalTerminal;
+        }
         String duration = flightDuration(departureTime, arrivalTime);
         String durationLabel = duration.isEmpty() ? escape(nvl(flightNumber, "")) : duration;
         String labelRow = label == null || label.isEmpty() ? "" : """

@@ -28,3 +28,6 @@ echo "3/3  inventory for flights that lack it (skybook_inventory)"
 docker exec -i "$C" psql -U postgres -d skybook_inventory -v ON_ERROR_STOP=1 < "$DIR/07_mesh_inventory.sql"
 
 echo "done."
+
+echo "terminals: real per-carrier terminal assignments (08_terminals.sql)"
+docker exec -i "$C" psql -U postgres -d skybook_flight -v ON_ERROR_STOP=1 < "$DIR/08_terminals.sql"

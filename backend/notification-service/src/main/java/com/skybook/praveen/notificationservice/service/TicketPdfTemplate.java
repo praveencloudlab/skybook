@@ -152,17 +152,29 @@ public class TicketPdfTemplate {
                 tables.append(routeTable(
                         segment.getOriginAirportCode(), segment.getDepartureTime(),
                         label + nvl(segment.getFlightNumber(), "-"),
-                        segment.getDestinationAirportCode(), segment.getArrivalTime()));
+                        segment.getDestinationAirportCode(), segment.getArrivalTime(),
+                        segment.getDepartureTerminal(), segment.getArrivalTerminal()));
             }
             return tables.toString();
         }
         return routeTable(event.getOriginAirportCode(), event.getDepartureTime(),
                 "Flight " + nvl(event.getFlightNumber(), "-"),
-                event.getDestinationAirportCode(), event.getArrivalTime());
+                event.getDestinationAirportCode(), event.getArrivalTime(), null, null);
     }
 
     private static String routeTable(String origin, String departureTime,
-                                     String flightLabel, String destination, String arrivalTime) {
+                                     String flightLabel, String destination, String arrivalTime,
+                                     String departureTerminal, String arrivalTerminal) {
+        // Real terminals from the event (flight-service TerminalPolicy);
+        // old events carry none and print the city alone.
+        String originCity = nvl(AirportCityLookup.cityFor(origin), "");
+        String destinationCity = nvl(AirportCityLookup.cityFor(destination), "");
+        if (departureTerminal != null && !departureTerminal.isBlank()) {
+            originCity = originCity + " - Terminal " + departureTerminal;
+        }
+        if (arrivalTerminal != null && !arrivalTerminal.isBlank()) {
+            destinationCity = destinationCity + " - Terminal " + arrivalTerminal;
+        }
         return """
                   <table width="100%%" style="margin-top:14px;border:1px solid #d7dce1;">
                     <tr>
@@ -184,11 +196,11 @@ public class TicketPdfTemplate {
                   </table>
                 """.formatted(
                 escape(nvl(origin, "-")),
-                escape(nvl(AirportCityLookup.cityFor(origin), "")),
+                escape(originCity),
                 escape(nvl(departureTime, "-")),
                 escape(flightLabel),
                 escape(nvl(destination, "-")),
-                escape(nvl(AirportCityLookup.cityFor(destination), "")),
+                escape(destinationCity),
                 escape(nvl(arrivalTime, "-")));
     }
 

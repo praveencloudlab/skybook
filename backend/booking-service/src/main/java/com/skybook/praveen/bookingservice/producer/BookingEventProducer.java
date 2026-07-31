@@ -121,6 +121,8 @@ public class BookingEventProducer {
                                                     ? details.departureTime().format(EVENT_TIME) : null)
                                             .arrivalTime(details != null && details.arrivalTime() != null
                                                     ? details.arrivalTime().format(EVENT_TIME) : null)
+                                            .departureTerminal(details != null ? details.departureTerminal() : null)
+                                            .arrivalTerminal(details != null ? details.arrivalTerminal() : null)
                                             .passengers(booking.passengers() == null ? List.of()
                                                     : booking.passengers().stream()
                                                             .filter(p -> p.segmentIndex() == segment.segmentIndex())

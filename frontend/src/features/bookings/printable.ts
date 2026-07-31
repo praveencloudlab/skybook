@@ -341,11 +341,11 @@ export function printETicket(
       <tr${cancelled ? ' style="opacity:.55;"' : ''}>
         <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">
           <div><b style="font-size:15px;">${flight.originAirportCode}</b> ${cityFor(flight.originAirportCode).toUpperCase()}</div>
-          <div style="color:#333;">Terminal: M</div>
+          ${flight.departureTerminal ? `<div style="color:#333;">Terminal: <b>${flight.departureTerminal}</b></div>` : ''}
         </td>
         <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">
           <div><b style="font-size:15px;">${flight.destinationAirportCode}</b> ${cityFor(flight.destinationAirportCode).toUpperCase()}</div>
-          <div style="color:#333;">Terminal: 4</div>
+          ${flight.arrivalTerminal ? `<div style="color:#333;">Terminal: <b>${flight.arrivalTerminal}</b></div>` : ''}
         </td>
         <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">${flight.airlineCode}${flight.flightNumber.replace(/\D/g, '') || flight.flightNumber}</td>
         <td style="padding:14px 14px;vertical-align:top;line-height:1.85;"><b>${time(flight.departureTime)}</b><br>${ddMon(flight.departureTime)}</td>

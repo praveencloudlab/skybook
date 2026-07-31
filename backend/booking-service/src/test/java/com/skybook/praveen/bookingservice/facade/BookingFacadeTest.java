@@ -112,7 +112,7 @@ class BookingFacadeTest {
     private final FlightDetails flight = new FlightDetails(
             10L, "AI131", "LHR", "DEL",
             LocalDateTime.of(2030, 7, 16, 10, 0), LocalDateTime.of(2030, 7, 16, 19, 0),
-            FlightBookingStatus.SCHEDULED);
+            null, null, FlightBookingStatus.SCHEDULED);
 
     private void stubFlightOk() {
         when(flightServiceClient.getFlight(10L)).thenReturn(flight);
@@ -274,7 +274,7 @@ class BookingFacadeTest {
         private final FlightDetails returnFlight = new FlightDetails(
                 20L, "AI132", "DEL", "LHR",
                 LocalDateTime.of(2030, 7, 23, 10, 0), LocalDateTime.of(2030, 7, 23, 19, 0),
-                FlightBookingStatus.SCHEDULED);
+                null, null, FlightBookingStatus.SCHEDULED);
 
         // One traveller with a manual outbound seat pick; return auto-assigns.
         private final CreateBookingRequest request = new CreateBookingRequest(
@@ -355,7 +355,7 @@ class BookingFacadeTest {
             stubFlightOk();
             FlightDetails tooEarly = new FlightDetails(20L, "AI132", "DEL", "LHR",
                     flight.arrivalTime().minusHours(2), flight.arrivalTime().plusHours(6),
-                    FlightBookingStatus.SCHEDULED);
+                    null, null, FlightBookingStatus.SCHEDULED);
             when(flightServiceClient.getFlight(20L)).thenReturn(tooEarly);
 
             assertThatThrownBy(() -> facade.createBooking(request))
@@ -463,7 +463,7 @@ class BookingFacadeTest {
             when(flightServiceClient.getFlight(10L)).thenReturn(new FlightDetails(
                     10L, "AI131", "LHR", "DEL",
                     LocalDateTime.of(2030, 7, 16, 10, 0), LocalDateTime.of(2030, 7, 16, 19, 0),
-                    FlightBookingStatus.CANCELLED));
+                    null, null, FlightBookingStatus.CANCELLED));
 
             assertThatThrownBy(() -> facade.quoteFares(10L))
                     .isInstanceOf(IllegalArgumentException.class)
