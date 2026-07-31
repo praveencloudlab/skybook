@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import { useEffect, useState } from 'react';
 import type { Flight } from '../../api/flights';
 import type { PassengerType } from '../../api/bookings';
@@ -185,7 +186,7 @@ export function SeatSelectionPage({
               onClick={onBack}
               className="rounded-full border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              Back
+              {t('stepper.back')}
             </button>
             <div className="flex items-center gap-3">
               {selected.length === 0 ? (

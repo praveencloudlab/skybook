@@ -273,7 +273,7 @@ export function PaymentPage({
               disabled={busy}
               className="rounded-full border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
             >
-              Back
+              {t('stepper.back')}
             </button>
           </div>
         </div>

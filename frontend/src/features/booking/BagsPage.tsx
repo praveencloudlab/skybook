@@ -1,3 +1,4 @@
+import { t } from '../../lib/i18n';
 import type { Flight } from '../../api/flights';
 import type { PassengerType } from '../../api/bookings';
 import { FARE_TYPE_LABELS, type FareType, type TravelClass } from '../../api/quotes';
@@ -163,9 +164,9 @@ export function BagsPage({
               onClick={onBack}
               className="rounded-full border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              Back
+              {t('stepper.back')}
             </button>
-            <Button onClick={onContinue}>Continue</Button>
+            <Button onClick={onContinue}>{t('cta.continue')}</Button>
           </div>
         </div>
 
