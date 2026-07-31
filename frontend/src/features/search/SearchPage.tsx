@@ -92,6 +92,9 @@ export function SearchPage({
   // Seeded from the deep link so a landing-page round trip STAYS a round trip.
   const [returnDate, setReturnDate] = useState<string | undefined>(initial.returnDate);
   const [outbound, setOutbound] = useState<Flight | null>(null);
+  // A through-ticketed outbound holds its onward legs too - the whole
+  // connection joins the same PNR alongside the return.
+  const [outboundConnection, setOutboundConnection] = useState<Flight[]>([]);
   const [party, setParty] = useState<{ travellers: Travellers; cabin: TravelClass }>({
     travellers: initial.travellers,
     cabin: initial.cabin,
@@ -161,6 +164,7 @@ export function SearchPage({
     setParty({ travellers: search.travellers, cabin: search.cabin });
     setReturnDate(search.returnDate);
     setOutbound(null);
+    setOutboundConnection([]);
     // Cabin passed explicitly: setParty hasn't landed yet in this tick.
     void runSearch(
       { origin: search.origin, destination: search.destination, date: search.date },
@@ -269,14 +273,18 @@ export function SearchPage({
         {outbound ? (
           <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900 ring-1 ring-inset ring-emerald-200">
             <span>
-              <span className="font-bold">Outbound selected:</span> {outbound.flightNumber}{' '}
-              {outbound.originAirportCode} → {outbound.destinationAirportCode} — now choose your{' '}
+              <span className="font-bold">Outbound selected:</span> {outbound.flightNumber}
+              {outboundConnection.map((leg) => ` + ${leg.flightNumber}`).join('')}{' '}
+              {outbound.originAirportCode} →{' '}
+              {(outboundConnection[outboundConnection.length - 1] ?? outbound).destinationAirportCode}
+              {outboundConnection.length ? ' (through-ticket)' : ''} — now choose your{' '}
               <span className="font-bold">return</span> flight.
             </span>
             <button
               type="button"
               onClick={() => {
                 setOutbound(null);
+                setOutboundConnection([]);
                 if (searched) {
                   void runSearch({ origin: searched.destination, destination: searched.origin, date: widgetInitial.date });
                 }
@@ -410,7 +418,7 @@ export function SearchPage({
                                 return;
                               }
                               if (outbound) {
-                                onSelectFlight(outbound, party.travellers, party.cabin, leg);
+                                onSelectFlight(outbound, party.travellers, party.cabin, leg, outboundConnection);
                                 return;
                               }
                               onSelectFlight(leg, party.travellers, party.cabin);
@@ -419,17 +427,31 @@ export function SearchPage({
                       }
                       onSelectItinerary={
                         // Same-carrier through-ticket: all legs, ONE booking.
-                        // Round-trip two-phase keeps direct-or-per-leg picks,
-                        // so through selection is one-way only (v1).
-                        onSelectFlight && !returnDate
-                          ? (tripLegs) =>
+                        // In round-trip phase ONE the whole connection is held
+                        // as the outbound and joins the same PNR as the
+                        // return; in phase TWO the return must be a single
+                        // flight (request shape), so through cards fall back
+                        // to per-leg booking there.
+                        onSelectFlight && (!returnDate || !outbound)
+                          ? (tripLegs) => {
+                              if (returnDate && !outbound && searched) {
+                                setOutbound(tripLegs[0]);
+                                setOutboundConnection(tripLegs.slice(1));
+                                void runSearch({
+                                  origin: searched.destination,
+                                  destination: searched.origin,
+                                  date: returnDate,
+                                });
+                                return;
+                              }
                               onSelectFlight(
                                 tripLegs[0],
                                 party.travellers,
                                 party.cabin,
                                 undefined,
                                 tripLegs.slice(1),
-                              )
+                              );
+                            }
                           : undefined
                       }
                     />

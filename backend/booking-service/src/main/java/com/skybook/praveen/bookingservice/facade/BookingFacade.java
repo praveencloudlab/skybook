@@ -94,11 +94,6 @@ public class BookingFacade {
         // previous leg's arrival - before any row or hold exists.
         List<FlightDetails> outboundLegs = new ArrayList<>(List.of(flight));
         if (request.connectionFlightIds() != null && !request.connectionFlightIds().isEmpty()) {
-            if (request.returnFlightId() != null) {
-                throw new IllegalArgumentException(
-                        "A through-ticket connection can't be combined with a return in one booking yet"
-                                + " - book the return separately.");
-            }
             for (Long legId : request.connectionFlightIds()) {
                 FlightDetails legFlight = flightServiceClient.getFlight(legId);
                 if (legFlight.status() == FlightBookingStatus.CANCELLED) {
@@ -123,8 +118,11 @@ public class BookingFacade {
             if (returnFlight.status() == FlightBookingStatus.CANCELLED) {
                 throw new IllegalArgumentException("Cannot book a cancelled return flight");
             }
-            if (flight.arrivalTime() != null
-                    && !returnFlight.departureTime().isAfter(flight.arrivalTime())) {
+            // Chronology against the LAST outbound leg: a through-ticketed
+            // outbound arrives when its final connection lands.
+            FlightDetails lastOutbound = outboundLegs.get(outboundLegs.size() - 1);
+            if (lastOutbound.arrivalTime() != null
+                    && !returnFlight.departureTime().isAfter(lastOutbound.arrivalTime())) {
                 throw new IllegalArgumentException(
                         "The return flight must depart after the outbound arrives");
             }

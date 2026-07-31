@@ -678,11 +678,15 @@ function BookingJourney() {
         extras={extras}
         total={total}
         onBack={() => {
-          if (connection.length) {
+          // Walk the seat chain backwards: return map, then connection legs,
+          // then the outbound map.
+          if (returnFlight) {
+            setStep('seatReturn');
+          } else if (connection.length) {
             setConnLeg(connection.length - 1);
             setStep('seatConnection');
           } else {
-            setStep(returnFlight ? 'seatReturn' : 'seat');
+            setStep('seat');
           }
         }}
         onContinue={() => setStep('payment')}
@@ -754,7 +758,8 @@ function BookingJourney() {
           if (connLeg + 1 < connection.length) {
             setConnLeg(connLeg + 1);
           } else {
-            setStep('bags');
+            // A combined journey continues to the return's own seat map.
+            setStep(returnFlight ? 'seatReturn' : 'bags');
           }
         }}
       />
@@ -778,7 +783,14 @@ function BookingJourney() {
         travellers={travellers}
         paxTypes={paxTypes}
         guests={guests}
-        onBack={() => setStep('seat')}
+        onBack={() => {
+          if (connection.length) {
+            setConnLeg(connection.length - 1);
+            setStep('seatConnection');
+          } else {
+            setStep('seat');
+          }
+        }}
         onContinue={(chosen) => {
           setReturnSeats(chosen);
           setStep('bags');
