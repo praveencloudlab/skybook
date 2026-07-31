@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useEffect, useState, type FormEvent } from 'react';
 import { NATIONALITIES, bookingsApi } from '../../api/bookings';
 import { flightsApi } from '../../api/flights';
@@ -144,10 +145,10 @@ function NextTripCard() {
               Payment pending
             </span>
           ) : null}
-          <a href={`/bookings/${booking.id}`}
+          <Link to={`/bookings?open=${booking.id}`}
             className="rounded-full bg-accent-500 px-5 py-2 text-sm font-bold text-white transition hover:bg-accent-600">
             {checkInOpen ? 'Check in' : 'View trip'}
-          </a>
+          </Link>
         </div>
       </div>
     </section>

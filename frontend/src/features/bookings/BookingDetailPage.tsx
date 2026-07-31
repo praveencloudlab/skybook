@@ -214,6 +214,24 @@ export function BookingDetailPage({
       .filter((r) => r.status === 'CHECKED_IN' || r.status === 'BOARDED')
       .map((r) => r.bookingPassengerId),
   );
+  /**
+   * A segment is the RETURN only if its flight lands back at the journey's
+   * first origin - a through-ticket's onward connection is a LEG of the
+   * outbound, never a return, and must not offer return-only actions (the
+   * server would refuse anyway; the button should not exist).
+   */
+  const isReturnSegment = (segmentIndex: number): boolean => {
+    if (segmentIndex === 0) return false;
+    const segs = booking.segments ?? [];
+    const firstFlight = segmentFlights[segs[0]?.flightId ?? -1];
+    const thisFlight = segmentFlights[segs.find((s) => s.segmentIndex === segmentIndex)?.flightId ?? -1];
+    if (!firstFlight || !thisFlight) return false;
+    return thisFlight.destinationAirportCode === firstFlight.originAirportCode;
+  };
+
+  const segLabel = (segmentIndex: number): string =>
+    segmentIndex === 0 ? 'Outbound' : isReturnSegment(segmentIndex) ? 'Return' : `Leg ${segmentIndex + 1}`;
+
   const checkedIn = (p: (typeof booking.passengers)[number]) =>
     p.checkInStatus === 'CHECKED_IN' ||
     p.checkInStatus === 'BOARDED' ||
@@ -328,7 +346,7 @@ export function BookingDetailPage({
             <div className="mb-3 flex items-center gap-2">
               {multi ? (
                 <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-700 ring-1 ring-inset ring-brand-100">
-                  {seg.segmentIndex === 0 ? 'Outbound' : 'Return'}
+                  {segLabel(seg.segmentIndex)}
                 </span>
               ) : null}
               <span className="grid h-6 w-8 place-items-center rounded bg-brand-600 text-[10px] font-bold text-white">
@@ -387,14 +405,14 @@ export function BookingDetailPage({
                     Change date — free for Premium
                   </button>
                 ) : null}
-                {seg.segmentIndex >= 1 ? (
+                {isReturnSegment(seg.segmentIndex) ? (
                   <button
                     type="button"
                     disabled={cancelling}
                     onClick={() => void cancelReturnSegment(seg.segmentIndex)}
                     className="rounded-xl border border-red-200 px-3.5 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
                   >
-                    Cancel this leg &amp; refund
+                    Cancel the return &amp; refund
                   </button>
                 ) : null}
               </div>
@@ -472,7 +490,7 @@ export function BookingDetailPage({
                   <p className="mt-0.5 text-xs text-slate-500">
                     {(booking.segments?.length ?? 0) > 1 ? (
                       <span className="font-semibold text-brand-700">
-                        {(p.segmentIndex ?? 0) === 0 ? 'Outbound' : 'Return'} ·{' '}
+                        {segLabel(p.segmentIndex ?? 0)} ·{' '}
                       </span>
                     ) : null}
                     {TRAVEL_CLASS_LABELS[p.travelClass]} · {FARE_TYPE_LABELS[p.fareType]}

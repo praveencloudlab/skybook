@@ -35,7 +35,7 @@ import { ConfirmationPage } from './features/booking/ConfirmationPage';
 import { MyBookingsPage } from './features/bookings/MyBookingsPage';
 import { BookingDetailPage } from './features/bookings/BookingDetailPage';
 import type { AircraftSeat } from './api/seats';
-import type { Booking, PassengerType } from './api/bookings';
+import { bookingsApi, type Booking, type PassengerType } from './api/bookings';
 import { ONE_ADULT, totalTravellers, type Travellers } from './components/TravellersPicker';
 import type { Payment } from './api/payments';
 import type { FareType, TravelClass } from './api/quotes';
@@ -874,14 +874,22 @@ function BookingJourney() {
 function BookingsRoute() {
   const [open, setOpen] = useState<Booking | null>(null);
   const location = useLocation();
+  const [params] = useSearchParams();
 
   // Close the open detail whenever /bookings is navigated to - including
   // clicking "My trips" in the header while already here (same path, new
   // history key). Without this the detail is local state that a same-path
   // navigation can't clear, so the link appears to do nothing.
+  // ?open={id} (profile hub's next-trip card) deep-links straight into one
+  // booking's detail instead.
   useEffect(() => {
-    setOpen(null);
-  }, [location.key]);
+    const openId = Number(params.get('open'));
+    if (openId) {
+      bookingsApi.byId(openId).then(setOpen).catch(() => setOpen(null));
+    } else {
+      setOpen(null);
+    }
+  }, [location.key, params]);
 
   return open ? (
     <BookingDetailPage booking={open} onBack={() => setOpen(null)} />

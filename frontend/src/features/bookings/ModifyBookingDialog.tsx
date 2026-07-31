@@ -68,10 +68,18 @@ export function ModifyBookingDialog({
     setChosen(null);
     flightsApi
       .search({ origin, destination, date }, controller.signal)
-      .then((list) => setFlights(list.filter((f) => f.status !== 'CANCELLED')))
+      .then((list) => {
+        const open = list.filter((f) => f.status !== 'CANCELLED');
+        setFlights(open);
+        // Bags-only change: keep the CURRENT flight preselected when it is
+        // on this date, so adjusting bags alone can confirm without the
+        // user having to re-pick the flight they already have.
+        const current = open.find((f) => f.id === booking.flightId);
+        if (current) setChosen(current);
+      })
       .catch(() => setFlights([]));
     return () => controller.abort();
-  }, [origin, destination, date]);
+  }, [origin, destination, date, booking.flightId]);
 
   // Reprice once a flight is chosen - the same quote checkout will honour.
   useEffect(() => {
@@ -313,6 +321,17 @@ export function ModifyBookingDialog({
                 <div className="flex justify-between px-4 py-2 font-bold">
                   <dt className="text-slate-900">New booking total (today's fares)</dt>
                   <dd className="tabular text-slate-900">{money(newTotal, CURRENCY)}</dd>
+                </div>
+                {/* The number that actually matters: what this change COSTS
+                    once the old booking's refund lands. */}
+                <div className="flex justify-between border-t border-slate-200 bg-slate-50 px-4 py-2 font-bold">
+                  <dt className="text-slate-900">
+                    Net {newTotal >= Number(booking.totalFare) ? 'cost' : 'refund'} after your{' '}
+                    {money(booking.totalFare, CURRENCY)} refund
+                  </dt>
+                  <dd className={'tabular ' + (newTotal >= Number(booking.totalFare) ? 'text-slate-900' : 'text-emerald-700')}>
+                    {money(Math.abs(newTotal - Number(booking.totalFare)), CURRENCY)}
+                  </dd>
                 </div>
               </dl>
             ) : null}

@@ -143,6 +143,18 @@ export function PaymentPage({
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Payment</h1>
           <p className="mt-1 text-sm text-slate-500">How would you like to pay?</p>
 
+          {/* The WHOLE journey being paid for - every leg named, so a
+              multi-city or round trip is never mistaken for leg one alone. */}
+          {connection.length || returnFlight ? (
+            <div className="mt-3 rounded-xl bg-brand-50 px-4 py-3 text-sm text-slate-700 ring-1 ring-inset ring-brand-100">
+              <span className="font-bold text-brand-900">Your journey · one booking:</span>{' '}
+              {[flight, ...connection].map((leg) => `${leg.originAirportCode} → ${leg.destinationAirportCode} (${leg.flightNumber})`).join(' · ')}
+              {returnFlight
+                ? ` · return ${returnFlight.originAirportCode} → ${returnFlight.destinationAirportCode} (${returnFlight.flightNumber})`
+                : ''}
+            </div>
+          ) : null}
+
           <div className="mt-4">
             <ErrorAlert error={error} />
           </div>
