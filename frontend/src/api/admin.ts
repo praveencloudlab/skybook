@@ -203,6 +203,11 @@ export const adminApi = {
       `/api/boarding-passes/verify?token=${encodeURIComponent(token)}`, { signal });
   },
 
+  /** Create a flight's seat inventory on a chosen aircraft's cabin layout. */
+  createInventory(flightId: number, aircraftId: number): Promise<FlightInventorySummary> {
+    return api.post<FlightInventorySummary>('/api/inventory', { flightId, aircraftId, blockedSeats: 0 });
+  },
+
   /* ---- fleet & inventory ---- */
   aircraft(signal?: AbortSignal): Promise<Aircraft[]> {
     return api.get<Aircraft[]>('/api/aircraft', { signal });

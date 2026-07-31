@@ -337,9 +337,20 @@ function CreateFlightForm({ onCreated }: { onCreated: () => void }) {
   const [destination, setDestination] = useState('DXB');
   const [departure, setDeparture] = useState(`${addDaysIso(todayIso(), 2)}T09:00`);
   const [arrival, setArrival] = useState(`${addDaysIso(todayIso(), 2)}T16:00`);
+  const [fleet, setFleet] = useState<Aircraft[]>([]);
+  const [aircraftId, setAircraftId] = useState<number | ''>('');
   const [error, setError] = useState<ApiError | null>(null);
-  const [done, setDone] = useState<Flight | null>(null);
+  const [done, setDone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const c = new AbortController();
+    adminApi.aircraft(c.signal).then((a) => {
+      setFleet(a);
+      if (a.length) setAircraftId(a[0].id);
+    }).catch(() => {});
+    return () => c.abort();
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -352,7 +363,15 @@ function CreateFlightForm({ onCreated }: { onCreated: () => void }) {
         originAirportCode: origin, destinationAirportCode: destination,
         departureTime: `${departure}:00`, arrivalTime: `${arrival}:00`,
       });
-      setDone(created);
+      // A flight without inventory sells seats unpriced - so the console
+      // creates the cabin in the same breath, on the chosen aircraft.
+      let inventoryNote = 'no inventory (unpriced seats)';
+      if (aircraftId !== '') {
+        await adminApi.createInventory(created.id, aircraftId);
+        const chosen = fleet.find((a) => a.id === aircraftId);
+        inventoryNote = `${chosen?.registrationNumber} ${chosen?.model} cabin (${chosen?.totalSeats} seats)`;
+      }
+      setDone(`Created ${created.flightNumber} (#${created.id}) - T${created.departureTerminal} → T${created.arrivalTerminal} · ${inventoryNote}.`);
       onCreated();
     } catch (e) {
       setError(e instanceof ApiError ? e : null);
@@ -382,6 +401,16 @@ function CreateFlightForm({ onCreated }: { onCreated: () => void }) {
           <input type="datetime-local" value={arrival} onChange={(e) => setArrival(e.target.value)}
             className="tabular w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500" />
         </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Aircraft (cabin)</span>
+          <select value={aircraftId} onChange={(e) => setAircraftId(e.target.value ? Number(e.target.value) : '')}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500">
+            {fleet.map((a) => (
+              <option key={a.id} value={a.id}>{a.registrationNumber} · {a.model} ({a.totalSeats})</option>
+            ))}
+            <option value="">No inventory (unpriced seats)</option>
+          </select>
+        </label>
         <div className="flex items-end">
           <button type="submit" disabled={busy || origin === destination}
             className="h-[42px] w-full rounded-xl bg-accent-500 px-5 text-sm font-bold text-white hover:bg-accent-600 disabled:bg-slate-300">
@@ -390,15 +419,11 @@ function CreateFlightForm({ onCreated }: { onCreated: () => void }) {
         </div>
       </div>
       <p className="text-[11px] text-slate-400">
-        Terminals assign automatically from the carrier's real airport assignments. Seat inventory is separate — a
-        flight without inventory sells seats unpriced.
+        Terminals assign automatically from the carrier's real airport assignments; the seat inventory is created on
+        the chosen aircraft's cabin in the same step.
       </p>
       <ErrorAlert error={error} />
-      {done ? (
-        <p className="text-sm font-medium text-emerald-700">
-          Created {done.flightNumber} (#{done.id}) — T{done.departureTerminal} → T{done.arrivalTerminal}.
-        </p>
-      ) : null}
+      {done ? <p className="text-sm font-medium text-emerald-700">{done}</p> : null}
     </form>
   );
 }

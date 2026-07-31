@@ -38,3 +38,7 @@ echo "done."
 
 echo "terminals: real per-carrier terminal assignments (08_terminals.sql)"
 docker exec -i "$C" psql -U postgres -d skybook_flight -v ON_ERROR_STOP=1 < "$DIR/08_terminals.sql"
+
+echo "modern fleet + re-fleet (10_modern_fleet.sql, refleet.sh)"
+docker exec -i "$C" psql -U postgres -d skybook_inventory -v ON_ERROR_STOP=1 < "$DIR/10_modern_fleet.sql"
+bash "$DIR/refleet.sh"
