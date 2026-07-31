@@ -372,6 +372,7 @@ const localeListeners = new Set<() => void>();
 
 if (typeof document !== 'undefined') {
   document.documentElement.lang = activeLanguage;
+  document.documentElement.dir = activeLanguage === 'ar' ? 'rtl' : 'ltr';
 }
 
 /** The active language right now (live - do not cache across renders). */
@@ -418,5 +419,9 @@ export function setLanguage(code: LanguageCode): void {
   }
   activeLanguage = code;
   document.documentElement.lang = code;
+  // Arabic reads right-to-left: flipping the document direction makes the
+  // whole layout mirror (flex/grid/text) - the honest way to serve ar, not
+  // left-aligned Arabic text.
+  document.documentElement.dir = code === 'ar' ? 'rtl' : 'ltr';
   notifyLocaleChanged();
 }
