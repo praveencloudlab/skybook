@@ -214,7 +214,7 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
                   <table style="width:100%;border-collapse:collapse;">
                     <tr>${fld('FLIGHT', pass.flightNumber, { mono: true })}${fld('DATE', departDate)}${fld('DEPARTS', departTime)}${fld('BOARDING', boardTime, { accent: true })}</tr>
                     <tr><td colspan="4" style="height:14px;"></td></tr>
-                    <tr>${fld('GATE', gate)}${fld('SEAT', pass.seatNumber, { mono: true })}${fld('CABIN', cabin)}${fld('BOARDING GROUP', group)}</tr>
+                    <tr>${fld('TERMINAL', pass.departureTerminal ?? TBA)}${fld('GATE', gate)}${fld('SEAT', pass.seatNumber, { mono: true })}${fld('CABIN', cabin)}${fld('BOARDING GROUP', group)}</tr>
                   </table>
                 </td>
               </tr>

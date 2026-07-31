@@ -37,6 +37,13 @@ public record CreateCheckInRequest(
 
         LocalDateTime departureTime,
 
+        /** Real terminals from the booking event; null on pre-terminal events. */
+        @Size(max = 4, message = "departureTerminal must be at most 4 characters")
+        String departureTerminal,
+
+        @Size(max = 4, message = "arrivalTerminal must be at most 4 characters")
+        String arrivalTerminal,
+
         @NotBlank(message = "passengerName is required")
         @Size(max = 200, message = "passengerName must be at most 200 characters")
         String passengerName,

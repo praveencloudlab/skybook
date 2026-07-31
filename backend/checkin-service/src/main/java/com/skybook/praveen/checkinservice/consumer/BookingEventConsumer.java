@@ -73,7 +73,8 @@ public class BookingEventConsumer {
                 LocalDateTime departureTime = parseEventTime(segment.getDepartureTime());
                 for (BookingEventPassenger passenger : segment.getPassengers()) {
                     createCheckIn(event, passenger, segment.getFlightId(), segment.getFlightNumber(),
-                            segment.getOriginAirportCode(), segment.getDestinationAirportCode(), departureTime);
+                            segment.getOriginAirportCode(), segment.getDestinationAirportCode(), departureTime,
+                            segment.getDepartureTerminal(), segment.getArrivalTerminal());
                 }
             }
             return;
@@ -87,15 +88,18 @@ public class BookingEventConsumer {
 
         LocalDateTime departureTime = parseEventTime(event.getDepartureTime());
         for (BookingEventPassenger passenger : event.getPassengers()) {
+            // Old flat events carry no terminals - honest null, never invented.
             createCheckIn(event, passenger, event.getFlightId(), event.getFlightNumber(),
-                    event.getOriginAirportCode(), event.getDestinationAirportCode(), departureTime);
+                    event.getOriginAirportCode(), event.getDestinationAirportCode(), departureTime,
+                    null, null);
         }
     }
 
     private void createCheckIn(BookingEvent event, BookingEventPassenger passenger,
                                Long flightId, String flightNumber,
                                String originAirportCode, String destinationAirportCode,
-                               LocalDateTime departureTime) {
+                               LocalDateTime departureTime,
+                               String departureTerminal, String arrivalTerminal) {
 
         if (passenger.getBookingPassengerId() == null) {
             log.warn("Passenger {} on booking {} has no bookingPassengerId (pre-enrichment producer) - skipping",
@@ -121,6 +125,8 @@ public class BookingEventConsumer {
                 originAirportCode,
                 destinationAirportCode,
                 departureTime,
+                departureTerminal,
+                arrivalTerminal,
                 passenger.getName(),
                 event.getContactEmail(),
                 passenger.getSeatNumber(),

@@ -63,6 +63,8 @@ public class CheckInServiceImpl implements CheckInService {
                 .originAirportCode(request.originAirportCode())
                 .destinationAirportCode(request.destinationAirportCode())
                 .departureTime(request.departureTime())
+                .departureTerminal(request.departureTerminal())
+                .arrivalTerminal(request.arrivalTerminal())
                 .passengerName(request.passengerName())
                 .contactEmail(request.contactEmail())
                 .seatNumber(request.seatNumber())

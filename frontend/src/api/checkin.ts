@@ -59,6 +59,8 @@ export interface BoardingPass {
   originAirportCode?: string;
   destinationAirportCode?: string;
   seatNumber: string;
+  /** Departure terminal printed on the pass (real assignment); absent on pre-terminal check-ins. */
+  departureTerminal?: string | null;
   gate?: string | null;
   boardingGroup?: string | null;
   boardingTime?: string | null;

@@ -124,6 +124,7 @@ export function BoardingPassCard({
             <Field label="DEPARTS" value={departTime} />
             <Field label="BOARDING" value={boardTime} accent />
 
+            <Field label="TERMINAL" value={pass.departureTerminal ?? TBA} />
             <Field label="GATE" value={gate} />
             <Field label="SEAT" value={pass.seatNumber} mono />
             <Field label="CABIN" value={cabin} />
