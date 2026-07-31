@@ -120,6 +120,14 @@ public interface BookingService {
     /** bookingPassengerId identifies the passenger's line item within this booking (not Passenger.id). */
     BookingResponse checkInPassenger(Long bookingId, Long bookingPassengerId);
 
+    /**
+     * Pre-check-in seat change (passenger features): writes the row's new
+     * seat AFTER the facade has secured it with inventory. The paid
+     * surcharge is untouched - the entitlement ceiling was enforced by the
+     * caller, and stored money never moves on a seat change.
+     */
+    BookingResponse updateSeatNumber(Long bookingId, Long bookingPassengerId, String seatNumber);
+
     BookingResponse boardPassenger(Long bookingId, Long bookingPassengerId);
 
     /**

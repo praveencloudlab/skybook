@@ -756,6 +756,23 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
+    public BookingResponse updateSeatNumber(Long bookingId, Long bookingPassengerId, String seatNumber) {
+
+        Booking booking = findBookingOrThrow(bookingId);
+        BookingPassenger passenger = findBookingPassengerOrThrow(booking, bookingPassengerId);
+
+        String from = passenger.getSeatNumber();
+        passenger.setSeatNumber(seatNumber);
+        passenger.setChargedSeatAssignmentMode(SeatAssignmentMode.MANUAL);
+
+        Booking saved = bookingRepository.save(booking);
+        log.info("Booking {}: passenger row {} seat changed {} -> {}",
+                saved.getBookingReference(), bookingPassengerId, from, seatNumber);
+        return BookingMapper.toResponse(saved);
+    }
+
+    @Override
+    @Transactional
     public BookingResponse boardPassenger(Long bookingId, Long bookingPassengerId) {
 
         Booking booking = findBookingOrThrow(bookingId);

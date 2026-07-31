@@ -407,6 +407,66 @@ public class BookingFacade {
                 .toList();
     }
 
+    /**
+     * Pre-check-in seat change (passenger features): after payment, before
+     * check-in, a traveller moves seats under the SAME entitlement ceiling
+     * check-in uses (§9) - Flexi/Premium move anywhere free (their picks are
+     * waived), Saver up to the surcharge they originally PAID. Stored money
+     * never moves. Hold-new-first ordering: the old seat is only released
+     * once the new one is secured, so a failure can never leave the
+     * traveller seatless.
+     */
+    public BookingResponse changeSeat(Long bookingId, Long bookingPassengerId, String seatNumber) {
+
+        BookingResponse booking = bookingService.getBookingById(bookingId);
+        BookingPassengerResponse row = booking.passengers().stream()
+                .filter(p -> p.id().equals(bookingPassengerId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("No such passenger on this booking"));
+
+        if (booking.bookingStatus() != com.skybook.praveen.bookingservice.enums.BookingStatus.CONFIRMED) {
+            throw new IllegalStateException("Seats can be changed after payment and before check-in.");
+        }
+        if (row.cancelled()) {
+            throw new IllegalStateException("This passenger has been cancelled off the booking.");
+        }
+        if (row.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.CHECKED_IN
+                || row.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.BOARDED
+                || row.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.CLOSED) {
+            throw new IllegalStateException(
+                    "Already checked in - use the seat change at check-in instead.");
+        }
+
+        String newSeat = seatNumber.toUpperCase();
+        if (newSeat.equals(row.seatNumber())) {
+            return booking;
+        }
+
+        InventoryHoldDetails held = inventoryServiceClient.holdSeat(
+                        row.flightId(), newSeat, bookingId, bookingPassengerId, row.travelClass())
+                .orElseThrow(() -> new IllegalStateException("This flight has no seat inventory"));
+
+        if (row.fareType() == FareType.SAVER
+                && held.listedSurcharge().compareTo(row.seatSurcharge()) > 0) {
+            inventoryServiceClient.releaseHoldQuietly(row.flightId(), newSeat, bookingId,
+                    "seat change above fare ceiling");
+            throw new IllegalArgumentException(
+                    "Seat " + newSeat + " carries a " + held.listedSurcharge()
+                            + " surcharge - above the " + row.seatSurcharge()
+                            + " your Saver fare paid. Pick a seat at or below it.");
+        }
+
+        // New seat secured as a reservation (the booking is CONFIRMED), then
+        // the old one goes back to the pool.
+        inventoryServiceClient.reserveSeat(row.flightId(), newSeat, bookingId, bookingPassengerId);
+        if (row.seatNumber() != null && !row.seatNumber().isBlank()) {
+            inventoryServiceClient.releaseHoldQuietly(row.flightId(), row.seatNumber(), bookingId, "seat changed");
+            inventoryServiceClient.cancelReservationQuietly(row.flightId(), row.seatNumber(), bookingId, "seat changed");
+        }
+
+        return bookingService.updateSeatNumber(bookingId, bookingPassengerId, newSeat);
+    }
+
     // ---------------------------------------------------------------
     // Fare watch (passenger features)
     // ---------------------------------------------------------------

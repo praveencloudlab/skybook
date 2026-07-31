@@ -185,6 +185,19 @@ export const bookingsApi = {
     return api.get<Booking>(`/api/bookings/reference/${pnr}`, { signal });
   },
 
+  /**
+   * Pre-check-in seat change: after payment, before check-in, under the same
+   * entitlement ceiling as check-in (Flexi/Premium free, Saver up to the
+   * surcharge they paid). Stored fares never move.
+   */
+  changeSeat(id: number, bookingPassengerId: number, seatNumber: string, signal?: AbortSignal): Promise<Booking> {
+    return api.post<Booking>(
+      `/api/bookings/${id}/passengers/${bookingPassengerId}/seat`,
+      { seatNumber },
+      { signal },
+    );
+  },
+
   cancel(id: number, signal?: AbortSignal): Promise<Booking> {
     return api.patch<Booking>(`/api/bookings/${id}/cancel`, undefined, { signal });
   },

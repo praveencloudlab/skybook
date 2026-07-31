@@ -9,6 +9,7 @@ import {
   type BoardingPass,
   type CheckIn,
 } from '../../api/checkin';
+import { seatsApi, type FlightSeatMap } from '../../api/seats';
 import { Alert, ErrorAlert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { ApiError } from '../../lib/errors';
@@ -38,6 +39,8 @@ export function BookingDetailPage({
   onBack: () => void;
 }) {
   const [booking, setBooking] = useState(initial);
+  // Pre-check-in seat change: which passenger row has the dialog open.
+  const [seatChangeFor, setSeatChangeFor] = useState<(typeof initial.passengers)[number] | null>(null);
   const [flight, setFlight] = useState<Flight | null>(null);
   // Every segment's flight, keyed by flight id - a round trip has two legs.
   const [segmentFlights, setSegmentFlights] = useState<Record<number, Flight>>({});
@@ -483,11 +486,22 @@ export function BookingDetailPage({
                     )}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="tabular text-sm font-medium text-slate-900">{money(fare, CURRENCY)}</p>
-                  {surcharge > 0 ? (
-                    <p className="tabular text-[11px] text-slate-400">incl. seat {money(surcharge, CURRENCY)}</p>
+                <div className="flex items-center gap-3">
+                  {booking.bookingStatus === 'CONFIRMED' && !p.cancelled && !checkedIn(p) && !departed && p.flightId ? (
+                    <button
+                      type="button"
+                      onClick={() => setSeatChangeFor(p)}
+                      className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-accent-500 hover:text-accent-600"
+                    >
+                      Change seat
+                    </button>
                   ) : null}
+                  <div className="text-right">
+                    <p className="tabular text-sm font-medium text-slate-900">{money(fare, CURRENCY)}</p>
+                    {surcharge > 0 ? (
+                      <p className="tabular text-[11px] text-slate-400">incl. seat {money(surcharge, CURRENCY)}</p>
+                    ) : null}
+                  </div>
                 </div>
               </li>
             );
@@ -498,6 +512,18 @@ export function BookingDetailPage({
           <span className="tabular text-sm font-semibold text-slate-900">{money(booking.totalFare, CURRENCY)}</span>
         </div>
       </section>
+
+      {seatChangeFor ? (
+        <ChangeSeatDialog
+          bookingId={booking.id}
+          row={seatChangeFor}
+          onClose={() => setSeatChangeFor(null)}
+          onChanged={(updated) => {
+            setBooking(updated);
+            setSeatChangeFor(null);
+          }}
+        />
+      ) : null}
 
       {/* Contact */}
       {booking.contact ? (
@@ -863,6 +889,99 @@ function CheckInRow({
           <BoardingPassCard pass={pass} record={record} arrivalTime={flightArrivalTime} />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Pre-check-in seat change (passenger features): the row's flight's real seat
+ * map in the traveller's cabin; taken seats are disabled, and for Saver so is
+ * anything above the surcharge they originally paid - the SAME entitlement
+ * ceiling check-in applies, enforced again server-side.
+ */
+function ChangeSeatDialog({ bookingId, row, onClose, onChanged }: {
+  bookingId: number;
+  row: Booking['passengers'][number];
+  onClose: () => void;
+  onChanged: (updated: Booking) => void;
+}) {
+  const [map, setMap] = useState<FlightSeatMap | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    seatsApi.forFlight(row.flightId!, controller.signal).then(setMap).catch((e) => {
+      if (!(e instanceof DOMException)) setError(e instanceof ApiError ? e : null);
+    });
+    return () => controller.abort();
+  }, [row.flightId]);
+
+  const paid = Number(row.seatSurcharge) || 0;
+  const saver = row.fareType === 'SAVER';
+
+  async function pick(seat: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      onChanged(await bookingsApi.changeSeat(bookingId, row.id, seat));
+    } catch (e) {
+      setError(e instanceof ApiError ? e : null);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-30 grid place-items-center bg-slate-900/50 p-4" onClick={onClose}>
+      <div className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-900">
+            Change seat — {row.firstName} {row.lastName}
+            <span className="ml-2 text-xs font-medium text-slate-500">
+              current {row.seatNumber ?? '—'}
+            </span>
+          </h3>
+          <button type="button" onClick={onClose} className="text-xs font-medium text-slate-500 hover:text-slate-700">Close</button>
+        </div>
+        {saver ? (
+          <p className="mt-1 text-xs text-slate-500">
+            Saver fare: seats up to the {money(paid, CURRENCY)} surcharge you already paid.
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-slate-500">Your fare includes free seat selection — pick any open seat.</p>
+        )}
+        <div className="mt-3"><ErrorAlert error={error} /></div>
+        {!map ? (
+          <p className="mt-3 text-sm text-slate-500">Loading seat map…</p>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {map.aircraft.seats
+              .filter((s) => s.seatType === row.travelClass && s.status === 'ACTIVE')
+              .map((s) => {
+                const taken = map.taken.has(s.seatNumber) && s.seatNumber !== row.seatNumber;
+                const overCeiling = saver && Number(s.listedSurcharge) > paid;
+                const current = s.seatNumber === row.seatNumber;
+                const disabled = taken || overCeiling || current || busy;
+                return (
+                  <button key={s.seatNumber} type="button" disabled={disabled}
+                    onClick={() => void pick(s.seatNumber)}
+                    title={taken ? 'Taken' : overCeiling ? `Surcharge ${money(Number(s.listedSurcharge), CURRENCY)} — above your ceiling` : Number(s.listedSurcharge) > 0 ? `Listed surcharge ${money(Number(s.listedSurcharge), CURRENCY)}` : 'Free'}
+                    className={
+                      'tabular grid h-9 w-11 place-items-center rounded-lg text-xs font-bold transition ' +
+                      (current
+                        ? 'bg-brand-900 text-white'
+                        : disabled
+                          ? 'bg-slate-100 text-slate-300'
+                          : 'bg-emerald-50 text-emerald-800 ring-1 ring-inset ring-emerald-200 hover:bg-emerald-500 hover:text-white')
+                    }>
+                    {s.seatNumber}
+                  </button>
+                );
+              })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

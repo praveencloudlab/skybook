@@ -202,6 +202,19 @@ public class BookingController {
         return bookingFacade.cancelPassengers(id, request.bookingPassengerIds());
     }
 
+    @Operation(summary = "Change seat",
+            description = "Pre-check-in seat change: after payment, before check-in, under the same "
+                    + "entitlement ceiling as check-in - Flexi/Premium move free, Saver up to the "
+                    + "surcharge they paid. Stored fares never move.")
+    @PostMapping("/{id}/passengers/{bookingPassengerId}/seat")
+    public BookingResponse changeSeat(
+            @PathVariable Long id,
+            @PathVariable Long bookingPassengerId,
+            @Valid @RequestBody com.skybook.praveen.bookingservice.dto.request.ChangeSeatRequest request) {
+        accessGuard.requireOwnerOfBooking(id);
+        return bookingFacade.changeSeat(id, bookingPassengerId, request.seatNumber());
+    }
+
     @Operation(summary = "Cancel Segment",
             description = "Cancel one whole segment of a multi-segment booking - \"drop the return\" "
                     + "(ROUND_TRIP_MODULE.md §7). Only segmentIndex >= 1 may be cancelled alone; the "
