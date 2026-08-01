@@ -73,6 +73,15 @@ public class CheckInEvent {
 
     private String gate;
 
+    /**
+     * Real terminals (flight-service TerminalPolicy), snapshotted onto the
+     * pass at issue - the emailed boarding pass must show the SAME terminals
+     * as the on-screen one. Null on pre-terminals events.
+     */
+    private String departureTerminal;
+
+    private String arrivalTerminal;
+
     /** When checkin-service issued the pass - the "Issued" stamp on the document. */
     private LocalDateTime issuedAt;
 

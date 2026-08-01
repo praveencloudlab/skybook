@@ -42,6 +42,11 @@ public class BoardingPassPdfTemplate {
         String gateBy = BoardingDisplay.clock(BoardingDisplay.gateBy(event));
         String gate = nvl(event.getGate(), "TBA");
         String group = nvl(event.getBoardingGroup(), "-");
+        String depTerminal = nvl(event.getDepartureTerminal(), "TBA");
+        String fromTerminalLine = event.getDepartureTerminal() != null && !event.getDepartureTerminal().isBlank()
+                ? " &#183; <b>Terminal " + escape(event.getDepartureTerminal()) + "</b>" : "";
+        String toTerminalLine = event.getArrivalTerminal() != null && !event.getArrivalTerminal().isBlank()
+                ? " &#183; <b>Terminal " + escape(event.getArrivalTerminal()) + "</b>" : "";
         String issued = BoardingDisplay.stamp(event.getIssuedAt() != null ? event.getIssuedAt() : event.getOccurredAt());
         String passNumber = nvl(event.getBoardingPassNumber(), "-");
 
@@ -98,14 +103,14 @@ public class BoardingPassPdfTemplate {
                                 <tr>
                                   <td style="width:45%%;background-color:%s;border-radius:8px;padding:9px 13px;">
                                     <div class="mono" style="font-size:21px;font-weight:bold;color:%s;">%s</div>
-                                    <div style="font-size:10px;color:#334155;margin-top:3px;">%s</div>
+                                    <div style="font-size:10px;color:#334155;margin-top:3px;">%s%s</div>
                                   </td>
                                   <td style="width:10%%;text-align:center;">
                                     <div style="width:0;height:0;border-top:6px solid transparent;border-bottom:6px solid transparent;border-left:10px solid %s;margin:0 auto;"></div>
                                   </td>
                                   <td style="width:45%%;background-color:%s;border-radius:8px;padding:9px 13px;">
                                     <div class="mono" style="font-size:21px;font-weight:bold;color:%s;">%s</div>
-                                    <div style="font-size:10px;color:#334155;margin-top:3px;">%s</div>
+                                    <div style="font-size:10px;color:#334155;margin-top:3px;">%s%s</div>
                                   </td>
                                 </tr>
                               </table>
@@ -125,10 +130,14 @@ public class BoardingPassPdfTemplate {
                                 </tr>
                                 <tr><td colspan="4" style="height:13px;"></td></tr>
                                 <tr>
+                                  <td><div class="lbl">TERMINAL</div><div class="val">%s</div></td>
                                   <td><div class="lbl">GATE</div><div class="val">%s</div></td>
                                   <td><div class="lbl">SEAT</div><div class="val mono">%s</div></td>
                                   <td><div class="lbl">CABIN</div><div class="val">%s</div></td>
-                                  <td><div class="lbl">BOARDING GROUP</div><div class="val">%s</div></td>
+                                </tr>
+                                <tr><td colspan="4" style="height:13px;"></td></tr>
+                                <tr>
+                                  <td colspan="4"><div class="lbl">BOARDING GROUP</div><div class="val">%s</div></td>
                                 </tr>
                               </table>
                             </td>
@@ -207,14 +216,14 @@ public class BoardingPassPdfTemplate {
                 RED, BADGE_RED, escape(cabin.toUpperCase()),
                 // passenger + pnr
                 INK, escape(passenger), RED, escape(pnr),
-                // airports
-                BLUE, INK, escape(fromCode), escape(BoardingDisplay.airportLabel(fromCode)),
+                // airports (terminal lines are pre-escaped fragments)
+                BLUE, INK, escape(fromCode), escape(BoardingDisplay.airportLabel(fromCode)), fromTerminalLine,
                 RED,
-                BLUE, INK, escape(toCode), escape(BoardingDisplay.airportLabel(toCode)),
+                BLUE, INK, escape(toCode), escape(BoardingDisplay.airportLabel(toCode)), toTerminalLine,
                 // grid row 1
                 escape(nvl(event.getFlightNumber(), "-")), escape(departDate), escape(departTime), RED, escape(boardTime),
-                // grid row 2
-                escape(gate), escape(nvl(event.getSeatNumber(), "-")), escape(cabin), escape(group),
+                // grid row 2 + boarding group
+                escape(depTerminal), escape(gate), escape(nvl(event.getSeatNumber(), "-")), escape(cabin), escape(group),
                 // notice + issued
                 RED, escape(gateBy), escape(boardTime), escape(issued),
                 // stub

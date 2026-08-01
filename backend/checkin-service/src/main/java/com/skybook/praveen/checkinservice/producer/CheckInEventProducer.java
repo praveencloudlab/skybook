@@ -41,6 +41,13 @@ public class CheckInEventProducer {
                 .token(pass.token())
                 .boardingTime(pass.boardingTime())
                 .boardingGroup(pass.boardingGroup())
+                // The PASS is the authority for what it displays: seat and
+                // terminals from the issued document, so the emailed pass can
+                // never disagree with the on-screen one.
+                .seatNumber(pass.seatNumber() != null ? pass.seatNumber() : checkIn.seatNumber())
+                .departureTerminal(pass.departureTerminal())
+                .arrivalTerminal(pass.arrivalTerminal())
+                .gate(pass.gate() != null ? pass.gate() : checkIn.gate())
                 .issuedAt(pass.issuedAt())
                 .build());
     }

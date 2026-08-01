@@ -81,6 +81,30 @@ class BoardingPassPdfTemplateTest {
     }
 
     @Test
+    void terminalsRenderInTheGridAndBothAirportBoxes() throws IOException {
+        // The frontend pass shows the departure terminal in the grid and BOTH
+        // terminals in the airport boxes - the emailed pass must match.
+        String text = renderedText(baseEvent()
+                .departureTerminal("T5")
+                .arrivalTerminal("T8")
+                .build());
+
+        assertThat(text).contains("TERMINAL");
+        assertThat(text).contains("T5");
+        assertThat(text).contains("Terminal T5");
+        assertThat(text).contains("Terminal T8");
+    }
+
+    @Test
+    void missingTerminalsFallBackToTbaWithoutBoxNoise() throws IOException {
+        String text = renderedText(baseEvent().build());
+
+        // Grid shows TBA (like the frontend); the airport boxes stay clean.
+        assertThat(text).contains("TERMINAL");
+        assertThat(text).doesNotContain("Terminal null");
+    }
+
+    @Test
     void boardingReadsEarlierThanDepartureWhenServerEchoesTheDepartureClock() throws IOException {
         // checkin-service stamps boardingTime with the departure clock - the
         // display must derive departure - 40, and the advisory 30 before that.
