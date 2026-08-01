@@ -43,18 +43,18 @@ public class CheckInEventConsumer {
             return;
         }
 
-        // BOARDING_PASS_GENERATED accompanies PASSENGER_CHECKED_IN for the same
-        // check-in and carries document details, not a state change.
+        // BOARDING_PASS_GENERATED is not a state change - but a REISSUED pass
+        // (post-check-in seat change) carries the passenger's NEW seat, and
+        // the mirror must track it or a later cancel releases the wrong seat.
+        // A pass only exists for a checked-in passenger, so CHECKED_IN is the
+        // honest target; applyCheckInStatus mirrors the seat first and treats
+        // an already-matching status as the normal no-op it is.
         CheckInStatus target = switch (event.getType()) {
-            case PASSENGER_CHECKED_IN -> CheckInStatus.CHECKED_IN;
+            case PASSENGER_CHECKED_IN, BOARDING_PASS_GENERATED -> CheckInStatus.CHECKED_IN;
             case PASSENGER_BOARDED -> CheckInStatus.BOARDED;
             case PASSENGER_NO_SHOW -> CheckInStatus.NO_SHOW;
             case PASSENGER_CHECKIN_CANCELLED -> CheckInStatus.CLOSED;
-            case BOARDING_PASS_GENERATED -> null;
         };
-        if (target == null) {
-            return;
-        }
 
         try {
             bookingService.applyCheckInStatus(event.getBookingId(), event.getBookingPassengerId(), target,

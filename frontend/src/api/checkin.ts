@@ -89,6 +89,16 @@ export const checkinApi = {
     return api.patch<CheckIn>(`/api/checkins/${checkInId}/checkin`, undefined, { signal });
   },
 
+  /**
+   * Post-check-in seat change (allowed while OPEN or CHECKED_IN, until 45min
+   * before departure): the server reserves the new seat under the same
+   * entitlement ceiling, releases the old one, and REISSUES the boarding
+   * pass with the new seat.
+   */
+  changeSeat(checkInId: number, newSeatNumber: string, signal?: AbortSignal): Promise<CheckIn> {
+    return api.patch<CheckIn>(`/api/checkins/${checkInId}/seat`, { newSeatNumber }, { signal });
+  },
+
   boardingPass(checkInId: number, signal?: AbortSignal): Promise<BoardingPass> {
     return api.get<BoardingPass>(`/api/boarding-passes/checkin/${checkInId}`, { signal });
   },

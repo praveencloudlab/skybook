@@ -41,6 +41,8 @@ export function BookingDetailPage({
   const [booking, setBooking] = useState(initial);
   // Pre-check-in seat change: which passenger row has the dialog open.
   const [seatChangeFor, setSeatChangeFor] = useState<(typeof initial.passengers)[number] | null>(null);
+  // Post-CHECK-IN seat change: which check-in record has the picker open.
+  const [checkinSeatFor, setCheckinSeatFor] = useState<CheckIn | null>(null);
   const [flight, setFlight] = useState<Flight | null>(null);
   // Every segment's flight, keyed by flight id - a round trip has two legs.
   const [segmentFlights, setSegmentFlights] = useState<Record<number, Flight>>({});
@@ -933,12 +935,42 @@ export function BookingDetailPage({
                 pass={passes[record.id]}
                 busy={busyId === record.id}
                 onCheckIn={() => handleCheckIn(record)}
+                onChangeSeat={record.status === 'CHECKED_IN' ? () => setCheckinSeatFor(record) : undefined}
                 flightArrivalTime={flight?.arrivalTime}
               />
             ))
           )}
         </div>
       </section>
+
+      {/* Seat change AFTER check-in: same map and ceiling, but the move goes
+          through checkin-service, which reissues the boarding pass. */}
+      {checkinSeatFor
+        ? (() => {
+            const row = booking.passengers.find((p) => p.id === checkinSeatFor.bookingPassengerId);
+            if (!row) return null;
+            return (
+              <ChangeSeatDialog
+                bookingId={booking.id}
+                row={{ ...row, seatNumber: checkinSeatFor.seatNumber ?? row.seatNumber }}
+                onClose={() => setCheckinSeatFor(null)}
+                onChanged={() => {}}
+                onPick={async (seat) => {
+                  await checkinApi.changeSeat(checkinSeatFor.id, seat);
+                  // Fresh pass (reissued with the new seat) + fresh booking.
+                  try {
+                    const pass = await checkinApi.boardingPass(checkinSeatFor.id);
+                    setPasses((current) => ({ ...current, [checkinSeatFor.id]: pass }));
+                  } catch {
+                    // The reissued pass will arrive with the next load.
+                  }
+                  setCheckinSeatFor(null);
+                  await load();
+                }}
+              />
+            );
+          })()
+        : null}
 
       {modifying ? (
         <ModifyBookingDialog
@@ -962,12 +994,15 @@ function CheckInRow({
   pass,
   busy,
   onCheckIn,
+  onChangeSeat,
   flightArrivalTime,
 }: {
   record: CheckIn;
   pass?: BoardingPass;
   busy: boolean;
   onCheckIn: () => void;
+  /** Present only while a seat change is still possible (CHECKED_IN, pre-boarding). */
+  onChangeSeat?: () => void;
   flightArrivalTime?: string;
 }) {
   // Gate on the SERVER's status, never on a locally recomputed window. The times
@@ -991,8 +1026,19 @@ function CheckInRow({
         </div>
 
         {done ? (
-          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
-            {record.status === 'BOARDED' ? 'boarded' : 'checked in'}
+          <span className="flex items-center gap-2">
+            {onChangeSeat ? (
+              <button
+                type="button"
+                onClick={onChangeSeat}
+                className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-accent-500 hover:text-accent-600"
+              >
+                Change seat
+              </button>
+            ) : null}
+            <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-200">
+              {record.status === 'BOARDED' ? 'boarded' : 'checked in'}
+            </span>
           </span>
         ) : noShow ? (
           <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 ring-1 ring-inset ring-red-200">
@@ -1035,11 +1081,17 @@ function CheckInRow({
  * anything above the surcharge they originally paid - the SAME entitlement
  * ceiling check-in applies, enforced again server-side.
  */
-function ChangeSeatDialog({ bookingId, row, onClose, onChanged }: {
+function ChangeSeatDialog({ bookingId, row, onClose, onChanged, onPick }: {
   bookingId: number;
   row: Booking['passengers'][number];
   onClose: () => void;
   onChanged: (updated: Booking) => void;
+  /**
+   * Override for the post-CHECK-IN path: the seat moves through
+   * checkin-service (which reissues the boarding pass) instead of
+   * booking-service. Same map, same ceiling, different authority.
+   */
+  onPick?: (seat: string) => Promise<void>;
 }) {
   const [map, setMap] = useState<FlightSeatMap | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1055,12 +1107,20 @@ function ChangeSeatDialog({ bookingId, row, onClose, onChanged }: {
 
   const paid = Number(row.seatSurcharge) || 0;
   const saver = row.fareType === 'SAVER';
+  // After CHECK-IN (onPick path) the ceiling applies to EVERY fare: the seat
+  // must list at or below the surcharge already paid - checkin-service's
+  // contained seat-change rule. Pre-check-in, only Saver has a ceiling.
+  const ceilingApplies = onPick ? true : saver;
 
   async function pick(seat: string) {
     setBusy(true);
     setError(null);
     try {
-      onChanged(await bookingsApi.changeSeat(bookingId, row.id, seat));
+      if (onPick) {
+        await onPick(seat);
+      } else {
+        onChanged(await bookingsApi.changeSeat(bookingId, row.id, seat));
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e : null);
       setBusy(false);
@@ -1080,7 +1140,13 @@ function ChangeSeatDialog({ bookingId, row, onClose, onChanged }: {
           </h3>
           <button type="button" onClick={onClose} className="text-xs font-medium text-slate-500 hover:text-slate-700">Close</button>
         </div>
-        {saver ? (
+        {onPick ? (
+          <p className="mt-1 text-xs text-slate-500">
+            After check-in you can move to seats listing at or below what you already paid
+            {paid > 0 ? ` (${money(paid, CURRENCY)})` : ' (free seats)'} — pricier seats are an
+            upgrade for the airport desk. Your boarding pass is reissued with the new seat.
+          </p>
+        ) : saver ? (
           <p className="mt-1 text-xs text-slate-500">
             Saver fare: seats up to the {money(paid, CURRENCY)} surcharge you already paid.
           </p>
@@ -1096,7 +1162,7 @@ function ChangeSeatDialog({ bookingId, row, onClose, onChanged }: {
               .filter((s) => s.seatType === row.travelClass && s.status === 'ACTIVE')
               .map((s) => {
                 const taken = map.taken.has(s.seatNumber) && s.seatNumber !== row.seatNumber;
-                const overCeiling = saver && Number(s.listedSurcharge) > paid;
+                const overCeiling = ceilingApplies && Number(s.listedSurcharge) > paid;
                 const current = s.seatNumber === row.seatNumber;
                 const disabled = taken || overCeiling || current || busy;
                 return (
