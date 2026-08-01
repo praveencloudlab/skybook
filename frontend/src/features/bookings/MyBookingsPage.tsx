@@ -70,6 +70,9 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
   // EVERY segment's flight is needed: the lifecycle grouping keys on the LAST
   // leg's departure, or a round trip would look completed after its outbound.
   const [flights, setFlights] = useState<Record<number, Flight>>({});
+  // Top filter chips: show everything, or exactly one lifecycle group -
+  // no scrolling past sections you don't care about.
+  const [filter, setFilter] = useState<'all' | TripGroup>('all');
   const [error, setError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -112,7 +115,42 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
       <h1 className="display text-3xl text-slate-900">My trips</h1>
       <p className="mt-2 text-sm text-slate-500">Your bookings, newest first. Tap one to see the itinerary and check in.</p>
 
-      <div className="mt-6 space-y-3">
+      {/* Sticky group filter - stays put while the list scrolls. */}
+      {bookings && bookings.length > 0 ? (
+        <div className="sticky top-0 z-10 -mx-2 mt-5 overflow-x-auto bg-[var(--page-bg,#f8fafc)]/95 px-2 py-2 backdrop-blur">
+          <div className="flex w-max gap-1.5">
+            {[{ id: 'all' as const, label: 'All' }, ...GROUPS].map((g) => {
+              const count =
+                g.id === 'all'
+                  ? bookings.length
+                  : bookings.filter((b) => groupOf(b, legsOf(b)) === g.id).length;
+              if (g.id !== 'all' && count === 0) return null;
+              const active = filter === g.id;
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={() => setFilter(g.id)}
+                  aria-pressed={active}
+                  className={
+                    'whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-semibold transition ring-1 ring-inset ' +
+                    (active
+                      ? 'bg-brand-900 text-white ring-brand-900'
+                      : 'bg-white text-slate-600 ring-slate-200 hover:ring-slate-400')
+                  }
+                >
+                  {g.label}
+                  <span className={'tabular ml-1.5 text-xs ' + (active ? 'opacity-75' : 'text-slate-400')}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="mt-4 space-y-3">
         <ErrorAlert error={error} />
 
         {bookings === null && !error ? <p className="text-sm text-slate-500">Loading…</p> : null}
@@ -132,9 +170,14 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
         {/* Lifecycle groups: pending check-in, checked in, completed, no show,
             cancelled - each with its own header; empty groups don't render. */}
         {bookings && bookings.length > 0
-          ? GROUPS.map((group) => {
+          ? GROUPS.filter((group) => filter === 'all' || group.id === filter).map((group) => {
               const members = bookings.filter((b) => groupOf(b, legsOf(b)) === group.id);
-              if (members.length === 0) return null;
+              if (members.length === 0)
+                return filter === group.id ? (
+                  <p key={group.id} className="card px-4 py-6 text-center text-sm text-slate-500">
+                    Nothing under “{group.label}”.
+                  </p>
+                ) : null;
               return (
                 <section key={group.id} className="pt-3 first:pt-0">
                   <div className="mb-2 flex items-baseline gap-2">
