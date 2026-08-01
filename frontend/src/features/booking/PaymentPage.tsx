@@ -50,6 +50,7 @@ export function PaymentPage({
   bags,
   returnBags = [],
   contactEmail,
+  contactPhone = '',
   extras,
   total,
   onBack,
@@ -74,6 +75,8 @@ export function PaymentPage({
   /** Round trip: the return direction's own bag counts. */
   returnBags?: number[];
   contactEmail: string;
+  /** Optional phone from the guests step - shows on the booking's contact card. */
+  contactPhone?: string;
   extras: SummaryExtra[];
   total: number;
   onBack: () => void;
@@ -108,6 +111,7 @@ export function PaymentPage({
         contact: {
           contactName: `${guests[0].firstName} ${guests[0].lastName}`.trim(),
           contactEmail: contactEmail.trim(),
+          ...(contactPhone.trim() ? { contactPhone: contactPhone.trim() } : {}),
         },
       });
 

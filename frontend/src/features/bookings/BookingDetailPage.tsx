@@ -630,14 +630,23 @@ export function BookingDetailPage({
 
       {/* Contact */}
       {booking.contact ? (
-        <section className="card mt-5 px-4 py-3">
+        <section className="card mt-5 px-5 py-4">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Contact</h2>
-          <div className="mt-2 grid gap-1 text-sm text-slate-700 sm:grid-cols-3">
-            <span>{booking.contact.contactName}</span>
-            <span className="truncate text-slate-500">{booking.contact.contactEmail}</span>
-            {booking.contact.contactPhone ? (
-              <span className="text-slate-500">{booking.contact.contactPhone}</span>
-            ) : null}
+          <div className="mt-3 grid gap-4 sm:grid-cols-3">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Name</p>
+              <p className="mt-0.5 text-sm font-semibold text-slate-900">{booking.contact.contactName}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Email</p>
+              <p className="mt-0.5 truncate text-sm font-medium text-slate-700">{booking.contact.contactEmail}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Phone</p>
+              <p className={'tabular mt-0.5 text-sm ' + (booking.contact.contactPhone ? 'font-medium text-slate-700' : 'text-slate-400')}>
+                {booking.contact.contactPhone ?? 'Not provided at booking'}
+              </p>
+            </div>
           </div>
         </section>
       ) : null}
@@ -1016,12 +1025,27 @@ function CheckInRow({
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between gap-4 px-4 py-3">
-        <div>
-          <p className="font-medium text-slate-900">{record.passengerName}</p>
-          <p className="text-sm text-slate-600">
-            {record.flightNumber} · {record.originAirportCode} → {record.destinationAirportCode}
-            {record.seatNumber ? ` · seat ${record.seatNumber}` : ''}
+      <div className="flex items-center justify-between gap-4 px-5 py-4">
+        <div className="min-w-0">
+          <p className="text-[15px] font-bold tracking-tight text-slate-900">{record.passengerName}</p>
+          <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-slate-600">
+            <span className="tabular rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs font-bold text-slate-700">
+              {record.flightNumber}
+            </span>
+            <span className="tabular font-semibold text-slate-800">
+              {record.originAirportCode}
+              <span className="mx-1 text-brand-600">→</span>
+              {record.destinationAirportCode}
+            </span>
+            <span className="text-slate-300">·</span>
+            <span className="tabular text-slate-500">
+              {dayAndMonth(record.departureTime)}, {time(record.departureTime)}
+            </span>
+            {record.seatNumber ? (
+              <span className="tabular rounded-md bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-800 ring-1 ring-inset ring-brand-100">
+                Seat {record.seatNumber}
+              </span>
+            ) : null}
           </p>
         </div>
 
@@ -1054,15 +1078,30 @@ function CheckInRow({
       {!done && !canCheckIn ? (
         <p
           className={
-            'border-t px-4 py-2 text-xs ' +
-            (noShow ? 'border-red-100 bg-red-50/50 text-red-700' : 'border-slate-100 text-slate-500')
+            'flex items-center gap-1.5 border-t px-5 py-2.5 text-xs ' +
+            (noShow ? 'border-red-100 bg-red-50/50 text-red-700' : 'border-slate-100 bg-slate-50/60 text-slate-500')
           }
         >
-          {notOpenYet
-            ? `Check-in opens around ${opens.toLocaleString()}, 24 hours before departure.`
-            : noShow
-              ? `No show — this passenger did not check in, and the check-in window closed at ${closes.toLocaleString()} (45 minutes before departure).`
-              : `Check-in is not available for this passenger (${record.status.toLowerCase()}).`}
+          {notOpenYet ? (
+            <>
+              <span aria-hidden="true">🕐</span>
+              <span>
+                Check-in opens{' '}
+                <span className="tabular font-semibold text-slate-700">
+                  {dayAndMonth(opens.toISOString())}, {time(opens.toISOString())}
+                </span>{' '}
+                — 24 hours before departure.
+              </span>
+            </>
+          ) : noShow ? (
+            <span>
+              No show — this passenger did not check in before the window closed at{' '}
+              {dayAndMonth(closes.toISOString())}, {time(closes.toISOString())} (45 minutes before
+              departure).
+            </span>
+          ) : (
+            <span>Check-in is not available for this passenger ({record.status.toLowerCase()}).</span>
+          )}
         </p>
       ) : null}
 

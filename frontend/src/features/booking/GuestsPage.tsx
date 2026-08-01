@@ -30,6 +30,8 @@ export function GuestsPage({
   onGuestsChange,
   contactEmail,
   onContactEmailChange,
+  contactPhone,
+  onContactPhoneChange,
   total,
   onBack,
   onContinue,
@@ -44,6 +46,9 @@ export function GuestsPage({
   onGuestsChange: (guests: PassengerDraft[]) => void;
   contactEmail: string;
   onContactEmailChange: (email: string) => void;
+  /** Optional contact phone - lands on the booking's contact card. */
+  contactPhone: string;
+  onContactPhoneChange: (phone: string) => void;
   total: number;
   onBack: () => void;
   onContinue: () => void;
@@ -178,7 +183,7 @@ export function GuestsPage({
             <p className="mt-1 text-xs text-slate-500">
               The booking confirmation and boarding passes go here.
             </p>
-            <div className="mt-3 max-w-sm">
+            <div className="mt-3 grid max-w-xl gap-3 sm:grid-cols-2">
               <Field
                 label="Email address"
                 type="email"
@@ -187,6 +192,14 @@ export function GuestsPage({
                 error={contactError}
                 placeholder={subject ?? 'name@example.com'}
                 autoComplete="email"
+              />
+              <Field
+                label="Phone (optional)"
+                type="tel"
+                value={contactPhone}
+                onChange={(e) => onContactPhoneChange(e.target.value)}
+                placeholder="+44 7700 900123"
+                autoComplete="tel"
               />
             </div>
           </section>

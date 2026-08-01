@@ -288,6 +288,7 @@ interface JourneyDraft {
   bags: number[];
   returnBags?: number[];
   contactEmail: string;
+  contactPhone?: string;
 }
 
 const JOURNEY_KEY = 'skybook.journeyDraft';
@@ -434,6 +435,7 @@ function BookingJourney() {
   // Per-direction bags: the return direction has its OWN counts on a round trip.
   const [returnBags, setReturnBags] = useState<number[]>(draft?.returnBags ?? [0]);
   const [contactEmail, setContactEmail] = useState(draft?.contactEmail ?? '');
+  const [contactPhone, setContactPhone] = useState(draft?.contactPhone ?? '');
   const [result, setResult] = useState<{ booking: Booking; payment: Payment } | null>(null);
 
   const paxCount = totalTravellers(travellers);
@@ -482,6 +484,7 @@ function BookingJourney() {
       bags,
       returnBags,
       contactEmail,
+      contactPhone,
       guests: guests.map((g) => ({ ...g, passportNumber: '', passportExpiry: '' })),
     };
     try {
@@ -490,7 +493,7 @@ function BookingJourney() {
       // Storage full/blocked: the journey still works, it just won't survive
       // a navigation - the pre-persistence behaviour.
     }
-  }, [step, flight, returnFlight, connection, travellers, preferredCabin, choice, seats, returnSeats, guests, bags, returnBags, contactEmail]);
+  }, [step, flight, returnFlight, connection, travellers, preferredCabin, choice, seats, returnSeats, guests, bags, returnBags, contactEmail, contactPhone]);
 
   function restart() {
     sessionStorage.removeItem(JOURNEY_KEY);
@@ -643,6 +646,7 @@ function BookingJourney() {
         bags={bags}
         returnBags={returnFlight ? returnBags : []}
         contactEmail={contactEmail}
+        contactPhone={contactPhone}
         extras={extras}
         total={total}
         onBack={() => setStep('bags')}
@@ -815,6 +819,8 @@ function BookingJourney() {
         onGuestsChange={setGuests}
         contactEmail={contactEmail}
         onContactEmailChange={setContactEmail}
+        contactPhone={contactPhone}
+        onContactPhoneChange={setContactPhone}
         total={total}
         onBack={() => setStep('fares')}
         onContinue={() => setStep('seat')}
