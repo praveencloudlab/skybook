@@ -45,22 +45,23 @@ public class FlownCouponSweepJob {
             return;
         }
 
-        LocalDateTime now = LocalDateTime.now();
-        Map<Long, LocalDateTime> departureByFlight = new HashMap<>();
+        Map<Long, FlightDetails> flightById = new HashMap<>();
         int flown = 0;
 
         for (TicketCoupon coupon : candidates) {
             Long flightId = coupon.getBookingPassenger().getFlightId();
-            LocalDateTime departure = departureByFlight.computeIfAbsent(flightId, id -> {
+            FlightDetails flight = flightById.computeIfAbsent(flightId, id -> {
                 try {
-                    FlightDetails flight = flightServiceClient.getFlightAsService(id);
-                    return flight != null ? flight.departureTime() : null;
+                    return flightServiceClient.getFlightAsService(id);
                 } catch (RuntimeException e) {
                     log.warn("FLOWN sweep could not fetch flight {}: {}", id, e.getMessage());
                     return null;
                 }
             });
-            if (departure != null && departure.isBefore(now)) {
+            // Departure is airport-local: "has it flown" is judged by that
+            // airport's clock, not the server's (AirportTimeZones).
+            if (flight != null && flight.departureTime() != null && flight.departureTime().isBefore(
+                    com.skybook.praveen.common.time.AirportTimeZones.nowAt(flight.originAirportCode()))) {
                 coupon.setStatus(CouponStatus.FLOWN);
                 flown++;
             }
@@ -69,7 +70,7 @@ public class FlownCouponSweepJob {
         if (flown > 0) {
             ticketCouponRepository.saveAll(candidates);
             log.info("FlownCouponSweepJob marked {} coupon(s) FLOWN across {} flight(s)",
-                    flown, departureByFlight.size());
+                    flown, flightById.size());
         }
     }
 }

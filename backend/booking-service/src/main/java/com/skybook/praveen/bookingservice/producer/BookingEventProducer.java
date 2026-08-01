@@ -56,8 +56,14 @@ public class BookingEventProducer {
      * refunds exactly what the passenger was quoted: 100 = fare rules alone,
      * 50 = half, 0 = same-day forfeiture (no refund is created at all).
      */
+    /**
+     * refundBreakdown (nullable): the UPCOMING rows' fare lines - when a leg
+     * already flew, payment-service refunds only the unused part of the
+     * journey instead of the whole remaining capture. Null = legacy full
+     * refund (unpaid bookings, or a desk cancel of a fully-departed one).
+     */
     public void publishBookingCancelled(BookingResponse booking, List<FlightDetails> flights,
-                                        int refundTierPercent) {
+                                        int refundTierPercent, String refundBreakdown) {
         String refundLine = switch (refundTierPercent) {
             case 100 -> " If a refund is due, it will be processed shortly.";
             case 0 -> " Under the same-day cancellation policy no refund is due for this booking.";
@@ -67,7 +73,7 @@ public class BookingEventProducer {
         publish(booking, flights, BookingEventType.CANCELLED,
                 "Your SkyBook booking " + booking.bookingReference() + " has been cancelled",
                 "Your booking " + booking.bookingReference() + " has been cancelled." + refundLine,
-                refundTierPercent);
+                refundTierPercent, refundBreakdown, null);
     }
 
     /**

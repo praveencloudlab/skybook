@@ -128,8 +128,12 @@ public class BookingServiceImpl implements BookingService {
             // closes 60 minutes before scheduled departure, so a departed or
             // imminently-departing flight is rejected here no matter what
             // client sent the request. Applies to every leg of the journey.
+            // Departure times are AIRPORT-LOCAL, so the comparison clock is
+            // that airport's, not the server's (AirportTimeZones).
             if (leg.departureTime() != null
-                    && !leg.departureTime().isAfter(LocalDateTime.now().plusMinutes(BOOKING_CLOSE_MINUTES))) {
+                    && !leg.departureTime().isAfter(
+                            com.skybook.praveen.common.time.AirportTimeZones.nowAt(leg.originAirportCode())
+                                    .plusMinutes(BOOKING_CLOSE_MINUTES))) {
                 throw new IllegalArgumentException(
                         "Booking for flight " + leg.flightId() + " is closed - it departs (or departed) at "
                                 + leg.departureTime() + ". Bookings close " + BOOKING_CLOSE_MINUTES
@@ -524,6 +528,12 @@ public class BookingServiceImpl implements BookingService {
                     .map(BookingPassenger::getFare)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             booking.setTotalFare(remainingTotal);
+            // The payment mirror tracks what the payment covers NOW - same
+            // convention as the Premium date-change fare adjustment. The
+            // historical capture/refund ledger lives in payment-service.
+            if (booking.getPayment() != null) {
+                booking.getPayment().setAmount(remainingTotal);
+            }
         }
 
         Booking saved = bookingRepository.save(booking);
@@ -596,9 +606,13 @@ public class BookingServiceImpl implements BookingService {
                 bookingStateMachine.transitionBookingStatus(booking, BookingStatus.PARTIALLY_CANCELLED,
                         "segment " + segmentIndex + " cancelled", "system");
             }
-            booking.setTotalFare(remaining.stream()
+            BigDecimal remainingTotal = remaining.stream()
                     .map(BookingPassenger::getFare)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add));
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            booking.setTotalFare(remainingTotal);
+            if (booking.getPayment() != null) {
+                booking.getPayment().setAmount(remainingTotal);
+            }
         }
 
         Booking saved = bookingRepository.save(booking);

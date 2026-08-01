@@ -42,7 +42,8 @@ public interface BookingService {
      * direction: baggage fees charge once per DIRECTION, never per leg - a
      * through-ticket checks bags through its connection.
      */
-    record JourneyLeg(Long flightId, LocalDateTime departureTime, int direction, boolean directionStart) {
+    record JourneyLeg(Long flightId, String originAirportCode, LocalDateTime departureTime,
+                      int direction, boolean directionStart) {
     }
 
     /**

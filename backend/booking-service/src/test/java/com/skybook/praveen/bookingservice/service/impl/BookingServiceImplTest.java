@@ -117,14 +117,14 @@ class BookingServiceImplTest {
     }
 
     private List<com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg> oneWay(LocalDateTime departure) {
-        return List.of(new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(1L, departure, 0, true));
+        return List.of(new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(1L, "LHR", departure, 0, true));
     }
 
     private List<com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg> roundTripLegs(
             LocalDateTime outbound, LocalDateTime inbound) {
         return List.of(
-                new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(1L, outbound, 0, true),
-                new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(2L, inbound, 1, true));
+                new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(1L, "LHR", outbound, 0, true),
+                new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(2L, "DXB", inbound, 1, true));
     }
 
     // ---------------------------------------------------------------
@@ -212,9 +212,9 @@ class BookingServiceImplTest {
                     null);
             List<com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg> journey = List.of(
                     new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(
-                            1L, NEUTRAL_DEPARTURE, 0, true),
+                            1L, "LHR", NEUTRAL_DEPARTURE, 0, true),
                     new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(
-                            2L, NEUTRAL_DEPARTURE.plusHours(10), 0, false));
+                            2L, "DXB", NEUTRAL_DEPARTURE.plusHours(10), 0, false));
 
             BookingResponse response = bookingService.createDraftBooking(request, journey, "owner@test.com");
 

@@ -95,6 +95,16 @@ CANCELLED, other untouched; SBXNKT round trip cancel return → refunded
 This closes the known gap where partial cancels reported a refund that
 never reached payment-service.
 
+## 2c. Bug-sweep round (2026-08-01, pre-deploy audit)
+
+Three defects found by self-audit, fixed and live-verified:
+
+| Bug | Fix | Live evidence |
+| --- | --- | --- |
+| Whole-cancel of a partially-flown booking refunded the FLOWN leg too | The CANCELLED event now carries the UPCOMING rows' fare lines; payment-service refunds only those | SB2YA5 (£314 RT, outbound forced past): preview quoted £154 (return only), refund was **exactly £154**, payment PARTIALLY_REFUNDED |
+| Every time window compared airport-LOCAL departures against server UTC (hours off for JFK/SYD/SIN) | `AirportTimeZones` (skybook-common): booking cutoff, cancellation tiers/preview, check-in open/close, no-show sweep and FLOWN sweep all judge each flight by ITS airport's clock | SYD flight dep next morning 06:59 local: UTC math = 27h out (50% tier), SYD clock = ~17h (0%) - preview now answers **0** |
+| Trip page's payment mirror kept the ORIGINAL amount after a partial cancel (PAID £280 beside total £140) | Partial cancels update the mirror to what the payment covers now (same convention as Premium date-change) | 2-pax £280 cancel one -> mirror **£140 = totalFare**; the capture/refund ledger stays in payment-service |
+
 ## 3. Automated suites
 
 - Backend: full reactor `mvn test` across **all modules — PASSED (exit 0)**,

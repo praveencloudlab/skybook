@@ -123,8 +123,19 @@ public class BookingEventConsumer {
                         event.getBookingReference(), payment.paymentReference());
                 return;
             }
+            // A breakdown means some of the journey already FLEW: refund only
+            // the upcoming rows' lines. No breakdown = legacy full refund of
+            // the remaining capture.
+            java.util.List<com.skybook.praveen.paymentservice.dto.request.FareLineRequest> lines =
+                    event.getRefundBreakdown() != null && !event.getRefundBreakdown().isBlank()
+                            ? com.skybook.praveen.paymentservice.domain.RefundCalculator
+                                    .parse(event.getRefundBreakdown(), java.math.BigDecimal.ZERO).stream()
+                                    .map(line -> new com.skybook.praveen.paymentservice.dto.request.FareLineRequest(
+                                            line.fareType(), line.amount()))
+                                    .toList()
+                            : null;
             paymentFacade.refund(payment.id(),
-                    new RefundRequest(null, tierPercent,
+                    new RefundRequest(lines, tierPercent,
                             "Booking " + event.getBookingReference() + " cancelled"), ctx);
         } else if (status == PaymentStatus.PENDING || status == PaymentStatus.AUTHORIZED
                 || status == PaymentStatus.AUTHORIZATION_FAILED || status == PaymentStatus.CAPTURE_FAILED) {

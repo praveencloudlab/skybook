@@ -55,6 +55,7 @@ class CheckInServiceImplTest {
         return CheckIn.builder()
                 .id(1L).bookingId(42L).bookingReference("SBTEST").bookingPassengerId(100L)
                 .flightId(7L).passengerName("Test Passenger").seatNumber("12B")
+                .originAirportCode("LHR")
                 .departureTime(DEPARTURE).status(status).documentVerified(true)
                 .build();
     }
@@ -229,7 +230,10 @@ class CheckInServiceImplTest {
     @Test
     void sweepNoShowsOnlyAffectsRowsPastTheCutoff() {
         CheckIn overdue = checkInWith(CheckInStatus.OPEN);
-        overdue.setDepartureTime(LocalDateTime.now().minusHours(1));
+        // Departures are airport-local: the fixture flies from LHR, so
+        // "an hour overdue" means an hour past LHR's clock, not the JVM's.
+        overdue.setDepartureTime(
+                com.skybook.praveen.common.time.AirportTimeZones.nowAt("LHR").minusHours(1));
 
         LocalDateTime cutoff = LocalDateTime.now();
         when(checkInRepository.findByStatusInAndDepartureTimeBefore(any(), any()))

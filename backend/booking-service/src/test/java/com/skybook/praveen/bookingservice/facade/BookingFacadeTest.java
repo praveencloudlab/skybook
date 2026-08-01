@@ -490,6 +490,6 @@ class BookingFacadeTest {
 
         verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12A"), eq(7L), anyString());
         verify(inventoryServiceClient).cancelReservationQuietly(eq(10L), eq("12B"), eq(7L), anyString());
-        verify(bookingEventProducer).publishBookingCancelled(eq(cancelled), any(), eq(100));
+        verify(bookingEventProducer).publishBookingCancelled(eq(cancelled), any(), eq(100), any());
     }
 }
