@@ -19,34 +19,57 @@ const CURRENCY = 'GBP';
  * with. Each row summarises the trip (reference, when it was booked, who is on
  * it, seats, cabin, total) so the list is scannable without opening anything.
  */
-type TripFilter = 'all' | 'upcoming' | 'completed' | 'cancelled';
+type TripGroup = 'pendingCheckIn' | 'checkedIn' | 'completed' | 'noShow' | 'cancelled';
 
-const FILTERS: Array<{ id: TripFilter; label: string }> = [
-  { id: 'all', label: 'All' },
-  { id: 'upcoming', label: 'Upcoming' },
-  { id: 'completed', label: 'Completed' },
-  { id: 'cancelled', label: 'Cancelled' },
+/** Display order: things needing action first, history last. */
+const GROUPS: Array<{ id: TripGroup; label: string; hint: string }> = [
+  { id: 'pendingCheckIn', label: 'Pending check-in', hint: 'Upcoming trips nobody has checked in for yet.' },
+  { id: 'checkedIn', label: 'Checked in', hint: 'Upcoming trips with a boarding pass issued.' },
+  { id: 'completed', label: 'Completed trips', hint: 'Journeys already flown.' },
+  { id: 'noShow', label: 'No show', hint: 'The flight left, but nobody had checked in.' },
+  { id: 'cancelled', label: 'Cancelled', hint: 'Cancelled bookings and their refunds.' },
 ];
 
-function matchesFilter(booking: Booking, filter: TripFilter): boolean {
-  switch (filter) {
-    case 'upcoming':
-      return booking.bookingStatus === 'CONFIRMED' || booking.bookingStatus === 'CREATED';
-    case 'completed':
-      return booking.bookingStatus === 'COMPLETED';
-    case 'cancelled':
-      return booking.bookingStatus === 'CANCELLED';
-    default:
-      return true;
+/**
+ * A trip's lifecycle group, derived from what actually happened rather than
+ * the booking status alone: passenger check-in states (the mirror from
+ * checkin-service) plus the LAST leg's departure - a round trip stays
+ * "upcoming" until its return has flown. Until the flights load, the
+ * booking status is the best available signal.
+ */
+export function groupOf(booking: Booking, legs: Flight[]): TripGroup {
+  if (booking.bookingStatus === 'CANCELLED') return 'cancelled';
+
+  const active = booking.passengers.filter((p) => !p.cancelled);
+  const anyCheckedIn = active.some(
+    (p) => p.checkInStatus === 'CHECKED_IN' || p.checkInStatus === 'BOARDED',
+  );
+  const lastDeparture = legs.length
+    ? Math.max(...legs.map((f) => new Date(f.departureTime).getTime()))
+    : null;
+  const allDeparted = lastDeparture !== null && lastDeparture < Date.now();
+
+  if (booking.bookingStatus === 'COMPLETED' || allDeparted) {
+    // The journey is over. If nobody ever checked in, that trip was a
+    // no-show, not a completed one - the ticket says so too (OPEN coupons
+    // stay OPEN; a no-show is not FLOWN).
+    const anyTravelled = active.some(
+      (p) => p.checkInStatus === 'CHECKED_IN' || p.checkInStatus === 'BOARDED',
+    );
+    const anyNoShow = active.some((p) => p.checkInStatus === 'NO_SHOW');
+    return !anyTravelled && (anyNoShow || active.length > 0) ? 'noShow' : 'completed';
   }
+
+  return anyCheckedIn ? 'checkedIn' : 'pendingCheckIn';
 }
 
 export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void }) {
   const [bookings, setBookings] = useState<Booking[] | null>(null);
-  // Flights keyed by id - the booking only carries a flightId, but "when am I
+  // Flights keyed by id - the booking only carries flight ids, but "when am I
   // flying" is the thing people actually scan this list for, so we fetch them.
+  // EVERY segment's flight is needed: the lifecycle grouping keys on the LAST
+  // leg's departure, or a round trip would look completed after its outbound.
   const [flights, setFlights] = useState<Record<number, Flight>>({});
-  const [filter, setFilter] = useState<TripFilter>('all');
   const [error, setError] = useState<ApiError | null>(null);
 
   useEffect(() => {
@@ -55,9 +78,14 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
       .mine(controller.signal)
       .then((list) => {
         setBookings(list);
-        // Fetch each distinct flight (public data) so the row can show the date
-        // and departure/arrival times. A miss just leaves that row without them.
-        const ids = [...new Set(list.map((b) => b.flightId))];
+        const ids = [
+          ...new Set(
+            list.flatMap((b) => [
+              b.flightId,
+              ...(b.segments ?? []).map((segment) => segment.flightId),
+            ]),
+          ),
+        ];
         ids.forEach((id) => {
           flightsApi
             .byId(id, controller.signal)
@@ -72,34 +100,17 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
     return () => controller.abort();
   }, []);
 
+  /** The booking's legs among the flights loaded so far. */
+  const legsOf = (booking: Booking): Flight[] =>
+    (booking.segments?.length
+      ? booking.segments.map((segment) => flights[segment.flightId])
+      : [flights[booking.flightId]]
+    ).filter(Boolean) as Flight[];
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-8">
       <h1 className="display text-3xl text-slate-900">My trips</h1>
       <p className="mt-2 text-sm text-slate-500">Your bookings, newest first. Tap one to see the itinerary and check in.</p>
-
-      {/* Status tabs (Module 11). Only shown once there's something to filter. */}
-      {bookings && bookings.length > 0 ? (
-        <div className="mt-5 inline-flex gap-1 rounded-xl bg-slate-100 p-1">
-          {FILTERS.map((f) => {
-            const count = bookings.filter((b) => matchesFilter(b, f.id)).length;
-            return (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => setFilter(f.id)}
-                aria-pressed={filter === f.id}
-                className={
-                  'rounded-lg px-3 py-1.5 text-sm font-medium transition ' +
-                  (filter === f.id ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500 hover:text-slate-700')
-                }
-              >
-                {f.label}
-                <span className="tabular ml-1.5 text-xs text-slate-400">{count}</span>
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
 
       <div className="mt-6 space-y-3">
         <ErrorAlert error={error} />
@@ -118,11 +129,31 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
           </div>
         ) : null}
 
-        {bookings && bookings.length > 0 && bookings.filter((b) => matchesFilter(b, filter)).length === 0 ? (
-          <p className="card px-4 py-6 text-center text-sm text-slate-500">No {filter} trips.</p>
-        ) : null}
+        {/* Lifecycle groups: pending check-in, checked in, completed, no show,
+            cancelled - each with its own header; empty groups don't render. */}
+        {bookings && bookings.length > 0
+          ? GROUPS.map((group) => {
+              const members = bookings.filter((b) => groupOf(b, legsOf(b)) === group.id);
+              if (members.length === 0) return null;
+              return (
+                <section key={group.id} className="pt-3 first:pt-0">
+                  <div className="mb-2 flex items-baseline gap-2">
+                    <h2 className="text-sm font-bold uppercase tracking-wide text-slate-700">
+                      {group.label}
+                    </h2>
+                    <span className="tabular text-xs font-semibold text-slate-400">{members.length}</span>
+                    <span className="hidden text-xs text-slate-400 sm:inline">· {group.hint}</span>
+                  </div>
+                  <div className="space-y-3">{members.map(renderTrip)}</div>
+                </section>
+              );
+            })
+          : null}
+      </div>
+    </main>
+  );
 
-        {bookings?.filter((b) => matchesFilter(b, filter)).map((booking) => {
+  function renderTrip(booking: Booking) {
           const seats = booking.passengers.map((p) => p.seatNumber).filter(Boolean) as string[];
           const cabin = booking.passengers[0]?.travelClass;
           const flight = flights[booking.flightId];
@@ -184,9 +215,6 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
                 </span>
               </div>
             </button>
-          );
-        })}
-      </div>
-    </main>
-  );
+    );
+  }
 }
