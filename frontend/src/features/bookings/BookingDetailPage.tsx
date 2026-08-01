@@ -170,6 +170,34 @@ export function BookingDetailPage({
     }
   }
 
+  /**
+   * Whole-booking cancel - the one path that works even after web check-in:
+   * the server voids every check-in and boarding pass downstream and releases
+   * the seats. Refund per the live preview's tier.
+   */
+  async function runCancelEntire() {
+    setCancelling(true);
+    setError(null);
+    try {
+      await bookingsApi.cancel(booking.id);
+      setSelected(new Set());
+      setConfirm(null);
+      setManaging(false);
+      setRefundNotice(
+        preview && !preview.unpaid
+          ? Number(preview.refundAmount) > 0
+            ? `Booking cancelled. A refund of ${money(preview.refundAmount, CURRENCY)} will be processed to your original payment method.`
+            : 'Booking cancelled. Under the same-day cancellation policy no refund is due.'
+          : 'Booking cancelled. Nothing had been charged.',
+      );
+      await load();
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause : null);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   /** Drop just the return leg - outbound travels on, coupons refund. */
   async function cancelReturnSegment(segmentIndex: number) {
     setCancelling(true);
@@ -274,7 +302,6 @@ export function BookingDetailPage({
     !remainingAfter.some((p) => !isMinor(p));
   const selectedCount = [...selected].filter((id) => cancellablePassengers.some((p) => p.id === id)).length;
   const canCancelSelected = selectedCount > 0 && !orphansMinor && !departed;
-  const anyCancellable = cancellablePassengers.length > 0;
   const anyCheckedIn = activePassengers.some(checkedIn);
 
   // The server's live quote can veto what the local heuristics would allow
@@ -659,7 +686,8 @@ export function BookingDetailPage({
             <li>• <span className="font-medium">More than 72h before departure</span> — full refund per your fare rules (Saver keeps its 30% fee; Flexi and Premium refund in full).</li>
             <li>• <span className="font-medium">72h – 24h before departure</span> — 50% of the fare-rule refund.</li>
             <li>• <span className="font-medium">Under 24h (same day)</span> — cancellation still frees your seat, but the fare is not refunded.</li>
-            <li>• <span className="font-medium">Last 2 hours &amp; after check-in</span> — online cancellation is closed; the airport desk can still help.</li>
+            <li>• <span className="font-medium">Last 2 hours before departure</span> — online cancellation is closed; the airport desk can still help.</li>
+            <li>• <span className="font-medium">Already checked in?</span> — you can still cancel the whole booking; issued boarding passes are voided and the seats released.</li>
             <li>• A refund due is returned automatically to the original payment method; check-in closes for every passenger.</li>
           </ul>
         </div>
@@ -676,7 +704,7 @@ export function BookingDetailPage({
           </p>
         ) : booking.bookingStatus === 'CANCELLED' ? (
           <p className="mt-4 text-sm text-slate-400">This booking is cancelled.</p>
-        ) : anyCancellable && !managing ? (
+        ) : activePassengers.length > 0 && !managing ? (
           <div className="mt-4 flex flex-wrap gap-2">
             {/* Change flight/date/bags = a guided rebook; impossible once
                 anyone holds a boarding pass. */}
@@ -700,7 +728,7 @@ export function BookingDetailPage({
               Cancel booking…
             </button>
           </div>
-        ) : anyCancellable ? (
+        ) : activePassengers.length > 0 ? (
           <div className="mt-4">
             {/* Live charges chart - what cancelling RIGHT NOW costs, straight
                 from the server's clock, refreshed while this panel is open. */}
@@ -757,8 +785,9 @@ export function BookingDetailPage({
 
             {anyCheckedIn ? (
               <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600 ring-1 ring-inset ring-slate-200">
-                Passengers who have already checked in can no longer be cancelled online — contact
-                support to change their travel.
+                Checked-in passengers can't be cancelled individually online — but{' '}
+                <span className="font-semibold">Cancel entire booking</span> still works: their
+                boarding passes are voided and every seat is released.
               </p>
             ) : null}
 
@@ -770,19 +799,17 @@ export function BookingDetailPage({
                 Cancel selected passenger{selectedCount === 1 ? '' : 's'}
                 {selectedCount > 0 ? ` (${selectedCount})` : ''}
               </Button>
-              {/* Whole-booking cancel disappears once anyone holds a boarding
-                  pass - "entire" would silently exclude them, which is worse
-                  than not offering it (a checked-in traveller needs support). */}
-              {!anyCheckedIn && activePassengers.length > 1 ? (
-                <button
-                  type="button"
-                  onClick={() => setConfirm('entire')}
-                  disabled={cancelling || cancellationBlocked}
-                  className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
-                >
-                  Cancel entire booking
-                </button>
-              ) : null}
+              {/* Whole-booking cancel is always offered - it is the ONE path
+                  that works after check-in too (the server voids the passes
+                  and releases the seats). Only the time window blocks it. */}
+              <button
+                type="button"
+                onClick={() => setConfirm('entire')}
+                disabled={cancelling || cancellationBlocked}
+                className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+              >
+                Cancel entire booking
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -825,6 +852,9 @@ export function BookingDetailPage({
                     <>A refund is calculated per the rules above.</>
                   )}
                   {confirm === 'selected' ? ' The remaining passengers keep their seats and services.' : ''}
+                  {confirm === 'entire' && anyCheckedIn
+                    ? ' Boarding passes already issued will be voided and every seat released.'
+                    : ''}
                 </p>
                 <div className="mt-3 flex gap-2">
                   <Button variant="secondary" onClick={() => setConfirm(null)} disabled={cancelling}>
@@ -834,11 +864,11 @@ export function BookingDetailPage({
                     type="button"
                     disabled={cancelling}
                     onClick={() =>
-                      runCancel(
-                        confirm === 'entire'
-                          ? cancellablePassengers.map((p) => p.id)
-                          : [...selected].filter((id) => cancellablePassengers.some((p) => p.id === id)),
-                      )
+                      confirm === 'entire'
+                        ? runCancelEntire()
+                        : runCancel(
+                            [...selected].filter((id) => cancellablePassengers.some((p) => p.id === id)),
+                          )
                     }
                     className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
                   >
@@ -852,11 +882,6 @@ export function BookingDetailPage({
               </div>
             ) : null}
           </div>
-        ) : anyCheckedIn ? (
-          <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-inset ring-amber-200">
-            Every remaining passenger has already checked in, so this booking can no longer be
-            cancelled online. To change a traveller, please contact support.
-          </p>
         ) : (
           <p className="mt-4 text-sm text-slate-400">
             This booking is {booking.bookingStatus.toLowerCase().replace(/_/g, ' ')} and can no longer

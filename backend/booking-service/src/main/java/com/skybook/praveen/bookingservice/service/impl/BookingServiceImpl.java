@@ -457,11 +457,14 @@ public class BookingServiceImpl implements BookingService {
         if (toCancel.isEmpty()) {
             throw new IllegalStateException("None of the selected passengers are on this booking, or they are already cancelled.");
         }
-        // A checked-in / boarded traveller cannot be cancelled online.
+        // A checked-in / boarded traveller cannot be cancelled INDIVIDUALLY -
+        // no event exists to void just their boarding pass. Cancelling the
+        // whole booking (which voids every pass downstream) still works.
         for (BookingPassenger bp : toCancel) {
             if (bp.getCheckInStatus() == CheckInStatus.CHECKED_IN || bp.getCheckInStatus() == CheckInStatus.BOARDED) {
                 throw new IllegalStateException(bp.getPassenger().getFirstName()
-                        + " has already checked in and can no longer be cancelled online.");
+                        + " has already checked in and cannot be cancelled individually online - "
+                        + "cancel the whole booking (boarding passes are voided) or contact the desk.");
             }
         }
 
@@ -800,11 +803,23 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
-    public void applyCheckInStatus(Long bookingId, Long bookingPassengerId, CheckInStatus target) {
+    public void applyCheckInStatus(Long bookingId, Long bookingPassengerId, CheckInStatus target,
+                                   String seatNumber) {
 
         Booking booking = findBookingOrThrow(bookingId);
         BookingPassenger passenger = findBookingPassengerOrThrow(booking, bookingPassengerId);
         CheckInStatus from = passenger.getCheckInStatus();
+
+        // Check-in may have MOVED the passenger (contained seat change) - the
+        // mirror must track the seat they actually hold, or a later cancel
+        // would release the booked seat and leak the boarding-pass seat.
+        if (seatNumber != null && !seatNumber.isBlank()
+                && !seatNumber.equals(passenger.getSeatNumber())) {
+            log.info("Check-in moved passenger {} on booking {} from seat {} to {}",
+                    bookingPassengerId, booking.getBookingReference(), passenger.getSeatNumber(), seatNumber);
+            passenger.setSeatNumber(seatNumber);
+            bookingRepository.save(booking);
+        }
 
         // Replays and duplicate deliveries are normal for a read-model - a
         // no-op, not an error.

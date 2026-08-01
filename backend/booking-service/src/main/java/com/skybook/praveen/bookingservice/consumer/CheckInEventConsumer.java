@@ -57,7 +57,8 @@ public class CheckInEventConsumer {
         }
 
         try {
-            bookingService.applyCheckInStatus(event.getBookingId(), event.getBookingPassengerId(), target);
+            bookingService.applyCheckInStatus(event.getBookingId(), event.getBookingPassengerId(), target,
+                    event.getSeatNumber());
         } catch (RuntimeException e) {
             log.error("Failed to mirror {} for booking {} passenger {} - read-model may lag until the next event",
                     event.getType(), event.getBookingReference(), event.getBookingPassengerId(), e);

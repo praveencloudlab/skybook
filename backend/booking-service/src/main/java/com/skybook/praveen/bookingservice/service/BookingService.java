@@ -144,6 +144,12 @@ public interface BookingService {
      * cancelled online" guard in {@link #cancelPassengers} - without it the
      * read-model stays NOT_OPEN forever and the guard never fires.
      */
+    /**
+     * seatNumber: the seat on the event (nullable) - check-in may move the
+     * passenger, and the mirror must track it so a later cancel releases the
+     * seat they actually hold, not the one they booked.
+     */
     void applyCheckInStatus(Long bookingId, Long bookingPassengerId,
-                            com.skybook.praveen.bookingservice.enums.CheckInStatus target);
+                            com.skybook.praveen.bookingservice.enums.CheckInStatus target,
+                            String seatNumber);
 }

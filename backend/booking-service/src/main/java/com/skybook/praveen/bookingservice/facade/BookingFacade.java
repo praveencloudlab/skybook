@@ -288,9 +288,16 @@ public class BookingFacade {
      * Guard + tier for every online cancel path. Scope = the active rows being
      * cancelled (null = the whole booking); the governing departure is the
      * EARLIEST still-upcoming flight in scope. Throws when cancellation is not
-     * allowed online (checked in, window closed, already departed); otherwise
-     * returns the refund percent for the tier in force. An ADMIN caller is the
-     * desk: no window, no tier - fare rules alone (100).
+     * allowed online (window closed, already departed); otherwise returns the
+     * refund percent for the tier in force. An ADMIN caller is the desk: no
+     * window, no tier - fare rules alone (100).
+     *
+     * <p>Web check-in is NOT a block here: the whole-booking cancel's
+     * CANCELLED event makes checkin-service cancel every check-in and revoke
+     * the boarding passes, so a checked-in passenger cancels under exactly
+     * the same time tiers as anyone else. (Cancelling a checked-in traveller
+     * INDIVIDUALLY stays blocked in the service - no event exists to void
+     * just their pass.)
      */
     private int assessOnlineCancellation(BookingResponse booking, java.util.Set<Long> scopeRowIds) {
 
@@ -306,15 +313,6 @@ public class BookingFacade {
             // Nothing active in scope - let the service produce its own
             // "already cancelled" error with full context.
             return 100;
-        }
-
-        for (BookingPassengerResponse row : scope) {
-            if (row.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.CHECKED_IN
-                    || row.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.BOARDED) {
-                throw new IllegalStateException(row.firstName() + " " + row.lastName()
-                        + " has already checked in - the booking can no longer be cancelled online. "
-                        + "Please contact the airport desk.");
-            }
         }
 
         // Unpaid = nothing captured: cancelling is free, no window applies
@@ -398,20 +396,16 @@ public class BookingFacade {
 
         var assessment = cancellationPolicy.assess(now, governing);
 
-        boolean anyCheckedIn = active.stream().anyMatch(
-                p -> p.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.CHECKED_IN
-                        || p.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.BOARDED);
-
-        boolean allowed = assessment.allowed() && !anyCheckedIn;
-        String blockedReason = anyCheckedIn
-                ? "A passenger on this booking has already checked in - cancellation is only "
-                        + "available at the airport desk."
-                : assessment.blockedReason();
+        // Web check-in does NOT block a whole-booking cancel: the CANCELLED
+        // event voids every check-in and boarding pass downstream. Only the
+        // time window (and departure) closes online cancellation.
+        boolean allowed = assessment.allowed();
+        String blockedReason = assessment.blockedReason();
 
         // Unpaid bookings cancel freely whatever the clock says - nothing was
         // charged, so there is nothing to refund or withhold.
         if (!paid) {
-            allowed = !active.isEmpty() && !anyCheckedIn;
+            allowed = !active.isEmpty();
         }
 
         int percent = paid ? assessment.refundPercent() : 0;
