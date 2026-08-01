@@ -303,6 +303,11 @@ export function BookingDetailPage({
   const selectedCount = [...selected].filter((id) => cancellablePassengers.some((p) => p.id === id)).length;
   const canCancelSelected = selectedCount > 0 && !orphansMinor && !departed;
   const anyCheckedIn = activePassengers.some(checkedIn);
+  // The per-passenger checklist only earns its place when there is an actual
+  // choice: more than one traveller AND at least one of them individually
+  // cancellable. A single-passenger booking (or an all-checked-in group) has
+  // exactly one action - cancel the booking - so show only that.
+  const canPickIndividuals = activePassengers.length > 1 && cancellablePassengers.length > 0;
 
   // The server's live quote can veto what the local heuristics would allow
   // (e.g. inside the 2h window) - trust it once it has loaded.
@@ -734,7 +739,10 @@ export function BookingDetailPage({
                 from the server's clock, refreshed while this panel is open. */}
             <CancellationChargesCard preview={preview} />
 
-            {/* Choose passengers to cancel (rule 12: two distinct actions). */}
+            {/* Choose passengers to cancel (rule 12) - only when there is a
+                real choice to make. One passenger = one action. */}
+            {canPickIndividuals ? (
+            <>
             <p className="mt-4 text-sm font-medium text-slate-700">Cancel passengers</p>
             <ul className="mt-2 space-y-1.5">
               {activePassengers.map((p) => {
@@ -790,15 +798,26 @@ export function BookingDetailPage({
                 boarding passes are voided and every seat is released.
               </p>
             ) : null}
+            </>
+            ) : (
+              <p className="mt-4 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 ring-1 ring-inset ring-slate-200">
+                {activePassengers.length === 1
+                  ? 'This booking has one passenger, so cancelling means cancelling the whole booking.'
+                  : 'All passengers have checked in, so they can only be cancelled together.'}
+                {anyCheckedIn ? ' Issued boarding passes are voided and the seats released.' : ''}
+              </p>
+            )}
 
             <div className="mt-4 flex flex-wrap gap-2">
-              <Button
-                onClick={() => setConfirm('selected')}
-                disabled={!canCancelSelected || cancelling || cancellationBlocked}
-              >
-                Cancel selected passenger{selectedCount === 1 ? '' : 's'}
-                {selectedCount > 0 ? ` (${selectedCount})` : ''}
-              </Button>
+              {canPickIndividuals ? (
+                <Button
+                  onClick={() => setConfirm('selected')}
+                  disabled={!canCancelSelected || cancelling || cancellationBlocked}
+                >
+                  Cancel selected passenger{selectedCount === 1 ? '' : 's'}
+                  {selectedCount > 0 ? ` (${selectedCount})` : ''}
+                </Button>
+              ) : null}
               {/* Whole-booking cancel is always offered - it is the ONE path
                   that works after check-in too (the server voids the passes
                   and releases the seats). Only the time window blocks it. */}
@@ -808,7 +827,7 @@ export function BookingDetailPage({
                 disabled={cancelling || cancellationBlocked}
                 className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
               >
-                Cancel entire booking
+                {activePassengers.length === 1 ? 'Cancel booking' : 'Cancel entire booking'}
               </button>
               <button
                 type="button"
@@ -829,7 +848,9 @@ export function BookingDetailPage({
               <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4">
                 <p className="text-sm font-medium text-red-800">
                   {confirm === 'entire'
-                    ? 'Cancel the entire booking for all passengers?'
+                    ? activePassengers.length === 1
+                      ? 'Cancel this booking?'
+                      : 'Cancel the entire booking for all passengers?'
                     : `Cancel ${selectedCount} passenger${selectedCount === 1 ? '' : 's'}?`}
                 </p>
                 <p className="mt-1 text-sm text-red-700">
