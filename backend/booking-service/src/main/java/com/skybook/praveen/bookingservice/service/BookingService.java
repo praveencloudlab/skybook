@@ -65,7 +65,7 @@ public interface BookingService {
      * and the booking derives PARTIALLY_CANCELLED (or CANCELLED if nothing
      * remains).
      */
-    CancelPassengersResponse cancelSegment(Long bookingId, int segmentIndex);
+    CancelPassengersResponse cancelSegment(Long bookingId, int segmentIndex, int refundPercent);
 
     /**
      * Premium date change (ROUND_TRIP_MODULE.md §11): move ONE segment to a
@@ -104,7 +104,13 @@ public interface BookingService {
     /** Event-driven confirmation: records the real payment reference from payment-service. */
     PaymentConfirmation confirmBookingFromPayment(Long bookingId, String paymentReference);
 
-    BookingResponse cancelBooking(Long id, String reason);
+    /**
+     * refundPercent is the time-tier multiplier (CancellationPolicy) computed
+     * by the facade: 100 keeps today's behaviour, 0 means the fare is
+     * forfeited - the payment mirror then stays PAID (money kept, nothing to
+     * refund) and coupons close as CANCELLED rather than REFUNDED.
+     */
+    BookingResponse cancelBooking(Long id, String reason, int refundPercent);
 
     /**
      * Cancel specific passengers off a booking. The booking survives with its
@@ -113,7 +119,8 @@ public interface BookingService {
      * without an adult). Returns the updated booking, the refund calculated for
      * the cancelled passengers, and whether the booking was emptied.
      */
-    CancelPassengersResponse cancelPassengers(Long bookingId, java.util.List<Long> bookingPassengerIds);
+    CancelPassengersResponse cancelPassengers(Long bookingId, java.util.List<Long> bookingPassengerIds,
+                                              int refundPercent);
 
     BookingResponse completeBooking(Long id);
 

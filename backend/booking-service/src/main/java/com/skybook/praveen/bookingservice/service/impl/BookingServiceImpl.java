@@ -1,6 +1,7 @@
 package com.skybook.praveen.bookingservice.service.impl;
 
 import com.skybook.praveen.bookingservice.domain.BookingStateMachine;
+import com.skybook.praveen.bookingservice.domain.CancellationPolicy;
 import com.skybook.praveen.bookingservice.domain.BookingValidator;
 import com.skybook.praveen.bookingservice.domain.FareCalculator;
 import com.skybook.praveen.bookingservice.domain.PnrGenerator;
@@ -68,6 +69,7 @@ public class BookingServiceImpl implements BookingService {
     private final BookingStateMachine bookingStateMachine;
     private final BookingValidator bookingValidator;
     private final FareCalculator fareCalculator;
+    private final CancellationPolicy cancellationPolicy;
 
     /** TTL for the stale-draft sweep (§5.1a) - matches inventory's hold TTL by default. */
     private final long draftTtlMinutes;
@@ -78,6 +80,7 @@ public class BookingServiceImpl implements BookingService {
                               BookingStateMachine bookingStateMachine,
                               BookingValidator bookingValidator,
                               FareCalculator fareCalculator,
+                              CancellationPolicy cancellationPolicy,
                               @Value("${booking.draft.ttl-minutes:15}") long draftTtlMinutes) {
         this.bookingRepository = bookingRepository;
         this.bookingPassengerRepository = bookingPassengerRepository;
@@ -85,6 +88,7 @@ public class BookingServiceImpl implements BookingService {
         this.bookingStateMachine = bookingStateMachine;
         this.bookingValidator = bookingValidator;
         this.fareCalculator = fareCalculator;
+        this.cancellationPolicy = cancellationPolicy;
         this.draftTtlMinutes = draftTtlMinutes;
     }
 
@@ -402,7 +406,7 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
-    public BookingResponse cancelBooking(Long id, String reason) {
+    public BookingResponse cancelBooking(Long id, String reason, int refundPercent) {
 
         Booking booking = findBookingOrThrow(id);
 
@@ -410,18 +414,26 @@ public class BookingServiceImpl implements BookingService {
         bookingStateMachine.transitionBookingStatus(booking, BookingStatus.CANCELLED, reason, "system");
 
         if (booking.getPayment() != null && booking.getPayment().getPaymentStatus() == PaymentStatus.PAID) {
-            bookingValidator.validateRefundAllowed(booking);
-            bookingStateMachine.transitionPaymentStatus(booking.getPayment(), PaymentStatus.REFUNDED, "system");
+            if (refundPercent > 0) {
+                bookingValidator.validateRefundAllowed(booking);
+                bookingStateMachine.transitionPaymentStatus(booking.getPayment(), PaymentStatus.REFUNDED, "system");
+            } else {
+                // Same-day tier: the fare is forfeited. Saying REFUNDED with
+                // nothing returned would be a lie - the payment stays PAID.
+                log.info("Booking {} cancelled inside the zero-refund window - fare forfeited, payment kept",
+                        booking.getBookingReference());
+            }
         }
 
-        refundCoupons(booking, row -> true);
+        refundCoupons(booking, row -> true, refundPercent > 0);
 
         return BookingMapper.toResponse(bookingRepository.save(booking));
     }
 
     @Override
     @Transactional
-    public CancelPassengersResponse cancelPassengers(Long bookingId, List<Long> bookingPassengerIds) {
+    public CancelPassengersResponse cancelPassengers(Long bookingId, List<Long> bookingPassengerIds,
+                                                     int refundPercent) {
         Booking booking = findBookingOrThrow(bookingId);
 
         List<BookingPassenger> active = booking.getPassengers().stream()
@@ -471,9 +483,10 @@ public class BookingServiceImpl implements BookingService {
             }
         }
 
-        BigDecimal refundAmount = toCancel.stream()
-                .map(BookingPassenger::getFare)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Refund = fare rules first (Saver keeps its fee), then the time tier.
+        BigDecimal refundAmount = cancellationPolicy
+                .computeRefund(fareLines(toCancel), refundPercent)
+                .refundAmount();
 
         for (BookingPassenger bp : toCancel) {
             bp.setCancelled(true);
@@ -481,15 +494,16 @@ public class BookingServiceImpl implements BookingService {
         }
         Set<Long> cancelledRowIds = toCancel.stream().map(BookingPassenger::getId)
                 .collect(java.util.stream.Collectors.toSet());
-        refundCoupons(booking, row -> cancelledRowIds.contains(row.getId()));
+        refundCoupons(booking, row -> cancelledRowIds.contains(row.getId()), refundPercent > 0);
 
         boolean bookingCancelled = remaining.isEmpty();
         if (bookingCancelled) {
             // The last active passengers went - the booking itself is now
-            // cancelled and (if paid) fully refunded, exactly like a whole cancel.
+            // cancelled and (if paid) refunded per the tier, exactly like a whole cancel.
             bookingStateMachine.transitionBookingStatus(booking, BookingStatus.CANCELLED,
                     "all passengers cancelled", "system");
-            if (booking.getPayment() != null && booking.getPayment().getPaymentStatus() == PaymentStatus.PAID) {
+            if (booking.getPayment() != null && booking.getPayment().getPaymentStatus() == PaymentStatus.PAID
+                    && refundPercent > 0) {
                 bookingValidator.validateRefundAllowed(booking);
                 bookingStateMachine.transitionPaymentStatus(booking.getPayment(), PaymentStatus.REFUNDED, "system");
             }
@@ -515,7 +529,7 @@ public class BookingServiceImpl implements BookingService {
 
     @Override
     @Transactional
-    public CancelPassengersResponse cancelSegment(Long bookingId, int segmentIndex) {
+    public CancelPassengersResponse cancelSegment(Long bookingId, int segmentIndex, int refundPercent) {
         Booking booking = findBookingOrThrow(bookingId);
 
         BookingSegment segment = booking.getSegments().stream()
@@ -550,16 +564,16 @@ public class BookingServiceImpl implements BookingService {
             }
         }
 
-        BigDecimal refundAmount = toCancel.stream()
-                .map(BookingPassenger::getFare)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal refundAmount = cancellationPolicy
+                .computeRefund(fareLines(toCancel), refundPercent)
+                .refundAmount();
 
         for (BookingPassenger bp : toCancel) {
             bp.setCancelled(true);
             bp.setCheckInStatus(CheckInStatus.CLOSED);
         }
         Set<Long> cancelledRows = toCancel.stream().map(BookingPassenger::getId).collect(Collectors.toSet());
-        refundCoupons(booking, row -> cancelledRows.contains(row.getId()));
+        refundCoupons(booking, row -> cancelledRows.contains(row.getId()), refundPercent > 0);
 
         List<BookingPassenger> remaining = booking.getPassengers().stream()
                 .filter(bp -> !bp.isCancelled())
@@ -568,7 +582,8 @@ public class BookingServiceImpl implements BookingService {
         if (bookingCancelled) {
             bookingStateMachine.transitionBookingStatus(booking, BookingStatus.CANCELLED,
                     "segment " + segmentIndex + " was the last active segment", "system");
-            if (booking.getPayment() != null && booking.getPayment().getPaymentStatus() == PaymentStatus.PAID) {
+            if (booking.getPayment() != null && booking.getPayment().getPaymentStatus() == PaymentStatus.PAID
+                    && refundPercent > 0) {
                 bookingValidator.validateRefundAllowed(booking);
                 bookingStateMachine.transitionPaymentStatus(booking.getPayment(), PaymentStatus.REFUNDED, "system");
             }
@@ -867,15 +882,19 @@ public class BookingServiceImpl implements BookingService {
 
     /**
      * Cancellation-side coupon lifecycle: every matching row's coupon goes
-     * REFUNDED (a FLOWN coupon is history and stays); a ticket with no
-     * live coupon left is itself REFUNDED. No tickets (pre-ticketing booking
-     * or an unconfirmed draft being compensated) = no-op.
+     * REFUNDED - or CANCELLED when the time tier forfeited the fare (a
+     * "refunded" coupon with no money behind it would be a lie). A FLOWN
+     * coupon is history and stays; a ticket with no live coupon left is
+     * itself REFUNDED. No tickets (pre-ticketing booking or an unconfirmed
+     * draft being compensated) = no-op.
      */
-    private void refundCoupons(Booking booking, java.util.function.Predicate<BookingPassenger> affected) {
+    private void refundCoupons(Booking booking, java.util.function.Predicate<BookingPassenger> affected,
+                               boolean refunded) {
+        CouponStatus target = refunded ? CouponStatus.REFUNDED : CouponStatus.CANCELLED;
         for (Ticket ticket : booking.getTickets()) {
             for (TicketCoupon coupon : ticket.getCoupons()) {
                 if (affected.test(coupon.getBookingPassenger()) && coupon.getStatus() != CouponStatus.FLOWN) {
-                    coupon.setStatus(CouponStatus.REFUNDED);
+                    coupon.setStatus(target);
                 }
             }
             boolean anyLive = ticket.getCoupons().stream()
@@ -884,6 +903,14 @@ public class BookingServiceImpl implements BookingService {
                 ticket.setStatus(TicketStatus.REFUNDED);
             }
         }
+    }
+
+    /** A row's money as a policy fare line - fareType decides the fare-rule fee. */
+    private List<CancellationPolicy.FareLine> fareLines(List<BookingPassenger> rows) {
+        return rows.stream()
+                .map(bp -> new CancellationPolicy.FareLine(
+                        bp.getFareType() != null ? bp.getFareType().name() : "FLEXI", bp.getFare()))
+                .toList();
     }
 
     /** Check-in mirror onto the coupon: the row's coupon follows it to CHECKED_IN. */

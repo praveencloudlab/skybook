@@ -85,7 +85,9 @@ class BookingServiceImplTest {
     void setUp() {
         bookingService = new BookingServiceImpl(
                 bookingRepository, bookingPassengerRepository,
-                pnrGenerator, bookingStateMachine, bookingValidator, fareCalculator, DRAFT_TTL_MINUTES);
+                pnrGenerator, bookingStateMachine, bookingValidator, fareCalculator,
+                new com.skybook.praveen.bookingservice.domain.CancellationPolicy(new java.math.BigDecimal("30"), 72, 24, 2),
+                DRAFT_TTL_MINUTES);
     }
 
     // ---------------------------------------------------------------
@@ -341,7 +343,9 @@ class BookingServiceImplTest {
 
             BookingServiceImpl serviceWithMockedPnr = new BookingServiceImpl(
                     bookingRepository, bookingPassengerRepository,
-                    mockPnrGenerator, bookingStateMachine, bookingValidator, fareCalculator, DRAFT_TTL_MINUTES);
+                    mockPnrGenerator, bookingStateMachine, bookingValidator, fareCalculator,
+                    new com.skybook.praveen.bookingservice.domain.CancellationPolicy(new java.math.BigDecimal("30"), 72, 24, 2),
+                    DRAFT_TTL_MINUTES);
 
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
@@ -700,7 +704,7 @@ class BookingServiceImplTest {
             when(bookingRepository.findById(1L)).thenReturn(Optional.of(booking));
             stubSaveReturnsArgument();
 
-            BookingResponse response = bookingService.cancelBooking(1L, "change of plans");
+            BookingResponse response = bookingService.cancelBooking(1L, "change of plans", 100);
 
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.CANCELLED);
             assertThat(response.payment().paymentStatus()).isEqualTo(PaymentStatus.REFUNDED);
@@ -716,7 +720,7 @@ class BookingServiceImplTest {
             when(bookingRepository.findById(1L)).thenReturn(Optional.of(booking));
             stubSaveReturnsArgument();
 
-            BookingResponse response = bookingService.cancelBooking(1L, null);
+            BookingResponse response = bookingService.cancelBooking(1L, null, 100);
 
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.CANCELLED);
             assertThat(response.payment().paymentStatus()).isEqualTo(PaymentStatus.PENDING);

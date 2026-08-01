@@ -90,6 +90,14 @@ public class BookingEvent {
 
     private BigDecimal totalFare;
 
+    /**
+     * CANCELLED events only: the time-tier refund percent quoted at
+     * cancellation (booking-service CancellationPolicy) - 100 = fare rules
+     * alone, 50 = half, 0 = same-day forfeiture (payment-service must NOT
+     * create a refund). Null on legacy events = 100 (old behaviour).
+     */
+    private Integer refundTierPercent;
+
     private String currency;
 
     /** Payment status, e.g. "PAID" - null if no payment record yet */

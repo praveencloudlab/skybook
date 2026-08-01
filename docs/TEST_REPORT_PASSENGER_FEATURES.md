@@ -68,6 +68,22 @@ Each row is a live test executed this session, with its observed result.
     boarding pass (dep + arrival), next-trip card; booking a departed flight
     is refused ("Bookings close 60 minutes before departure", verified 400).
 
+## 2b. Cancellation policy round (2026-08-01)
+
+Time-based cancellation with a live charges chart, all live-verified:
+
+| Check | Evidence |
+| --- | --- |
+| **50% tier (24-72h out)** | SB7ZXJ on SB1897 (dep +54h), £160 Flexi: preview quoted `refundPercent:50, refundAmount:£80`; cancel refunded **exactly £80** (payment: captured 160, refunded 80, REFUNDED) |
+| **Same-day zero refund (<24h)** | Booking on SB1879 (dep +6h): preview 0%; cancel succeeded, coupons went **CANCELLED** (not REFUNDED), payment stayed **CAPTURED with £0 refunded** - fare honestly forfeited, no fake "REFUNDED £0" |
+| **Checked-in guard (the reported bug)** | Whole-booking `PATCH /cancel` after web check-in → **409** "has already checked in - contact the airport desk"; preview reports `allowed:false` with the same reason. Previously this endpoint had NO guard and refunded 100% |
+| **Seat release** | Seat 14B: reservations showed `RESERVED (bookingId 207)` before cancel, **empty after** - released back to the pool (all cancel paths release holds + reservations) |
+| **Live charges chart** | Trip page → Cancel booking: four tier bands with the active one highlighted, ticking countdown ("⏱ Your refund drops to 50% in 25d 6h 34m"), "You'd get back £210.00"; server-refreshed every 30s |
+| **Modify dialog coherence** | The net-after-refund row now uses the LIVE cancellation quote (tiers included), and Modify is blocked when the old booking can no longer be cancelled online |
+| **<2h / departed window** | Unit-tested from both sides (CancellationPolicyTest, 10 tests); no live flight fell in the 70-115min window at test time |
+
+Policy: ≥72h → 100% of the fare-rule refund (Saver still pays its 30% fee) · 24-72h → 50% · <24h → 0% (cancel still allowed, frees the seat) · <2h or departed or checked-in → online cancellation closed (ADMIN desk bypasses). Unpaid bookings cancel freely. The tier rides the CANCELLED event (`refundTierPercent`) so payment-service refunds exactly what was quoted.
+
 ## 3. Automated suites
 
 - Backend: full reactor `mvn test` across **all modules — PASSED (exit 0)**,

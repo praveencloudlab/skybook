@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { bookingsApi, type Booking } from '../../api/bookings';
+import { bookingsApi, type Booking, type CancellationPreview } from '../../api/bookings';
 import { flightsApi, type Flight } from '../../api/flights';
 import { FARE_TYPE_LABELS, TRAVEL_CLASS_LABELS } from '../../api/quotes';
 import {
@@ -58,6 +58,9 @@ export function BookingDetailPage({
   // actions stay hidden until the user explicitly opens them - a detail page
   // should read as an itinerary, not open on a cancellation form.
   const [managing, setManaging] = useState(false);
+  // Live cancellation quote: fetched when the cancel panel opens, refreshed
+  // every 30s while it stays open so the charges chart tracks the clock.
+  const [preview, setPreview] = useState<CancellationPreview | null>(null);
   const [modifying, setModifying] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirm, setConfirm] = useState<'selected' | 'entire' | null>(null);
@@ -106,6 +109,28 @@ export function BookingDetailPage({
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  // Live cancellation quote while the cancel panel is open: fetch on open,
+  // re-fetch every 30s - the server recomputes the tier from ITS clock, so
+  // the chart can never promise a refund the cancel call would refuse.
+  useEffect(() => {
+    if (!managing) {
+      setPreview(null);
+      return;
+    }
+    const controller = new AbortController();
+    const fetchPreview = () =>
+      bookingsApi
+        .cancellationPreview(booking.id, controller.signal)
+        .then(setPreview)
+        .catch(() => {});
+    void fetchPreview();
+    const timer = window.setInterval(fetchPreview, 30_000);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+    };
+  }, [managing, booking.id]);
 
   async function handleCheckIn(record: CheckIn) {
     setError(null);
@@ -251,6 +276,32 @@ export function BookingDetailPage({
   const canCancelSelected = selectedCount > 0 && !orphansMinor && !departed;
   const anyCancellable = cancellablePassengers.length > 0;
   const anyCheckedIn = activePassengers.some(checkedIn);
+
+  // The server's live quote can veto what the local heuristics would allow
+  // (e.g. inside the 2h window) - trust it once it has loaded.
+  const cancellationBlocked = preview !== null && !preview.allowed;
+
+  // What the CURRENT selection would refund, priced from the live preview.
+  // Traveller expansion mirrors the server: selecting any row cancels that
+  // traveller off every segment, so all their rows count.
+  const selectedQuote = (() => {
+    if (!preview) return null;
+    const travellerIds = new Set(
+      activePassengers.filter((p) => selected.has(p.id)).map((p) => p.passengerId),
+    );
+    const rowIds = new Set(
+      activePassengers.filter((p) => travellerIds.has(p.passengerId)).map((p) => p.id),
+    );
+    let paid = 0;
+    let refund = 0;
+    for (const line of preview.lines) {
+      if (rowIds.has(line.bookingPassengerId)) {
+        paid += Number(line.paid);
+        refund += Number(line.refund);
+      }
+    }
+    return { paid, refund };
+  })();
 
   // A cancelled passenger has no seat and no valid check-in, so it must NOT
   // appear in the check-in list (its stale checkin-service record would offer a
@@ -605,10 +656,11 @@ export function BookingDetailPage({
         <div className="mt-3 rounded-xl bg-slate-50 p-4 text-sm">
           <p className="font-medium text-slate-700">Cancellation &amp; refund rules</p>
           <ul className="mt-2 space-y-1 text-slate-600">
-            <li>• <span className="font-medium">Saver</span> — cancellable; a cancellation fee applies and the refund is partial.</li>
-            <li>• <span className="font-medium">Flexi</span> — cancellable with a more generous refund.</li>
-            <li>• <span className="font-medium">Premium</span> — fully flexible; highest refund.</li>
-            <li>• A captured payment is refunded automatically to the original method; check-in closes for every passenger.</li>
+            <li>• <span className="font-medium">More than 72h before departure</span> — full refund per your fare rules (Saver keeps its 30% fee; Flexi and Premium refund in full).</li>
+            <li>• <span className="font-medium">72h – 24h before departure</span> — 50% of the fare-rule refund.</li>
+            <li>• <span className="font-medium">Under 24h (same day)</span> — cancellation still frees your seat, but the fare is not refunded.</li>
+            <li>• <span className="font-medium">Last 2 hours &amp; after check-in</span> — online cancellation is closed; the airport desk can still help.</li>
+            <li>• A refund due is returned automatically to the original payment method; check-in closes for every passenger.</li>
           </ul>
         </div>
 
@@ -650,8 +702,12 @@ export function BookingDetailPage({
           </div>
         ) : anyCancellable ? (
           <div className="mt-4">
+            {/* Live charges chart - what cancelling RIGHT NOW costs, straight
+                from the server's clock, refreshed while this panel is open. */}
+            <CancellationChargesCard preview={preview} />
+
             {/* Choose passengers to cancel (rule 12: two distinct actions). */}
-            <p className="text-sm font-medium text-slate-700">Cancel passengers</p>
+            <p className="mt-4 text-sm font-medium text-slate-700">Cancel passengers</p>
             <ul className="mt-2 space-y-1.5">
               {activePassengers.map((p) => {
                 const locked = checkedIn(p);
@@ -709,7 +765,7 @@ export function BookingDetailPage({
             <div className="mt-4 flex flex-wrap gap-2">
               <Button
                 onClick={() => setConfirm('selected')}
-                disabled={!canCancelSelected || cancelling}
+                disabled={!canCancelSelected || cancelling || cancellationBlocked}
               >
                 Cancel selected passenger{selectedCount === 1 ? '' : 's'}
                 {selectedCount > 0 ? ` (${selectedCount})` : ''}
@@ -721,7 +777,7 @@ export function BookingDetailPage({
                 <button
                   type="button"
                   onClick={() => setConfirm('entire')}
-                  disabled={cancelling}
+                  disabled={cancelling || cancellationBlocked}
                   className="rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
                 >
                   Cancel entire booking
@@ -750,8 +806,24 @@ export function BookingDetailPage({
                     : `Cancel ${selectedCount} passenger${selectedCount === 1 ? '' : 's'}?`}
                 </p>
                 <p className="mt-1 text-sm text-red-700">
-                  This can't be undone. A refund is calculated for the cancelled passenger
-                  {confirm === 'entire' || selectedCount !== 1 ? 's' : ''} per the fare rules above.
+                  This can't be undone.{' '}
+                  {confirm === 'entire' && preview && !preview.unpaid ? (
+                    <>
+                      You'll get{' '}
+                      <span className="font-bold">{money(preview.refundAmount, CURRENCY)}</span> back
+                      of the {money(preview.totalPaid, CURRENCY)} paid
+                      {preview.refundPercent < 100 ? ` (${preview.refundPercent}% window)` : ''}.
+                    </>
+                  ) : confirm === 'selected' && selectedQuote && preview && !preview.unpaid ? (
+                    <>
+                      You'll get{' '}
+                      <span className="font-bold">{money(selectedQuote.refund, CURRENCY)}</span> back
+                      of their {money(selectedQuote.paid, CURRENCY)}
+                      {preview.refundPercent < 100 ? ` (${preview.refundPercent}% window)` : ''}.
+                    </>
+                  ) : (
+                    <>A refund is calculated per the rules above.</>
+                  )}
                   {confirm === 'selected' ? ' The remaining passengers keep their seats and services.' : ''}
                 </p>
                 <div className="mt-3 flex gap-2">
@@ -1000,6 +1072,144 @@ function ChangeSeatDialog({ bookingId, row, onClose, onChanged }: {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The live cancellation charges chart: the four time tiers with the tier in
+ * force highlighted, a ticking countdown to the next drop, and exactly what
+ * cancelling right now pays back. Data comes from the server's clock
+ * (/cancellation-preview, refreshed by the parent) - this component only
+ * renders it and ticks the countdown.
+ */
+function CancellationChargesCard({ preview }: { preview: CancellationPreview | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  if (!preview) {
+    return (
+      <p className="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-500">
+        Checking today's cancellation terms…
+      </p>
+    );
+  }
+
+  const boundary = (iso?: string | null) => (iso ? new Date(iso).getTime() : null);
+  const closes = boundary(preview.cancelClosesAt);
+  const full = boundary(preview.fullRefundUntil);
+  const half = boundary(preview.halfRefundUntil);
+
+  const fmt = (iso?: string | null) =>
+    iso ? `${dayAndMonth(iso)} ${time(iso)}` : '—';
+
+  const countdown = (target: number) => {
+    let seconds = Math.max(0, Math.floor((target - now) / 1000));
+    const days = Math.floor(seconds / 86400);
+    seconds -= days * 86400;
+    const hours = Math.floor(seconds / 3600);
+    seconds -= hours * 3600;
+    const minutes = Math.floor(seconds / 60);
+    seconds -= minutes * 60;
+    return days > 0
+      ? `${days}d ${hours}h ${minutes}m`
+      : hours > 0
+        ? `${hours}h ${minutes}m ${seconds}s`
+        : `${minutes}m ${seconds}s`;
+  };
+
+  // Which band is in force, and what the next deadline means for the money.
+  const closed = !preview.allowed;
+  const tiers = [
+    { label: '100% refund', window: `Until ${fmt(preview.fullRefundUntil)}`, active: !closed && preview.refundPercent === 100 },
+    { label: '50% refund', window: `Until ${fmt(preview.halfRefundUntil)}`, active: !closed && preview.refundPercent === 50 },
+    { label: 'No refund', window: `Until ${fmt(preview.cancelClosesAt)}`, active: !closed && preview.refundPercent === 0 },
+    { label: 'Online cancel closed', window: `From ${fmt(preview.cancelClosesAt)}`, active: closed },
+  ];
+
+  const nextDeadline = !closed
+    ? preview.refundPercent === 100 && full && full > now
+      ? { at: full, note: 'refund drops to 50% in' }
+      : preview.refundPercent === 50 && half && half > now
+        ? { at: half, note: 'refund drops to zero in' }
+        : closes && closes > now
+          ? { at: closes, note: 'online cancellation closes in' }
+          : null
+    : null;
+
+  return (
+    <div className="rounded-xl border border-slate-200 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Cancellation charges right now
+      </p>
+
+      {/* Tier chart: four bands, the one in force highlighted. */}
+      <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        {tiers.map((tier) => (
+          <div
+            key={tier.label}
+            className={
+              'rounded-lg px-2.5 py-2 text-center ring-1 ring-inset ' +
+              (tier.active
+                ? tier.label === 'Online cancel closed'
+                  ? 'bg-red-50 text-red-700 ring-red-200'
+                  : 'bg-brand-900 text-white ring-brand-900'
+                : 'bg-slate-50 text-slate-500 ring-slate-200')
+            }
+          >
+            <p className="text-xs font-bold">{tier.label}</p>
+            <p className={'tabular mt-0.5 text-[10px] ' + (tier.active ? 'opacity-80' : 'text-slate-400')}>
+              {tier.window}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {nextDeadline ? (
+        <p className="tabular mt-2 text-xs font-semibold text-amber-700">
+          ⏱ Your {nextDeadline.note} {countdown(nextDeadline.at)}
+        </p>
+      ) : null}
+
+      {preview.unpaid ? (
+        <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800 ring-1 ring-inset ring-emerald-200">
+          Nothing has been charged on this booking yet — cancelling is free.
+        </p>
+      ) : (
+        <dl className="mt-3 space-y-1 text-sm">
+          <div className="flex justify-between text-slate-600">
+            <dt>You paid</dt>
+            <dd className="tabular">{money(preview.totalPaid, CURRENCY)}</dd>
+          </div>
+          {Number(preview.fareRuleFee) > 0 ? (
+            <div className="flex justify-between text-slate-600">
+              <dt>Saver fare-rule fee</dt>
+              <dd className="tabular">−{money(preview.fareRuleFee, CURRENCY)}</dd>
+            </div>
+          ) : null}
+          {Number(preview.timePenalty) > 0 ? (
+            <div className="flex justify-between text-slate-600">
+              <dt>Time-of-cancellation charge ({100 - preview.refundPercent}%)</dt>
+              <dd className="tabular">−{money(preview.timePenalty, CURRENCY)}</dd>
+            </div>
+          ) : null}
+          <div className="flex justify-between border-t border-slate-200 pt-1 font-bold text-slate-900">
+            <dt>You'd get back</dt>
+            <dd className={'tabular ' + (Number(preview.refundAmount) > 0 ? 'text-emerald-700' : 'text-red-600')}>
+              {money(preview.refundAmount, CURRENCY)}
+            </dd>
+          </div>
+        </dl>
+      )}
+
+      {closed && preview.blockedReason ? (
+        <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 ring-1 ring-inset ring-red-200">
+          {preview.blockedReason}
+        </p>
+      ) : null}
     </div>
   );
 }

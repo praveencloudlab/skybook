@@ -72,7 +72,9 @@ class BookingFacadeTest {
                 bookingService, bookingEventProducer,
                 new com.skybook.praveen.bookingservice.domain.FareCalculator(
                         java.time.Clock.fixed(java.time.Instant.parse("2030-06-04T09:00:00Z"), java.time.ZoneOffset.UTC)),
-                fareAlertRepository);
+                fareAlertRepository,
+                new com.skybook.praveen.bookingservice.domain.CancellationPolicy(
+                        new BigDecimal("30"), 72, 24, 2));
     }
 
     private BookingPassengerResponse passenger(long id, String seat) {
@@ -158,7 +160,7 @@ class BookingFacadeTest {
             assertThat(assignments.get(0).mode()).isEqualTo(SeatAssignmentMode.MANUAL);
             // The FINALIZED response is announced, never the draft.
             verify(bookingEventProducer).publishBookingCreated(created, List.of(flight));
-            verify(bookingService, never()).cancelBooking(anyLong(), anyString());
+            verify(bookingService, never()).cancelBooking(anyLong(), anyString(), org.mockito.ArgumentMatchers.anyInt());
         }
 
         @Test
@@ -223,7 +225,7 @@ class BookingFacadeTest {
                     .hasMessageContaining("inconsistent");
 
             verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12A"), eq(7L), anyString());
-            verify(bookingService).cancelBooking(eq(7L), anyString());
+            verify(bookingService).cancelBooking(eq(7L), anyString(), eq(100));
             verify(bookingService, never()).finalizeSeatAssignments(anyLong(), any());
             verify(bookingEventProducer, never()).publishBookingCreated(any(), any());
         }
@@ -243,7 +245,7 @@ class BookingFacadeTest {
             // The successful hold is released, the DRAFT cancelled, nothing
             // finalized, no event published.
             verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12A"), eq(7L), anyString());
-            verify(bookingService).cancelBooking(eq(7L), anyString());
+            verify(bookingService).cancelBooking(eq(7L), anyString(), eq(100));
             verify(bookingService, never()).finalizeSeatAssignments(anyLong(), any());
             verify(bookingEventProducer, never()).publishBookingCreated(any(), any());
         }
@@ -262,7 +264,7 @@ class BookingFacadeTest {
 
             verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12A"), eq(7L), anyString());
             verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12B"), eq(7L), anyString());
-            verify(bookingService).cancelBooking(eq(7L), anyString());
+            verify(bookingService).cancelBooking(eq(7L), anyString(), eq(100));
             verify(bookingEventProducer, never()).publishBookingCreated(any(), any());
         }
     }
@@ -348,7 +350,7 @@ class BookingFacadeTest {
                     .isInstanceOf(SeatUnavailableException.class);
 
             verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12A"), eq(7L), anyString());
-            verify(bookingService).cancelBooking(eq(7L), anyString());
+            verify(bookingService).cancelBooking(eq(7L), anyString(), eq(100));
             verify(bookingService, never()).finalizeSeatAssignments(anyLong(), any());
             verify(bookingEventProducer, never()).publishBookingCreated(any(), any());
         }
@@ -481,12 +483,13 @@ class BookingFacadeTest {
     @Test
     void cancelReleasesHoldsAndReservationsQuietlyThenPublishes() {
         BookingResponse cancelled = booking(BookingStatus.CANCELLED, "12A", "12B");
-        when(bookingService.cancelBooking(7L, "changed plans")).thenReturn(cancelled);
+        when(bookingService.getBookingById(7L)).thenReturn(booking(BookingStatus.CONFIRMED, "12A", "12B"));
+        when(bookingService.cancelBooking(7L, "changed plans", 100)).thenReturn(cancelled);
 
         facade.cancelBooking(7L, "changed plans");
 
         verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12A"), eq(7L), anyString());
         verify(inventoryServiceClient).cancelReservationQuietly(eq(10L), eq("12B"), eq(7L), anyString());
-        verify(bookingEventProducer).publishBookingCancelled(eq(cancelled), any());
+        verify(bookingEventProducer).publishBookingCancelled(eq(cancelled), any(), eq(100));
     }
 }

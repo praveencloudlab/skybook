@@ -137,6 +137,39 @@ export interface BookingPassenger {
   checkInStatus?: string;
 }
 
+/** One passenger row's money in the cancellation preview. */
+export interface CancellationPreviewLine {
+  bookingPassengerId: number;
+  segmentIndex: number;
+  passengerName: string;
+  fareType: string;
+  paid: string | number;
+  refund: string | number;
+}
+
+/**
+ * Live cancellation quote (GET /bookings/{id}/cancellation-preview): the
+ * time-tier in force right now, its deadlines for the charges chart, and
+ * exactly what cancelling would refund and withhold.
+ */
+export interface CancellationPreview {
+  allowed: boolean;
+  blockedReason?: string | null;
+  /** 100 / 50 / 0 - the tier in force right now. */
+  refundPercent: number;
+  departureTime?: string | null;
+  fullRefundUntil?: string | null;
+  halfRefundUntil?: string | null;
+  cancelClosesAt?: string | null;
+  /** Nothing captured yet - cancelling is free and refunds nothing. */
+  unpaid: boolean;
+  totalPaid: string | number;
+  fareRuleFee: string | number;
+  timePenalty: string | number;
+  refundAmount: string | number;
+  lines: CancellationPreviewLine[];
+}
+
 /** Result of cancelling selected passengers. */
 export interface CancelPassengersResult {
   booking: Booking;
@@ -200,6 +233,11 @@ export const bookingsApi = {
 
   cancel(id: number, signal?: AbortSignal): Promise<Booking> {
     return api.patch<Booking>(`/api/bookings/${id}/cancel`, undefined, { signal });
+  },
+
+  /** Live cancellation quote - recomputed server-side on every call. */
+  cancellationPreview(id: number, signal?: AbortSignal): Promise<CancellationPreview> {
+    return api.get<CancellationPreview>(`/api/bookings/${id}/cancellation-preview`, { signal });
   },
 
   /**

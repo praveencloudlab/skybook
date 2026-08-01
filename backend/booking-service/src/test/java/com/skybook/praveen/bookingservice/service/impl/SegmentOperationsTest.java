@@ -69,7 +69,8 @@ class SegmentOperationsTest {
         bookingService = new BookingServiceImpl(
                 bookingRepository, bookingPassengerRepository,
                 pnrGenerator, new BookingStateMachine(), bookingValidator,
-                new FareCalculator(Clock.fixed(Instant.parse("2030-06-04T09:00:00Z"), ZoneOffset.UTC)), 15);
+                new FareCalculator(Clock.fixed(Instant.parse("2030-06-04T09:00:00Z"), ZoneOffset.UTC)),
+                new com.skybook.praveen.bookingservice.domain.CancellationPolicy(new java.math.BigDecimal("30"), 72, 24, 2), 15);
         lenient().when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
@@ -123,7 +124,7 @@ class SegmentOperationsTest {
         Booking booking = roundTrip(FareType.FLEXI);
         when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
 
-        CancelPassengersResponse result = bookingService.cancelSegment(7L, 1);
+        CancelPassengersResponse result = bookingService.cancelSegment(7L, 1, 100);
 
         assertThat(result.refundAmount()).isEqualByComparingTo("100.00");
         assertThat(result.bookingCancelled()).isFalse();
@@ -144,7 +145,7 @@ class SegmentOperationsTest {
         Booking booking = roundTrip(FareType.FLEXI);
         when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
 
-        assertThatThrownBy(() -> bookingService.cancelSegment(7L, 0))
+        assertThatThrownBy(() -> bookingService.cancelSegment(7L, 0, 100))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("on its own");
     }

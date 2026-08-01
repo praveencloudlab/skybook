@@ -34,23 +34,35 @@ public class RefundCalculator {
     }
 
     public RefundComputation compute(List<FareLine> lines) {
+        return compute(lines, 100);
+    }
 
-        BigDecimal refund = BigDecimal.ZERO;
-        BigDecimal fee = BigDecimal.ZERO;
+    /**
+     * Fare rules first, then the cancellation-policy time tier scales what
+     * survived (booking-service CancellationPolicy - the same percent the
+     * passenger was quoted). refund + fee always equals the lines' total.
+     */
+    public RefundComputation compute(List<FareLine> lines, int refundPercent) {
+
+        BigDecimal total = BigDecimal.ZERO;
+        BigDecimal ruleRefundable = BigDecimal.ZERO;
 
         for (FareLine line : lines) {
+            total = total.add(line.amount());
             if ("SAVER".equalsIgnoreCase(line.fareType())) {
                 BigDecimal lineFee = line.amount()
                         .multiply(saverFeePercent)
                         .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-                fee = fee.add(lineFee);
-                refund = refund.add(line.amount().subtract(lineFee));
+                ruleRefundable = ruleRefundable.add(line.amount().subtract(lineFee));
             } else {
-                refund = refund.add(line.amount());
+                ruleRefundable = ruleRefundable.add(line.amount());
             }
         }
 
-        return new RefundComputation(refund, fee);
+        BigDecimal refund = ruleRefundable
+                .multiply(BigDecimal.valueOf(refundPercent))
+                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+        return new RefundComputation(refund, total.subtract(refund));
     }
 
     // ---------------------------------------------------------------

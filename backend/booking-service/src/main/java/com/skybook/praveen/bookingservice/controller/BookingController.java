@@ -174,6 +174,20 @@ public class BookingController {
     }
 
     @Operation(
+            summary = "Cancellation preview",
+            description = "Live quote for cancelling this booking right now: the time-tier in force "
+                    + "(100% / 50% / 0% refund), the tier deadlines for the charges chart, per-passenger "
+                    + "refunds, and whether online cancellation is still open (it closes 2h before "
+                    + "departure, and entirely once anyone has checked in)."
+    )
+    @GetMapping("/{id}/cancellation-preview")
+    public com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse cancellationPreview(
+            @PathVariable Long id) {
+        accessGuard.requireOwnerOfBooking(id);
+        return bookingFacade.cancellationPreview(id);
+    }
+
+    @Operation(
             summary = "Cancel Booking",
             description = "Cancels the booking, closes check-in for every passenger on it, refunds if payment had " +
                     "been captured, and publishes a booking-cancelled notification event."

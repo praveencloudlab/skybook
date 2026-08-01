@@ -80,6 +80,7 @@ public class BookingFacade {
     private final BookingEventProducer bookingEventProducer;
     private final FareCalculator fareCalculator;
     private final FareAlertRepository fareAlertRepository;
+    private final com.skybook.praveen.bookingservice.domain.CancellationPolicy cancellationPolicy;
 
     public BookingResponse createBooking(CreateBookingRequest request) {
 
@@ -193,7 +194,11 @@ public class BookingFacade {
 
     public BookingResponse cancelBooking(Long id, String reason) {
 
-        BookingResponse booking = bookingService.cancelBooking(id, reason);
+        // Time-tier + checked-in guards run BEFORE anything mutates - an
+        // ADMIN (desk) bypasses both and refunds per the fare rules alone.
+        int refundPercent = assessOnlineCancellation(bookingService.getBookingById(id), null);
+
+        BookingResponse booking = bookingService.cancelBooking(id, reason, refundPercent);
 
         // Return the seats to the pool - holds if never confirmed,
         // reservations if it was. Cleanup must not fail the cancellation.
@@ -206,7 +211,7 @@ public class BookingFacade {
             }
         }
 
-        bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking));
+        bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking), refundPercent);
 
         return booking;
     }
@@ -219,7 +224,11 @@ public class BookingFacade {
      */
     public CancelPassengersResponse cancelPassengers(Long bookingId, java.util.List<Long> bookingPassengerIds) {
 
-        CancelPassengersResponse result = bookingService.cancelPassengers(bookingId, bookingPassengerIds);
+        int refundPercent = assessOnlineCancellation(bookingService.getBookingById(bookingId),
+                new java.util.HashSet<>(bookingPassengerIds));
+
+        CancelPassengersResponse result =
+                bookingService.cancelPassengers(bookingId, bookingPassengerIds, refundPercent);
         BookingResponse booking = result.booking();
 
         // Release seats only for cancelled passengers - remaining passengers keep
@@ -234,7 +243,7 @@ public class BookingFacade {
         }
 
         if (result.bookingCancelled()) {
-            bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking));
+            bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking), refundPercent);
         }
 
         return result;
@@ -247,7 +256,15 @@ public class BookingFacade {
      */
     public CancelPassengersResponse cancelSegment(Long bookingId, int segmentIndex) {
 
-        CancelPassengersResponse result = bookingService.cancelSegment(bookingId, segmentIndex);
+        BookingResponse current = bookingService.getBookingById(bookingId);
+        java.util.Set<Long> segmentRowIds = current.passengers().stream()
+                .filter(p -> !p.cancelled() && p.segmentIndex() == segmentIndex)
+                .map(BookingPassengerResponse::id)
+                .collect(java.util.stream.Collectors.toSet());
+        int refundPercent = assessOnlineCancellation(current,
+                segmentRowIds.isEmpty() ? null : segmentRowIds);
+
+        CancelPassengersResponse result = bookingService.cancelSegment(bookingId, segmentIndex, refundPercent);
         BookingResponse booking = result.booking();
 
         for (BookingPassengerResponse passenger : booking.passengers()) {
@@ -261,10 +278,172 @@ public class BookingFacade {
         }
 
         if (result.bookingCancelled()) {
-            bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking));
+            bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking), refundPercent);
         }
 
         return result;
+    }
+
+    /**
+     * Guard + tier for every online cancel path. Scope = the active rows being
+     * cancelled (null = the whole booking); the governing departure is the
+     * EARLIEST still-upcoming flight in scope. Throws when cancellation is not
+     * allowed online (checked in, window closed, already departed); otherwise
+     * returns the refund percent for the tier in force. An ADMIN caller is the
+     * desk: no window, no tier - fare rules alone (100).
+     */
+    private int assessOnlineCancellation(BookingResponse booking, java.util.Set<Long> scopeRowIds) {
+
+        if (com.skybook.praveen.security.SecurityAccess.isAdmin()) {
+            return 100;
+        }
+
+        List<BookingPassengerResponse> scope = booking.passengers().stream()
+                .filter(p -> !p.cancelled())
+                .filter(p -> scopeRowIds == null || scopeRowIds.contains(p.id()))
+                .toList();
+        if (scope.isEmpty()) {
+            // Nothing active in scope - let the service produce its own
+            // "already cancelled" error with full context.
+            return 100;
+        }
+
+        for (BookingPassengerResponse row : scope) {
+            if (row.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.CHECKED_IN
+                    || row.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.BOARDED) {
+                throw new IllegalStateException(row.firstName() + " " + row.lastName()
+                        + " has already checked in - the booking can no longer be cancelled online. "
+                        + "Please contact the airport desk.");
+            }
+        }
+
+        // Unpaid = nothing captured: cancelling is free, no window applies
+        // (it only releases seats - exactly what we want near departure).
+        boolean paid = booking.payment() != null
+                && booking.payment().paymentStatus() == com.skybook.praveen.bookingservice.enums.PaymentStatus.PAID;
+        if (!paid) {
+            return 100;
+        }
+
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        java.time.LocalDateTime earliestUpcoming = scope.stream()
+                .map(BookingPassengerResponse::flightId)
+                .distinct()
+                .map(this::flightOrNull)
+                .filter(java.util.Objects::nonNull)
+                .map(FlightDetails::departureTime)
+                .filter(dep -> dep != null && dep.isAfter(now))
+                .min(java.util.Comparator.naturalOrder())
+                .orElseThrow(() -> new IllegalStateException(
+                        "This journey has already departed - the booking can no longer be cancelled online."));
+
+        var assessment = cancellationPolicy.assess(now, earliestUpcoming);
+        if (!assessment.allowed()) {
+            throw new IllegalStateException(assessment.blockedReason());
+        }
+        return assessment.refundPercent();
+    }
+
+    /**
+     * Live cancellation quote - what cancelling the whole booking RIGHT NOW
+     * refunds and withholds, with the tier boundaries for the charges chart.
+     * Never throws for policy reasons: a blocked state is reported, so the
+     * UI can show WHY alongside the schedule.
+     */
+    public com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse cancellationPreview(Long id) {
+
+        BookingResponse booking = bookingService.getBookingById(id);
+
+        List<BookingPassengerResponse> active = booking.passengers().stream()
+                .filter(p -> !p.cancelled())
+                .toList();
+
+        boolean paid = booking.payment() != null
+                && booking.payment().paymentStatus() == com.skybook.praveen.bookingservice.enums.PaymentStatus.PAID;
+
+        if (active.isEmpty()) {
+            return new com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse(
+                    false, "This booking is already cancelled.", 0, null, null, null, null,
+                    !paid, ZERO_MONEY, ZERO_MONEY, ZERO_MONEY, ZERO_MONEY, List.of());
+        }
+
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        Map<Long, java.time.LocalDateTime> departures = new java.util.HashMap<>();
+        for (Long flightId : active.stream().map(BookingPassengerResponse::flightId).distinct().toList()) {
+            FlightDetails details = flightOrNull(flightId);
+            if (details != null && details.departureTime() != null) {
+                departures.put(flightId, details.departureTime());
+            }
+        }
+
+        // Rows whose flight already departed carry no refund value - their
+        // journey is used. The tiers key on the earliest UPCOMING flight.
+        List<BookingPassengerResponse> upcoming = active.stream()
+                .filter(p -> {
+                    java.time.LocalDateTime dep = departures.get(p.flightId());
+                    return dep != null && dep.isAfter(now);
+                })
+                .toList();
+
+        java.time.LocalDateTime governing = upcoming.stream()
+                .map(p -> departures.get(p.flightId()))
+                .min(java.util.Comparator.naturalOrder())
+                .orElse(null);
+
+        if (governing == null) {
+            return new com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse(
+                    false, "This journey has already departed - the booking can no longer be cancelled online.",
+                    0, null, null, null, null, !paid, ZERO_MONEY, ZERO_MONEY, ZERO_MONEY, ZERO_MONEY, List.of());
+        }
+
+        var assessment = cancellationPolicy.assess(now, governing);
+
+        boolean anyCheckedIn = active.stream().anyMatch(
+                p -> p.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.CHECKED_IN
+                        || p.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.BOARDED);
+
+        boolean allowed = assessment.allowed() && !anyCheckedIn;
+        String blockedReason = anyCheckedIn
+                ? "A passenger on this booking has already checked in - cancellation is only "
+                        + "available at the airport desk."
+                : assessment.blockedReason();
+
+        // Unpaid bookings cancel freely whatever the clock says - nothing was
+        // charged, so there is nothing to refund or withhold.
+        if (!paid) {
+            allowed = !active.isEmpty() && !anyCheckedIn;
+        }
+
+        int percent = paid ? assessment.refundPercent() : 0;
+
+        List<com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse.Line> lines =
+                new ArrayList<>();
+        BigDecimal totalPaid = ZERO_MONEY;
+        BigDecimal totalRefund = ZERO_MONEY;
+        BigDecimal totalRuleFee = ZERO_MONEY;
+        for (BookingPassengerResponse row : upcoming) {
+            String fareType = row.fareType() != null ? row.fareType().name() : "FLEXI";
+            var comp = cancellationPolicy.computeRefund(
+                    List.of(new com.skybook.praveen.bookingservice.domain.CancellationPolicy.FareLine(
+                            fareType, row.fare())), percent);
+            BigDecimal refund = paid ? comp.refundAmount() : ZERO_MONEY;
+            lines.add(new com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse.Line(
+                    row.id(), row.segmentIndex(), row.firstName() + " " + row.lastName(),
+                    fareType, row.fare(), refund));
+            totalPaid = totalPaid.add(row.fare());
+            totalRefund = totalRefund.add(refund);
+            if (paid) {
+                totalRuleFee = totalRuleFee.add(comp.fareRuleFee());
+            }
+        }
+        BigDecimal timePenalty = paid
+                ? totalPaid.subtract(totalRuleFee).subtract(totalRefund)
+                : ZERO_MONEY;
+
+        return new com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse(
+                allowed, allowed ? null : blockedReason, percent, governing,
+                assessment.fullRefundUntil(), assessment.halfRefundUntil(), assessment.cancelClosesAt(),
+                !paid, totalPaid, totalRuleFee, timePenalty, totalRefund, lines);
     }
 
     /**
@@ -725,7 +904,7 @@ public class BookingFacade {
             inventoryServiceClient.releaseHoldQuietly(held.flightId(), held.seatNumber(), draft.id(),
                     "compensation - " + reason);
         }
-        bookingService.cancelBooking(draft.id(), reason);
+        bookingService.cancelBooking(draft.id(), reason, 100);
         log.warn("Draft booking {} rolled back - {}", draft.bookingReference(), reason);
     }
 

@@ -51,15 +51,32 @@ public class BookingEventProducer {
                 "Good news - your booking " + booking.bookingReference() + " is confirmed. Have a great flight.");
     }
 
-    public void publishBookingCancelled(BookingResponse booking, List<FlightDetails> flights) {
+    /**
+     * refundTierPercent (CancellationPolicy) rides the event so payment-service
+     * refunds exactly what the passenger was quoted: 100 = fare rules alone,
+     * 50 = half, 0 = same-day forfeiture (no refund is created at all).
+     */
+    public void publishBookingCancelled(BookingResponse booking, List<FlightDetails> flights,
+                                        int refundTierPercent) {
+        String refundLine = switch (refundTierPercent) {
+            case 100 -> " If a refund is due, it will be processed shortly.";
+            case 0 -> " Under the same-day cancellation policy no refund is due for this booking.";
+            default -> " A " + refundTierPercent
+                    + "% refund per your fare rules will be processed shortly.";
+        };
         publish(booking, flights, BookingEventType.CANCELLED,
                 "Your SkyBook booking " + booking.bookingReference() + " has been cancelled",
-                "Your booking " + booking.bookingReference()
-                        + " has been cancelled. If a refund is due, it will be processed shortly.");
+                "Your booking " + booking.bookingReference() + " has been cancelled." + refundLine,
+                refundTierPercent);
     }
 
     private void publish(BookingResponse booking, List<FlightDetails> flights,
                          BookingEventType type, String subject, String message) {
+        publish(booking, flights, type, subject, message, null);
+    }
+
+    private void publish(BookingResponse booking, List<FlightDetails> flights,
+                         BookingEventType type, String subject, String message, Integer refundTierPercent) {
 
         if (booking.contact() == null) {
             log.warn("Booking {} has no contact on file - skipping notification", booking.bookingReference());
@@ -132,6 +149,7 @@ public class BookingEventProducer {
                                 })
                                 .toList())
                 .totalFare(booking.totalFare())
+                .refundTierPercent(refundTierPercent)
                 .currency(booking.payment() != null ? booking.payment().currency() : null)
                 .paymentStatus(booking.payment() != null && booking.payment().paymentStatus() != null
                         ? booking.payment().paymentStatus().name() : null);

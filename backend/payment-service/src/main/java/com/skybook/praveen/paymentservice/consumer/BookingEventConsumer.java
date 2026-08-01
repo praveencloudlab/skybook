@@ -63,9 +63,21 @@ public class BookingEventConsumer {
 
         PaymentStatus status = payment.status();
 
+        // Time-tier percent quoted at cancellation (null on legacy events = 100).
+        int tierPercent = event.getRefundTierPercent() != null ? event.getRefundTierPercent() : 100;
+
         if (status == PaymentStatus.CAPTURED || status == PaymentStatus.PARTIALLY_REFUNDED) {
+            if (tierPercent == 0) {
+                // Same-day forfeiture: the passenger was told "zero refund" -
+                // creating any refund here would contradict the quote. The
+                // payment stays CAPTURED; the money is the cancellation fee.
+                log.info("Booking {} cancelled in the zero-refund window - keeping payment {} in full",
+                        event.getBookingReference(), payment.paymentReference());
+                return;
+            }
             paymentFacade.refund(payment.id(),
-                    new RefundRequest(null, "Booking " + event.getBookingReference() + " cancelled"), ctx);
+                    new RefundRequest(null, tierPercent,
+                            "Booking " + event.getBookingReference() + " cancelled"), ctx);
         } else if (status == PaymentStatus.PENDING || status == PaymentStatus.AUTHORIZED
                 || status == PaymentStatus.AUTHORIZATION_FAILED || status == PaymentStatus.CAPTURE_FAILED) {
             paymentFacade.cancel(payment.id(), ctx);

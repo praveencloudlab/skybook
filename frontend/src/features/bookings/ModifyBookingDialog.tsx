@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { bookingsApi, type Booking, type BookingPassenger, type PassengerDetail } from '../../api/bookings';
+import { bookingsApi, type Booking, type BookingPassenger, type CancellationPreview, type PassengerDetail } from '../../api/bookings';
 import { flightsApi, type Flight } from '../../api/flights';
 import { paymentsApi, type Payment } from '../../api/payments';
 import { quotesApi, type Quote } from '../../api/quotes';
@@ -54,6 +54,19 @@ export function ModifyBookingDialog({
     'pick' | 'review' | 'booking' | 'paying' | 'cancellingOld' | 'oldCancelFailed'
   >('pick');
   const [newBooking, setNewBooking] = useState<Booking | null>(null);
+  // A modify IS "pay new + cancel old", so the old booking's LIVE cancellation
+  // quote decides the real refund (time tiers apply) and whether a change is
+  // possible at all right now.
+  const [cancelPreview, setCancelPreview] = useState<CancellationPreview | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    bookingsApi
+      .cancellationPreview(booking.id, controller.signal)
+      .then(setCancelPreview)
+      .catch(() => {});
+    return () => controller.abort();
+  }, [booking.id]);
 
   const origin = currentFlight?.originAirportCode;
   const destination = currentFlight?.destinationAirportCode;
@@ -108,6 +121,16 @@ export function ModifyBookingDialog({
   const nothingChanged =
     chosen?.id === booking.flightId &&
     activePassengers.every((p, i) => (p.extraBags ?? 0) === bags[i]);
+
+  // What the old booking ACTUALLY refunds under the live cancellation quote
+  // (time tiers + fare rules) - not its face value.
+  const oldRefund = cancelPreview && !cancelPreview.unpaid
+    ? Number(cancelPreview.refundAmount)
+    : Number(booking.totalFare);
+  // The old booking can't be cancelled online right now (window closed /
+  // checked in) - then a modify is impossible too, and we must say so
+  // BEFORE taking money for a new booking.
+  const modifyBlocked = cancelPreview !== null && !cancelPreview.allowed;
 
   async function confirmRebook() {
     if (!chosen) {
@@ -189,9 +212,16 @@ export function ModifyBookingDialog({
         {/* How a change actually works - shown up front, not in small print. */}
         <div className="mt-3 rounded-xl bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900 ring-1 ring-inset ring-amber-200">
           Changes work as a rebooking: a new booking is created at today's fares and your current one
-          is cancelled with a refund per its fare rules. Chosen seats are not carried over — seats on
-          the new flight are assigned free at check-in.
+          is cancelled with a refund per its fare rules and the cancellation time windows. Chosen
+          seats are not carried over — seats on the new flight are assigned free at check-in.
         </div>
+
+        {modifyBlocked && cancelPreview?.blockedReason ? (
+          <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-xs leading-relaxed text-red-700 ring-1 ring-inset ring-red-200">
+            {cancelPreview.blockedReason} A change works by cancelling this booking, so changes are
+            closed too.
+          </div>
+        ) : null}
 
         {stage === 'oldCancelFailed' && newBooking ? (
           <div className="mt-4 space-y-3">
@@ -329,14 +359,18 @@ export function ModifyBookingDialog({
                   <dd className="tabular text-slate-900">{money(newTotal, CURRENCY)}</dd>
                 </div>
                 {/* The number that actually matters: what this change COSTS
-                    once the old booking's refund lands. */}
+                    once the old booking's refund lands. The refund comes from
+                    the live cancellation quote - time tiers included. */}
                 <div className="flex justify-between border-t border-slate-200 bg-slate-50 px-4 py-2 font-bold">
                   <dt className="text-slate-900">
-                    Net {newTotal >= Number(booking.totalFare) ? 'cost' : 'refund'} after your{' '}
-                    {money(booking.totalFare, CURRENCY)} refund
+                    Net {newTotal >= oldRefund ? 'cost' : 'refund'} after your{' '}
+                    {money(oldRefund, CURRENCY)} refund
+                    {cancelPreview && !cancelPreview.unpaid && cancelPreview.refundPercent < 100
+                      ? ` (${cancelPreview.refundPercent}% cancellation window)`
+                      : ''}
                   </dt>
-                  <dd className={'tabular ' + (newTotal >= Number(booking.totalFare) ? 'text-slate-900' : 'text-emerald-700')}>
-                    {money(Math.abs(newTotal - Number(booking.totalFare)), CURRENCY)}
+                  <dd className={'tabular ' + (newTotal >= oldRefund ? 'text-slate-900' : 'text-emerald-700')}>
+                    {money(Math.abs(newTotal - oldRefund), CURRENCY)}
                   </dd>
                 </div>
               </dl>
@@ -357,10 +391,12 @@ export function ModifyBookingDialog({
               >
                 Keep current booking
               </button>
-              <Button onClick={confirmRebook} busy={busy} disabled={!chosen || !quote || nothingChanged}>
-                {nothingChanged
-                  ? 'No changes yet'
-                  : `Confirm change · pay ${chosen && quote ? money(newTotal, CURRENCY) : ''}`}
+              <Button onClick={confirmRebook} busy={busy} disabled={!chosen || !quote || nothingChanged || modifyBlocked}>
+                {modifyBlocked
+                  ? 'Changes closed for this flight'
+                  : nothingChanged
+                    ? 'No changes yet'
+                    : `Confirm change · pay ${chosen && quote ? money(newTotal, CURRENCY) : ''}`}
               </Button>
             </div>
           </>
