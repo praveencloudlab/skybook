@@ -103,6 +103,12 @@ export function ModifyBookingDialog({
   const bagTotal = bags.reduce((sum, b) => sum + b, 0) * EXTRA_BAG_FEE;
   const newTotal = activePassengers.reduce((sum, p) => sum + fareFor(p), 0) + bagTotal;
 
+  // Same flight + same bags is not a change - it would charge the full fare
+  // and refund it straight back. Refuse to confirm until something differs.
+  const nothingChanged =
+    chosen?.id === booking.flightId &&
+    activePassengers.every((p, i) => (p.extraBags ?? 0) === bags[i]);
+
   async function confirmRebook() {
     if (!chosen) {
       return;
@@ -351,8 +357,10 @@ export function ModifyBookingDialog({
               >
                 Keep current booking
               </button>
-              <Button onClick={confirmRebook} busy={busy} disabled={!chosen || !quote}>
-                Confirm change · pay {chosen && quote ? money(newTotal, CURRENCY) : ''}
+              <Button onClick={confirmRebook} busy={busy} disabled={!chosen || !quote || nothingChanged}>
+                {nothingChanged
+                  ? 'No changes yet'
+                  : `Confirm change · pay ${chosen && quote ? money(newTotal, CURRENCY) : ''}`}
               </Button>
             </div>
           </>
