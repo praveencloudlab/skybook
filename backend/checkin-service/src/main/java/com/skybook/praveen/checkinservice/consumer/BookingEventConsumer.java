@@ -48,6 +48,17 @@ public class BookingEventConsumer {
             case CONFIRMED -> handleConfirmed(event);
             case CANCELLED -> checkInFacade.cancelForBooking(event.getBookingId(),
                     "Booking " + event.getBookingReference() + " cancelled");
+            // Passengers/segment cancelled off a SURVIVING booking: close
+            // exactly those rows' check-ins (they were never checked in - the
+            // guard blocks that - so there is no pass to revoke). Without this
+            // the records stayed OPEN forever and could still check in.
+            case PARTIALLY_CANCELLED -> {
+                if (event.getCancelledBookingPassengerIds() != null) {
+                    event.getCancelledBookingPassengerIds().forEach(rowId ->
+                            checkInService.cancelForBookingPassenger(rowId,
+                                    "Cancelled off booking " + event.getBookingReference()));
+                }
+            }
             default -> log.info("Ignoring {} event for {} (not check-in-relevant in v1)",
                     event.getType(), event.getBookingReference());
         }

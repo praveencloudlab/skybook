@@ -244,6 +244,9 @@ public class BookingFacade {
 
         if (result.bookingCancelled()) {
             bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking), refundPercent);
+        } else {
+            publishPartialCancellation(result, refundPercent,
+                    result.cancelledRowIds().size() + " passenger seat(s)");
         }
 
         return result;
@@ -279,9 +282,38 @@ public class BookingFacade {
 
         if (result.bookingCancelled()) {
             bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking), refundPercent);
+        } else {
+            publishPartialCancellation(result, refundPercent, "the return journey");
         }
 
         return result;
+    }
+
+    /**
+     * A cancellation that left the booking ALIVE: the actual money movement.
+     * Publishes PARTIALLY_CANCELLED with the cancelled rows' fare breakdown
+     * (payment-service refunds those lines x the tier) and their row ids
+     * (checkin-service closes those check-ins). Nothing captured = nothing
+     * to move = no event; the booking-side numbers already tell the story.
+     */
+    private void publishPartialCancellation(CancelPassengersResponse result, int refundPercent, String what) {
+
+        BookingResponse booking = result.booking();
+        boolean paid = booking.payment() != null
+                && booking.payment().paymentStatus() == com.skybook.praveen.bookingservice.enums.PaymentStatus.PAID;
+        if (!paid || result.cancelledRowIds() == null || result.cancelledRowIds().isEmpty()) {
+            return;
+        }
+
+        java.util.Set<Long> cancelledIds = new java.util.HashSet<>(result.cancelledRowIds());
+        String breakdown = booking.passengers().stream()
+                .filter(p -> cancelledIds.contains(p.id()))
+                .map(p -> (p.fareType() != null ? p.fareType().name() : "FLEXI")
+                        + ":" + p.fare().toPlainString())
+                .collect(java.util.stream.Collectors.joining(";"));
+
+        bookingEventProducer.publishBookingPartiallyCancelled(booking, flightsOrNull(booking),
+                refundPercent, breakdown, result.cancelledRowIds(), what, result.refundAmount());
     }
 
     /**

@@ -128,4 +128,61 @@ class BookingEventConsumerTest {
 
         verifyNoInteractions(paymentFacade);
     }
+
+    // ---------------------------------------------------------------
+    // PARTIALLY_CANCELLED - the actual money for partial cancellations
+    // ---------------------------------------------------------------
+
+    private BookingEvent partialEvent(Integer tierPercent, String breakdown) {
+        return BookingEvent.builder()
+                .type(BookingEventType.PARTIALLY_CANCELLED)
+                .bookingId(42L)
+                .bookingReference("SBTEST")
+                .refundTierPercent(tierPercent)
+                .refundBreakdown(breakdown)
+                .build();
+    }
+
+    @Test
+    void partialCancellationRefundsExactlyTheCancelledLinesAtTheTier() {
+        when(paymentService.getByBookingId(42L)).thenReturn(payment(PaymentStatus.CAPTURED));
+
+        consumer.consume(partialEvent(50, "SAVER:80.00;FLEXI:120.00"));
+
+        ArgumentCaptor<RefundRequest> captor = ArgumentCaptor.forClass(RefundRequest.class);
+        verify(paymentFacade).refund(eq(1L), captor.capture(), any(ActionContext.class));
+        RefundRequest request = captor.getValue();
+        assertThat(request.refundPercent()).isEqualTo(50);
+        assertThat(request.fareLines()).hasSize(2);
+        assertThat(request.fareLines().get(0).fareType()).isEqualTo("SAVER");
+        assertThat(request.fareLines().get(0).amount()).isEqualByComparingTo("80.00");
+        assertThat(request.reason()).contains("SBTEST");
+    }
+
+    @Test
+    void partialCancellationInTheZeroWindowKeepsTheMoney() {
+        when(paymentService.getByBookingId(42L)).thenReturn(payment(PaymentStatus.CAPTURED));
+
+        consumer.consume(partialEvent(0, "FLEXI:120.00"));
+
+        verifyNoInteractions(paymentFacade);
+    }
+
+    @Test
+    void partialCancellationWithoutCapturedMoneyIsANoOp() {
+        when(paymentService.getByBookingId(42L)).thenReturn(payment(PaymentStatus.PENDING));
+
+        consumer.consume(partialEvent(100, "FLEXI:120.00"));
+
+        verifyNoInteractions(paymentFacade);
+    }
+
+    @Test
+    void partialCancellationWithoutABreakdownRefusesToRefundBlind() {
+        when(paymentService.getByBookingId(42L)).thenReturn(payment(PaymentStatus.CAPTURED));
+
+        consumer.consume(partialEvent(100, null));
+
+        verifyNoInteractions(paymentFacade);
+    }
 }

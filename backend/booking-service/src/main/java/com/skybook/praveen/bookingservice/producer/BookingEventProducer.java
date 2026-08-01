@@ -70,13 +70,43 @@ public class BookingEventProducer {
                 refundTierPercent);
     }
 
-    private void publish(BookingResponse booking, List<FlightDetails> flights,
-                         BookingEventType type, String subject, String message) {
-        publish(booking, flights, type, subject, message, null);
+    /**
+     * Passengers or a segment cancelled off a SURVIVING booking: the money
+     * facts ride the event so payment-service refunds exactly the cancelled
+     * rows (breakdown x tier), and checkin-service closes exactly those
+     * check-ins. refundLine is pre-worded by the facade ("2 passengers" /
+     * "the return"), because only it knows what was cancelled.
+     */
+    public void publishBookingPartiallyCancelled(BookingResponse booking, List<FlightDetails> flights,
+                                                 int refundTierPercent, String refundBreakdown,
+                                                 List<Long> cancelledRowIds, String what,
+                                                 java.math.BigDecimal refundAmount) {
+        String refundLine = refundTierPercent == 0 || refundAmount == null
+                || refundAmount.signum() == 0
+                ? " Under the cancellation policy no refund is due for this change."
+                : " A refund of " + refundAmount.toPlainString()
+                        + " GBP will be processed to your original payment method.";
+        publish(booking, flights, BookingEventType.PARTIALLY_CANCELLED,
+                "Your SkyBook booking " + booking.bookingReference() + " has been updated",
+                "On booking " + booking.bookingReference() + ", " + what
+                        + " has been cancelled. The rest of the booking is unchanged." + refundLine,
+                refundTierPercent, refundBreakdown, cancelledRowIds);
     }
 
     private void publish(BookingResponse booking, List<FlightDetails> flights,
-                         BookingEventType type, String subject, String message, Integer refundTierPercent) {
+                         BookingEventType type, String subject, String message) {
+        publish(booking, flights, type, subject, message, null, null, null);
+    }
+
+    private void publish(BookingResponse booking, List<FlightDetails> flights,
+                         BookingEventType type, String subject, String message,
+                         Integer refundTierPercent) {
+        publish(booking, flights, type, subject, message, refundTierPercent, null, null);
+    }
+
+    private void publish(BookingResponse booking, List<FlightDetails> flights,
+                         BookingEventType type, String subject, String message, Integer refundTierPercent,
+                         String refundBreakdown, List<Long> cancelledRowIds) {
 
         if (booking.contact() == null) {
             log.warn("Booking {} has no contact on file - skipping notification", booking.bookingReference());
@@ -150,6 +180,8 @@ public class BookingEventProducer {
                                 .toList())
                 .totalFare(booking.totalFare())
                 .refundTierPercent(refundTierPercent)
+                .refundBreakdown(refundBreakdown)
+                .cancelledBookingPassengerIds(cancelledRowIds)
                 .currency(booking.payment() != null ? booking.payment().currency() : null)
                 .paymentStatus(booking.payment() != null && booking.payment().paymentStatus() != null
                         ? booking.payment().paymentStatus().name() : null);

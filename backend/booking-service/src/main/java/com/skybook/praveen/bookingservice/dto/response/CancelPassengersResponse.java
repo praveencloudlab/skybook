@@ -13,7 +13,10 @@ public record CancelPassengersResponse(
 
         BigDecimal refundAmount,
 
-        boolean bookingCancelled
+        boolean bookingCancelled,
+
+        /** The rows THIS call cancelled - what the partial-cancel event announces. */
+        java.util.List<Long> cancelledRowIds
 
 ) {
 }

@@ -82,7 +82,18 @@ Time-based cancellation with a live charges chart, all live-verified:
 | **Modify dialog coherence** | The net-after-refund row now uses the LIVE cancellation quote (tiers included), and Modify is blocked when the old booking can no longer be cancelled online |
 | **<2h / departed window** | Unit-tested from both sides (CancellationPolicyTest, 10 tests); no live flight fell in the 70-115min window at test time |
 
-Policy: ≥72h → 100% of the fare-rule refund (Saver still pays its 30% fee) · 24-72h → 50% · <24h → 0% (cancel still allowed, frees the seat) · <2h or departed or checked-in → online cancellation closed (ADMIN desk bypasses). Unpaid bookings cancel freely. The tier rides the CANCELLED event (`refundTierPercent`) so payment-service refunds exactly what was quoted.
+Policy: ≥72h → 100% of the fare-rule refund (Saver still pays its 30% fee) · 24-72h → 50% · <24h → 0% (cancel still allowed, frees the seat) · <2h or departed → online cancellation closed (ADMIN desk bypasses). Checked-in passengers CAN cancel the whole booking (passes voided). Unpaid bookings cancel freely. The tier rides the CANCELLED event (`refundTierPercent`) so payment-service refunds exactly what was quoted.
+
+**Partial-cancel refunds now move real money (2026-08-01):** cancelling
+passengers or the return off a SURVIVING booking publishes
+`PARTIALLY_CANCELLED` with the cancelled rows' fare breakdown + tier;
+payment-service refunds exactly those lines and checkin-service closes
+exactly those check-ins. Live-verified: SB38UA (2 pax, £280) cancel one →
+payment **PARTIALLY_REFUNDED, refunded £140**, cancelled pax's check-in
+CANCELLED, other untouched; SBXNKT round trip cancel return → refunded
+£140; both "has been updated" emails delivered with the refund amount.
+This closes the known gap where partial cancels reported a refund that
+never reached payment-service.
 
 ## 3. Automated suites
 

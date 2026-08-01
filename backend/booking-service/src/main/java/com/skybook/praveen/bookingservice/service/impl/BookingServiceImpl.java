@@ -527,7 +527,8 @@ public class BookingServiceImpl implements BookingService {
         }
 
         Booking saved = bookingRepository.save(booking);
-        return new CancelPassengersResponse(BookingMapper.toResponse(saved), refundAmount, bookingCancelled);
+        return new CancelPassengersResponse(BookingMapper.toResponse(saved), refundAmount, bookingCancelled,
+                toCancel.stream().map(BookingPassenger::getId).toList());
     }
 
     @Override
@@ -603,7 +604,8 @@ public class BookingServiceImpl implements BookingService {
         Booking saved = bookingRepository.save(booking);
         log.info("Cancelled segment {} of booking {} - {} row(s), refund {}",
                 segmentIndex, saved.getBookingReference(), toCancel.size(), refundAmount);
-        return new CancelPassengersResponse(BookingMapper.toResponse(saved), refundAmount, bookingCancelled);
+        return new CancelPassengersResponse(BookingMapper.toResponse(saved), refundAmount, bookingCancelled,
+                toCancel.stream().map(BookingPassenger::getId).toList());
     }
 
     @Override

@@ -5,6 +5,17 @@ public enum BookingEventType {
     CREATED,
     CONFIRMED,
     CANCELLED,
+
+    /**
+     * Passengers or a whole segment cancelled off a booking that SURVIVES
+     * (PARTIALLY_CANCELLED status). Carries refundBreakdown +
+     * refundTierPercent so payment-service can move the actual money, and
+     * cancelledBookingPassengerIds so checkin-service can close those
+     * passengers' check-ins. Like FARE_ALERT: deploy all BookingEvent
+     * consumers before (or together with) the first producer of this type.
+     */
+    PARTIALLY_CANCELLED,
+
     EXPIRED,
     COMPLETED,
 

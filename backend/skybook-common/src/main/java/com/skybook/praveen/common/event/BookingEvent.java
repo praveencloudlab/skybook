@@ -98,6 +98,20 @@ public class BookingEvent {
      */
     private Integer refundTierPercent;
 
+    /**
+     * PARTIALLY_CANCELLED only: the cancelled rows' fares in payment-service's
+     * compact breakdown format ("FLEXI:100.00;SAVER:80.00") - exactly what
+     * RefundCalculator parses, so payment refunds those lines (scaled by
+     * refundTierPercent) instead of the whole remaining capture.
+     */
+    private String refundBreakdown;
+
+    /**
+     * PARTIALLY_CANCELLED only: the BookingPassenger row ids THIS event
+     * cancelled - checkin-service closes exactly those check-ins.
+     */
+    private List<Long> cancelledBookingPassengerIds;
+
     private String currency;
 
     /** Payment status, e.g. "PAID" - null if no payment record yet */
