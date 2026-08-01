@@ -1,0 +1,67 @@
+# Production overlay for a single public VM (DEPLOY_ORACLE.md):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Principle: ONE door. Caddy owns 80/443 and terminates TLS for the frontend
+# (which already proxies /api to the gateway internally). Everything else that
+# docker-compose.yml publishes for local development is rebound to 127.0.0.1,
+# so Grafana, Prometheus, Loki, Tempo, Mailpit and the raw gateway are only
+# reachable from the VM itself (or through an SSH tunnel - see the deploy doc).
+#
+# `!override` replaces the base file's ports list instead of merging with it
+# (Compose v2.24+; the VM installs current docker-compose-plugin).
+
+services:
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # e.g. skybook-praveen.duckdns.org - Caddy fetches/renews the TLS
+      # certificate for it automatically (Let's Encrypt, HTTP-01 on port 80).
+      SKYBOOK_DOMAIN: ${SKYBOOK_DOMAIN:?set SKYBOOK_DOMAIN in .env, e.g. yourname.duckdns.org}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - frontend
+
+  frontend:
+    restart: unless-stopped
+    # Caddy reaches it by service name on the compose network; the host
+    # binding stays for on-VM smoke tests only.
+    ports: !override
+      - "127.0.0.1:3000:3000"
+
+  api-gateway:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:8080:8080"
+
+  mailpit:
+    ports: !override
+      - "127.0.0.1:8025:8025"
+
+  prometheus:
+    ports: !override
+      - "127.0.0.1:9090:9090"
+
+  loki:
+    ports: !override
+      - "127.0.0.1:3100:3100"
+
+  tempo:
+    ports: !override
+      - "127.0.0.1:3200:3200"
+
+  grafana:
+    ports: !override
+      - "127.0.0.1:3001:3000"
+
+volumes:
+  caddy-data:
+  caddy-config:
