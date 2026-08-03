@@ -43,6 +43,39 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+
+        <!-- JUnit 5 + AssertJ + Mockito, same starter every service uses. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Auditable's @EntityListeners(AuditingEntityListener.class) cannot even
+             be READ reflectively without spring-aspects: AuditingEntityListener
+             extends o.s.beans.factory.aspectj.ConfigurableObject, which lives
+             there. The services get it transitively from
+             spring-boot-starter-data-jpa; this module only declares
+             spring-data-jpa, so the test scope has to supply it. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-aspects</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- The event contracts travel as JSON on Kafka, so the wire-compatibility
+             rules (missing segments = old producer, unknown fields = old consumer)
+             are asserted against a real ObjectMapper, not just against getters. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>

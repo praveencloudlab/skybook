@@ -99,7 +99,10 @@ export function GuestsPage({
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    const perPax = guests.map((g) => validatePassenger(g));
+    // The category MUST be passed: the form bounds a child's date-of-birth
+    // field to its own age band, so validating that same date against the
+    // default adult band rejects every correctly-entered child and infant.
+    const perPax = guests.map((g, i) => validatePassenger(g, paxTypes[i]));
     const email = contactEmail.trim() || subject || '';
     const emailError = email ? undefined : 'A contact email is required';
     setErrors(perPax);
