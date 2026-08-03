@@ -69,6 +69,12 @@ class GatewayRoutingIntegrationTest {
         stubDownstream = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
         stubDownstream.createContext("/api/auth/login", exchange -> respond(exchange, 200, "auth-ok"));
         stubDownstream.createContext("/api/flights/1", GatewayRoutingIntegrationTest::respondWithAuthUser);
+        // A genuinely protected path. /api/flights/** became public when search
+        // was opened to anonymous visitors, so it can no longer stand in for
+        // "protected" - the filter short-circuits public paths and never
+        // validates or forwards an identity, which is correct but is the
+        // opposite of what these two tests exist to prove.
+        stubDownstream.createContext("/api/checkins/1", GatewayRoutingIntegrationTest::respondWithAuthUser);
         stubDownstream.start();
 
         try (ServerSocket socket = new ServerSocket(0)) {
@@ -136,7 +142,7 @@ class GatewayRoutingIntegrationTest {
 
     @Test
     void protectedRouteWithoutATokenReturns401() {
-        ResponseEntity<String> response = restTemplate.getForEntity("/api/flights/1", String.class);
+        ResponseEntity<String> response = restTemplate.getForEntity("/api/checkins/1", String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
@@ -147,10 +153,22 @@ class GatewayRoutingIntegrationTest {
         headers.setBearerAuth(validTokenFor("traveler@skybook.com"));
 
         ResponseEntity<String> response = restTemplate.exchange(
-                "/api/flights/1", HttpMethod.GET, new HttpEntity<>(headers), String.class);
+                "/api/checkins/1", HttpMethod.GET, new HttpEntity<>(headers), String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).isEqualTo("flight-ok:traveler@skybook.com");
+    }
+
+    @Test
+    void publicSearchIsReachableWithoutATokenAndCarriesNoIdentity() {
+        // The behaviour that made the two tests above fail, asserted directly:
+        // search is public, so it answers without a credential - and because
+        // the filter short-circuits public paths, no identity is forwarded
+        // downstream even when a caller does present a valid token.
+        ResponseEntity<String> anonymous = restTemplate.getForEntity("/api/flights/1", String.class);
+
+        assertThat(anonymous.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(anonymous.getBody()).isEqualTo("flight-ok:null");
     }
 
     @Test

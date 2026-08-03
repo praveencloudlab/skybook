@@ -17,6 +17,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -97,13 +99,29 @@ class CheckInBookingEventKafkaIntegrationTest extends AbstractCheckInIntegration
     // Helpers
     // ---------------------------------------------------------------
 
+    /**
+     * Departure is always well into the future, relative to now.
+     *
+     * <p>This was a hard-coded date, which made the test a time bomb: once that
+     * date passed, the no-show sweep marked every freshly created check-in
+     * NO_SHOW before the assertion could read it, and the build failed with no
+     * code change behind it. Anchoring to the clock keeps the check-in window
+     * genuinely open however long from now the suite runs.
+     */
+    private static final DateTimeFormatter EVENT_TIME =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    private static String futureDeparture() {
+        return LocalDateTime.now().plusDays(30).withHour(18).withMinute(0).format(EVENT_TIME);
+    }
+
     private void publishBookingConfirmed(long bookingId, String pnr, String passengersJson) {
         String json = """
                 {"type":"CONFIRMED","bookingId":%d,"bookingReference":"%s","contactEmail":"t@t.com",
                  "contactName":"Test","subject":"s","message":"m","flightId":7,"flightNumber":"BA178",
-                 "originAirportCode":"LHR","destinationAirportCode":"JFK","departureTime":"2026-07-08 18:00",
+                 "originAirportCode":"LHR","destinationAirportCode":"JFK","departureTime":"%s",
                  "totalFare":180.00,"currency":"USD","passengers":[%s]}
-                """.formatted(bookingId, pnr, passengersJson);
+                """.formatted(bookingId, pnr, futureDeparture(), passengersJson);
         publish(json);
     }
 
