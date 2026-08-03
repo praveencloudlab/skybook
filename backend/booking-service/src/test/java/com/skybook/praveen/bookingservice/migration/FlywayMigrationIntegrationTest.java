@@ -59,12 +59,16 @@ class FlywayMigrationIntegrationTest {
     @Test
     void freshDatabaseGetsBaselinePlusDeltasAndSurvivesHibernateValidate() {
         // Reaching here at all means ddl-auto: validate accepted the
-        // Flyway-built schema. Now prove all five migrations actually ran.
+        // Flyway-built schema. Now prove every migration actually ran.
+        // BUMP THIS when adding a migration - it is deliberately exact, so a
+        // migration that silently fails to apply is caught rather than ignored.
+        final int expectedMigrations = 6;
+
         List<Map<String, Object>> applied = jdbc.queryForList(
                 "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank");
 
-        assertThat(applied).hasSize(5);
-        for (int i = 0; i < 5; i++) {
+        assertThat(applied).hasSize(expectedMigrations);
+        for (int i = 0; i < expectedMigrations; i++) {
             assertThat(applied.get(i))
                     .containsEntry("version", String.valueOf(i + 1))
                     .containsEntry("success", true);

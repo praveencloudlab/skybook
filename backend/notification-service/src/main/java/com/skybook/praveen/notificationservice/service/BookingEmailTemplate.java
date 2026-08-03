@@ -38,24 +38,30 @@ public class BookingEmailTemplate {
             default -> "#fff8e6";
         };
 
+        // Multi-segment bookings group passenger rows under a per-leg header
+        // (ROUND_TRIP_MODULE.md §6); old/single-leg events keep the flat list.
         StringBuilder passengers = new StringBuilder();
-        if (event.getPassengers() != null) {
-            for (BookingEventPassenger p : event.getPassengers()) {
+        if (event.getSegments() != null && event.getSegments().size() > 1) {
+            for (var segment : event.getSegments()) {
                 passengers.append("""
                         <tr>
-                          <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">%s</td>
-                          <td style="padding:8px 12px;border-top:1px solid #e5e7eb;text-align:center;"><b>%s</b></td>
-                          <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">%s · %s</td>
-                          <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">%s</td>
-                          <td style="padding:8px 12px;border-top:1px solid #e5e7eb;text-align:right;">%s</td>
+                          <td colspan="5" style="padding:8px 12px;border-top:1px solid #e5e7eb;background:#eef2f7;font-weight:600;color:#0b3d91;">
+                            %s &middot; %s &rarr; %s
+                          </td>
                         </tr>
                         """.formatted(
-                        escape(p.getName()),
-                        escape(nvl(p.getSeatNumber(), "—")),
-                        escape(pretty(p.getTravelClass())),
-                        escape(pretty(p.getFareType())),
-                        escape(pretty(nvl(p.getCheckInStatus(), "NOT_OPEN"))),
-                        money(p.getFare(), event.getCurrency())));
+                        escape(segmentLabel(segment.getSegmentIndex())),
+                        escape(nvl(segment.getOriginAirportCode(), "?")),
+                        escape(nvl(segment.getDestinationAirportCode(), "?"))));
+                if (segment.getPassengers() != null) {
+                    for (BookingEventPassenger p : segment.getPassengers()) {
+                        passengers.append(passengerRow(p, event.getCurrency()));
+                    }
+                }
+            }
+        } else if (event.getPassengers() != null) {
+            for (BookingEventPassenger p : event.getPassengers()) {
+                passengers.append(passengerRow(p, event.getCurrency()));
             }
         }
 
@@ -143,41 +149,172 @@ public class BookingEmailTemplate {
                 escape(nvl(event.getBookingReference(), "")));
     }
 
-    /** Route + times, rendered only when the event carries flight context. */
+    private static String passengerRow(BookingEventPassenger p, String currency) {
+        return """
+                <tr>
+                  <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">%s</td>
+                  <td style="padding:8px 12px;border-top:1px solid #e5e7eb;text-align:center;"><b>%s</b></td>
+                  <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">%s · %s</td>
+                  <td style="padding:8px 12px;border-top:1px solid #e5e7eb;">%s</td>
+                  <td style="padding:8px 12px;border-top:1px solid #e5e7eb;text-align:right;">%s</td>
+                </tr>
+                """.formatted(
+                escape(p.getName()),
+                escape(nvl(p.getSeatNumber(), "—")),
+                escape(pretty(p.getTravelClass())),
+                escape(pretty(p.getFareType())),
+                escape(pretty(nvl(p.getCheckInStatus(), "NOT_OPEN"))),
+                money(p.getFare(), currency));
+    }
+
+    private static String segmentLabel(Integer segmentIndex) {
+        if (segmentIndex == null || segmentIndex == 0) {
+            return "Outbound";
+        }
+        return segmentIndex == 1 ? "Return" : "Leg " + (segmentIndex + 1);
+    }
+
+    /**
+     * Route + times: one card per segment when the event carries them
+     * (ROUND_TRIP_MODULE.md §6), else the single legacy card from the
+     * top-level flight fields.
+     */
     private static String routeCard(BookingEvent event) {
-        if (event.getOriginAirportCode() == null || event.getDestinationAirportCode() == null) {
+        if (event.getSegments() != null && !event.getSegments().isEmpty()) {
+            StringBuilder cards = new StringBuilder();
+            for (var segment : event.getSegments()) {
+                cards.append(card(
+                        event.getSegments().size() > 1 ? segmentLabel(segment.getSegmentIndex()) : "",
+                        segment.getFlightNumber(),
+                        segment.getOriginAirportCode(), segment.getDestinationAirportCode(),
+                        segment.getDepartureTime(), segment.getArrivalTime(),
+                        segment.getDepartureTerminal(), segment.getArrivalTerminal()));
+            }
+            return cards.toString();
+        }
+        return card("", event.getFlightNumber(),
+                event.getOriginAirportCode(), event.getDestinationAirportCode(),
+                event.getDepartureTime(), event.getArrivalTime(), null, null);
+    }
+
+    private static String card(String label, String flightNumber,
+                               String origin, String destination,
+                               String departureTime, String arrivalTime,
+                               String departureTerminal, String arrivalTerminal) {
+        if (origin == null || destination == null) {
             return "";
         }
-        String originCity = AirportCityLookup.cityFor(event.getOriginAirportCode());
-        String destinationCity = AirportCityLookup.cityFor(event.getDestinationAirportCode());
+        // Real terminals ride the event since the terminals feature; older
+        // events have none and simply show the city alone.
+        String originCity = AirportCityLookup.cityFor(origin);
+        String destinationCity = AirportCityLookup.cityFor(destination);
+        if (departureTerminal != null && !departureTerminal.isBlank()) {
+            originCity = nvl(originCity, "") + " &middot; Terminal " + departureTerminal;
+        }
+        if (arrivalTerminal != null && !arrivalTerminal.isBlank()) {
+            destinationCity = nvl(destinationCity, "") + " &middot; Terminal " + arrivalTerminal;
+        }
+        String duration = flightDuration(departureTime, arrivalTime);
+        String durationLabel = duration.isEmpty() ? escape(nvl(flightNumber, "")) : duration;
+        String labelRow = label == null || label.isEmpty() ? "" : """
+                  <tr>
+                    <td colspan="3" style="padding:8px 16px 0;color:#0b3d91;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;">%s</td>
+                  </tr>
+                """.formatted(escape(label));
 
+        String checkInOpens = checkInOpens(departureTime);
+        String checkInRow = checkInOpens.isEmpty() ? "" : """
+                  <tr>
+                    <td colspan="3" style="border-top:1px solid #e5e7eb;padding:9px 16px;text-align:center;color:#57606a;font-size:12px;">
+                      &#128336; Online check-in opens 24 hours before departure &mdash; around <b>%s</b>.
+                    </td>
+                  </tr>
+                """.formatted(escape(checkInOpens));
+
+        // Email-safe route line: a plane centred between two rules drawn with
+        // cell border-bottom (box-drawing characters render inconsistently across
+        // mail clients, which is what made the old line look broken).
         return """
                 <table style="width:100%%;border-collapse:collapse;margin-top:12px;background:#f6f8fa;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;">
+                  %s
                   <tr>
-                    <td style="padding:14px 16px;text-align:center;width:33%%;">
+                    <td style="padding:14px 12px;text-align:center;width:33%%;">
                       <div style="font-size:26px;font-weight:700;letter-spacing:1px;">%s</div>
                       <div style="color:#57606a;font-size:12px;">%s</div>
                       <div style="color:#57606a;font-size:12px;">Departs<br>%s</div>
                     </td>
-                    <td style="padding:14px 8px;text-align:center;color:#0b3d91;font-size:18px;">
-                      ────── ✈ ──────
-                      <div style="color:#57606a;font-size:12px;margin-top:2px;">%s</div>
+                    <td style="padding:14px 4px;text-align:center;width:34%%;">
+                      <div style="color:#57606a;font-size:12px;margin-bottom:5px;">%s</div>
+                      <table style="width:100%%;border-collapse:collapse;">
+                        <tr>
+                          <td style="border-bottom:2px solid #c8d0da;font-size:0;line-height:0;">&nbsp;</td>
+                          <td style="padding:0 6px;color:#0b3d91;font-size:17px;white-space:nowrap;vertical-align:middle;">&#9992;</td>
+                          <td style="border-bottom:2px solid #c8d0da;font-size:0;line-height:0;">&nbsp;</td>
+                        </tr>
+                      </table>
+                      <div style="color:#8a94a6;font-size:11px;margin-top:5px;">%s &middot; Direct</div>
                     </td>
-                    <td style="padding:14px 16px;text-align:center;width:33%%;">
+                    <td style="padding:14px 12px;text-align:center;width:33%%;">
                       <div style="font-size:26px;font-weight:700;letter-spacing:1px;">%s</div>
                       <div style="color:#57606a;font-size:12px;">%s</div>
                       <div style="color:#57606a;font-size:12px;">Arrives<br>%s</div>
                     </td>
                   </tr>
+                  %s
                 </table>
                 """.formatted(
-                escape(event.getOriginAirportCode()),
+                labelRow,
+                escape(origin),
                 escape(nvl(originCity, "")),
-                escape(nvl(event.getDepartureTime(), "—")),
-                escape(nvl(event.getFlightNumber(), "")),
-                escape(event.getDestinationAirportCode()),
+                escape(nvl(departureTime, "—")),
+                durationLabel,
+                escape(nvl(flightNumber, "")),
+                escape(destination),
                 escape(nvl(destinationCity, "")),
-                escape(nvl(event.getArrivalTime(), "—")));
+                escape(nvl(arrivalTime, "—")),
+                checkInRow);
+    }
+
+    /** Parses the event's loosely-formatted local time ("yyyy-MM-dd[ T]HH:mm[...]"). */
+    private static java.time.LocalDateTime parseTime(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            String iso = value.trim().replace(' ', 'T');
+            if (iso.length() > 16) {
+                iso = iso.substring(0, 16);
+            }
+            return java.time.LocalDateTime.parse(iso);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** "8h 10m" between departure and arrival, or "" if the times can't be read. */
+    private static String flightDuration(String departureTime, String arrivalTime) {
+        java.time.LocalDateTime dep = parseTime(departureTime);
+        java.time.LocalDateTime arr = parseTime(arrivalTime);
+        if (dep == null || arr == null) {
+            return "";
+        }
+        long minutes = java.time.Duration.between(dep, arr).toMinutes();
+        if (minutes <= 0) {
+            return "";
+        }
+        long hours = minutes / 60;
+        long mins = minutes % 60;
+        return mins == 0 ? hours + "h" : hours + "h " + mins + "m";
+    }
+
+    /** When online check-in opens (24h before departure), or "" if unknown. */
+    private static String checkInOpens(String departureTime) {
+        java.time.LocalDateTime dep = parseTime(departureTime);
+        if (dep == null) {
+            return "";
+        }
+        java.time.LocalDateTime open = dep.minusHours(24);
+        return String.format("%s %02d:%02d", open.toLocalDate(), open.getHour(), open.getMinute());
     }
 
     private static String qrBlock() {
@@ -195,7 +332,8 @@ public class BookingEmailTemplate {
 
     private static String money(BigDecimal amount, String currency) {
         if (amount == null) return "—";
-        return (currency != null ? currency + " " : "") + amount;
+        String symbol = "GBP".equals(currency) ? "&#163;" : "USD".equals(currency) ? "US$" : (currency != null ? currency + " " : "");
+        return symbol + amount;
     }
 
     /** "PREMIUM_ECONOMY" -> "Premium economy", "NOT_OPEN" -> "Not open" */

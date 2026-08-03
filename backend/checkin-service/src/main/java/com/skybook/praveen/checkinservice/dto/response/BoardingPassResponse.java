@@ -26,6 +26,11 @@ public record BoardingPassResponse(
 
         String seatNumber,
 
+        /** Real terminals; null on pre-terminal check-ins. */
+        String departureTerminal,
+
+        String arrivalTerminal,
+
         String gate,
 
         LocalDateTime boardingTime,

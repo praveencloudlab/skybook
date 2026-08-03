@@ -11,6 +11,11 @@ import com.skybook.praveen.bookingservice.dto.request.CreateBookingRequest;
 import com.skybook.praveen.bookingservice.dto.request.PassengerBookingDetail;
 import com.skybook.praveen.bookingservice.dto.response.BookingPassengerResponse;
 import com.skybook.praveen.bookingservice.dto.response.BookingResponse;
+import com.skybook.praveen.bookingservice.dto.response.CancelPassengersResponse;
+import com.skybook.praveen.bookingservice.dto.response.FareAlertResponse;
+import com.skybook.praveen.bookingservice.dto.response.FareCalendarDayResponse;
+import com.skybook.praveen.bookingservice.entity.FareAlert;
+import com.skybook.praveen.bookingservice.repository.FareAlertRepository;
 import com.skybook.praveen.bookingservice.dto.response.QuoteResponse;
 import com.skybook.praveen.bookingservice.enums.FareType;
 import com.skybook.praveen.bookingservice.enums.SeatAssignmentMode;
@@ -67,13 +72,15 @@ import java.util.Optional;
 public class BookingFacade {
 
     private static final BigDecimal ZERO_MONEY = new BigDecimal("0.00");
-    private static final String QUOTE_CURRENCY = "USD";
+    private static final String QUOTE_CURRENCY = "GBP";
 
     private final FlightServiceClient flightServiceClient;
     private final InventoryServiceClient inventoryServiceClient;
     private final BookingService bookingService;
     private final BookingEventProducer bookingEventProducer;
     private final FareCalculator fareCalculator;
+    private final FareAlertRepository fareAlertRepository;
+    private final com.skybook.praveen.bookingservice.domain.CancellationPolicy cancellationPolicy;
 
     public BookingResponse createBooking(CreateBookingRequest request) {
 
@@ -83,15 +90,73 @@ public class BookingFacade {
             throw new IllegalArgumentException("Cannot book a cancelled flight");
         }
 
-        BookingResponse draft = bookingService.createDraftBooking(
-                request, flight.departureTime(), currentSubject());
+        // Through-ticket connection legs (same-carrier, one direction): every
+        // leg validated up front - bookable and chronological after the
+        // previous leg's arrival - before any row or hold exists.
+        List<FlightDetails> outboundLegs = new ArrayList<>(List.of(flight));
+        if (request.connectionFlightIds() != null && !request.connectionFlightIds().isEmpty()) {
+            for (Long legId : request.connectionFlightIds()) {
+                FlightDetails legFlight = flightServiceClient.getFlight(legId);
+                if (legFlight.status() == FlightBookingStatus.CANCELLED) {
+                    throw new IllegalArgumentException("Cannot book a cancelled connection flight");
+                }
+                FlightDetails previous = outboundLegs.get(outboundLegs.size() - 1);
+                if (previous.arrivalTime() != null
+                        && !legFlight.departureTime().isAfter(previous.arrivalTime())) {
+                    throw new IllegalArgumentException(
+                            "Connection flight " + legId + " departs before the previous leg arrives");
+                }
+                outboundLegs.add(legFlight);
+            }
+        }
+
+        // Round trip (ROUND_TRIP_MODULE.md §5): validate the return leg up
+        // front - both flights bookable and the chronology sane - before any
+        // row or hold exists, so a bad pair fails cheap.
+        FlightDetails returnFlight = null;
+        if (request.returnFlightId() != null) {
+            returnFlight = flightServiceClient.getFlight(request.returnFlightId());
+            if (returnFlight.status() == FlightBookingStatus.CANCELLED) {
+                throw new IllegalArgumentException("Cannot book a cancelled return flight");
+            }
+            // Chronology against the LAST outbound leg: a through-ticketed
+            // outbound arrives when its final connection lands.
+            FlightDetails lastOutbound = outboundLegs.get(outboundLegs.size() - 1);
+            if (lastOutbound.arrivalTime() != null
+                    && !returnFlight.departureTime().isAfter(lastOutbound.arrivalTime())) {
+                throw new IllegalArgumentException(
+                        "The return flight must depart after the outbound arrives");
+            }
+        }
+
+        // The journey in segment order: direction-0 legs (outbound + any
+        // through-connection), then the direction-1 return. Bags charge once
+        // per direction, so only each direction's first leg is a start.
+        List<BookingService.JourneyLeg> journey = new ArrayList<>();
+        for (int i = 0; i < outboundLegs.size(); i++) {
+            journey.add(new BookingService.JourneyLeg(
+                    outboundLegs.get(i).id(), outboundLegs.get(i).originAirportCode(),
+                    outboundLegs.get(i).departureTime(), 0, i == 0));
+        }
+        if (returnFlight != null) {
+            journey.add(new BookingService.JourneyLeg(
+                    returnFlight.id(), returnFlight.originAirportCode(),
+                    returnFlight.departureTime(), 1, true));
+        }
+
+        BookingResponse draft = bookingService.createDraftBooking(request, journey, currentSubject());
 
         List<SeatAssignmentResult> assignments = holdSeatsOrCompensate(draft, request);
 
         BookingResponse booking = finalizeOrCompensate(draft, assignments);
 
         // Only a finalized (DRAFT -> CREATED) booking is announced (§5.1a).
-        bookingEventProducer.publishBookingCreated(booking, flight);
+        // Every leg's flight details ride the event (already fetched above).
+        List<FlightDetails> journeyFlights = new ArrayList<>(outboundLegs);
+        if (returnFlight != null) {
+            journeyFlights.add(returnFlight);
+        }
+        bookingEventProducer.publishBookingCreated(booking, journeyFlights);
 
         return booking;
     }
@@ -103,7 +168,7 @@ public class BookingFacade {
 
         reserveHeldSeatsQuietly(booking);
 
-        bookingEventProducer.publishBookingConfirmed(booking, flightOrNull(booking.flightId()));
+        bookingEventProducer.publishBookingConfirmed(booking, flightsOrNull(booking));
 
         return booking;
     }
@@ -123,7 +188,7 @@ public class BookingFacade {
         reserveHeldSeatsQuietly(booking);
 
         if (confirmation.transitioned()) {
-            bookingEventProducer.publishBookingConfirmed(booking, flightOrNull(booking.flightId()));
+            bookingEventProducer.publishBookingConfirmed(booking, flightsOrNull(booking));
         }
 
         return booking;
@@ -131,22 +196,413 @@ public class BookingFacade {
 
     public BookingResponse cancelBooking(Long id, String reason) {
 
-        BookingResponse booking = bookingService.cancelBooking(id, reason);
+        // Time-tier guard runs BEFORE anything mutates - an ADMIN (desk)
+        // bypasses the window and refunds per the fare rules alone.
+        BookingResponse current = bookingService.getBookingById(id);
+        int refundPercent = assessOnlineCancellation(current, null);
+        // Flown legs carry no refund value: the event ships the UPCOMING
+        // rows' fare lines so payment-service refunds those, never the
+        // whole remaining capture of a half-used journey.
+        String refundBreakdown = upcomingRefundBreakdown(current);
+
+        BookingResponse booking = bookingService.cancelBooking(id, reason, refundPercent);
 
         // Return the seats to the pool - holds if never confirmed,
         // reservations if it was. Cleanup must not fail the cancellation.
         for (BookingPassengerResponse passenger : booking.passengers()) {
             if (passenger.seatNumber() != null && !passenger.seatNumber().isBlank()) {
-                inventoryServiceClient.releaseHoldQuietly(booking.flightId(),
+                inventoryServiceClient.releaseHoldQuietly(passenger.flightId(),
                         passenger.seatNumber(), booking.id(), "booking cancelled");
-                inventoryServiceClient.cancelReservationQuietly(booking.flightId(),
+                inventoryServiceClient.cancelReservationQuietly(passenger.flightId(),
                         passenger.seatNumber(), booking.id(), "booking cancelled");
             }
         }
 
-        bookingEventProducer.publishBookingCancelled(booking, flightOrNull(booking.flightId()));
+        bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking), refundPercent,
+                refundBreakdown);
 
         return booking;
+    }
+
+    /**
+     * The refund basis for a whole-booking cancel: the active rows whose
+     * flight has NOT yet departed (each judged by its airport's clock), in
+     * payment-service's compact breakdown format. Null when nothing was
+     * captured or nothing is upcoming (an ADMIN cancelling a fully-departed
+     * booking falls back to the legacy full-remaining refund - a deliberate
+     * desk override).
+     */
+    private String upcomingRefundBreakdown(BookingResponse preCancel) {
+
+        boolean paid = preCancel.payment() != null
+                && preCancel.payment().paymentStatus() == com.skybook.praveen.bookingservice.enums.PaymentStatus.PAID;
+        if (!paid) {
+            return null;
+        }
+
+        Map<Long, FlightDetails> flightsById = new java.util.HashMap<>();
+        String breakdown = preCancel.passengers().stream()
+                .filter(p -> !p.cancelled())
+                .filter(p -> {
+                    FlightDetails f = flightsById.computeIfAbsent(p.flightId(), this::flightOrNull);
+                    return f != null && f.departureTime() != null && f.departureTime().isAfter(
+                            com.skybook.praveen.common.time.AirportTimeZones.nowAt(f.originAirportCode()));
+                })
+                .map(p -> (p.fareType() != null ? p.fareType().name() : "FLEXI")
+                        + ":" + p.fare().toPlainString())
+                .collect(java.util.stream.Collectors.joining(";"));
+        return breakdown.isEmpty() ? null : breakdown;
+    }
+
+    /**
+     * Cancel selected passengers (business rules 4-11). The service applies the
+     * guardian rule and derives the booking status (PARTIALLY_CANCELLED, or
+     * CANCELLED when the last passenger goes); this releases inventory ONLY for
+     * the cancelled passengers (rule 6) and notifies on a full cancel.
+     */
+    public CancelPassengersResponse cancelPassengers(Long bookingId, java.util.List<Long> bookingPassengerIds) {
+
+        BookingResponse preCancel = bookingService.getBookingById(bookingId);
+        int refundPercent = assessOnlineCancellation(preCancel,
+                new java.util.HashSet<>(bookingPassengerIds));
+
+        CancelPassengersResponse result =
+                bookingService.cancelPassengers(bookingId, bookingPassengerIds, refundPercent);
+        BookingResponse booking = result.booking();
+
+        // Release seats only for cancelled passengers - remaining passengers keep
+        // theirs (rules 6, 7). Quiet + idempotent, so re-running is harmless.
+        for (BookingPassengerResponse passenger : booking.passengers()) {
+            if (passenger.cancelled() && passenger.seatNumber() != null && !passenger.seatNumber().isBlank()) {
+                inventoryServiceClient.releaseHoldQuietly(passenger.flightId(),
+                        passenger.seatNumber(), booking.id(), "passenger cancelled");
+                inventoryServiceClient.cancelReservationQuietly(passenger.flightId(),
+                        passenger.seatNumber(), booking.id(), "passenger cancelled");
+            }
+        }
+
+        if (result.bookingCancelled()) {
+            bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking), refundPercent,
+                    upcomingRefundBreakdown(preCancel));
+        } else {
+            publishPartialCancellation(result, refundPercent,
+                    result.cancelledRowIds().size() + " passenger seat(s)");
+        }
+
+        return result;
+    }
+
+    /**
+     * Cancel just one segment - "drop the return" (ROUND_TRIP_MODULE.md §7).
+     * Releases only that leg's seats; the event fires only if the booking
+     * as a whole ended up cancelled, mirroring cancelPassengers.
+     */
+    public CancelPassengersResponse cancelSegment(Long bookingId, int segmentIndex) {
+
+        BookingResponse current = bookingService.getBookingById(bookingId);
+        java.util.Set<Long> segmentRowIds = current.passengers().stream()
+                .filter(p -> !p.cancelled() && p.segmentIndex() == segmentIndex)
+                .map(BookingPassengerResponse::id)
+                .collect(java.util.stream.Collectors.toSet());
+        int refundPercent = assessOnlineCancellation(current,
+                segmentRowIds.isEmpty() ? null : segmentRowIds);
+
+        CancelPassengersResponse result = bookingService.cancelSegment(bookingId, segmentIndex, refundPercent);
+        BookingResponse booking = result.booking();
+
+        for (BookingPassengerResponse passenger : booking.passengers()) {
+            if (passenger.cancelled() && passenger.segmentIndex() == segmentIndex
+                    && passenger.seatNumber() != null && !passenger.seatNumber().isBlank()) {
+                inventoryServiceClient.releaseHoldQuietly(passenger.flightId(),
+                        passenger.seatNumber(), booking.id(), "segment cancelled");
+                inventoryServiceClient.cancelReservationQuietly(passenger.flightId(),
+                        passenger.seatNumber(), booking.id(), "segment cancelled");
+            }
+        }
+
+        if (result.bookingCancelled()) {
+            bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking), refundPercent,
+                    upcomingRefundBreakdown(current));
+        } else {
+            publishPartialCancellation(result, refundPercent, "the return journey");
+        }
+
+        return result;
+    }
+
+    /**
+     * A cancellation that left the booking ALIVE: the actual money movement.
+     * Publishes PARTIALLY_CANCELLED with the cancelled rows' fare breakdown
+     * (payment-service refunds those lines x the tier) and their row ids
+     * (checkin-service closes those check-ins). Nothing captured = nothing
+     * to move = no event; the booking-side numbers already tell the story.
+     */
+    private void publishPartialCancellation(CancelPassengersResponse result, int refundPercent, String what) {
+
+        BookingResponse booking = result.booking();
+        boolean paid = booking.payment() != null
+                && booking.payment().paymentStatus() == com.skybook.praveen.bookingservice.enums.PaymentStatus.PAID;
+        if (!paid || result.cancelledRowIds() == null || result.cancelledRowIds().isEmpty()) {
+            return;
+        }
+
+        java.util.Set<Long> cancelledIds = new java.util.HashSet<>(result.cancelledRowIds());
+        String breakdown = booking.passengers().stream()
+                .filter(p -> cancelledIds.contains(p.id()))
+                .map(p -> (p.fareType() != null ? p.fareType().name() : "FLEXI")
+                        + ":" + p.fare().toPlainString())
+                .collect(java.util.stream.Collectors.joining(";"));
+
+        bookingEventProducer.publishBookingPartiallyCancelled(booking, flightsOrNull(booking),
+                refundPercent, breakdown, result.cancelledRowIds(), what, result.refundAmount());
+    }
+
+    /**
+     * Guard + tier for every online cancel path. Scope = the active rows being
+     * cancelled (null = the whole booking); the governing departure is the
+     * EARLIEST still-upcoming flight in scope. Throws when cancellation is not
+     * allowed online (window closed, already departed); otherwise returns the
+     * refund percent for the tier in force. An ADMIN caller is the desk: no
+     * window, no tier - fare rules alone (100).
+     *
+     * <p>Web check-in is NOT a block here: the whole-booking cancel's
+     * CANCELLED event makes checkin-service cancel every check-in and revoke
+     * the boarding passes, so a checked-in passenger cancels under exactly
+     * the same time tiers as anyone else. (Cancelling a checked-in traveller
+     * INDIVIDUALLY stays blocked in the service - no event exists to void
+     * just their pass.)
+     */
+    private int assessOnlineCancellation(BookingResponse booking, java.util.Set<Long> scopeRowIds) {
+
+        if (com.skybook.praveen.security.SecurityAccess.isAdmin()) {
+            return 100;
+        }
+
+        List<BookingPassengerResponse> scope = booking.passengers().stream()
+                .filter(p -> !p.cancelled())
+                .filter(p -> scopeRowIds == null || scopeRowIds.contains(p.id()))
+                .toList();
+        if (scope.isEmpty()) {
+            // Nothing active in scope - let the service produce its own
+            // "already cancelled" error with full context.
+            return 100;
+        }
+
+        // Unpaid = nothing captured: cancelling is free, no window applies
+        // (it only releases seats - exactly what we want near departure).
+        boolean paid = booking.payment() != null
+                && booking.payment().paymentStatus() == com.skybook.praveen.bookingservice.enums.PaymentStatus.PAID;
+        if (!paid) {
+            return 100;
+        }
+
+        // Departure times are airport-local: each flight is judged against
+        // ITS airport's wall clock, and the governing (soonest) one is found
+        // by real instant, not by naive LocalDateTime comparison.
+        FlightDetails governing = scope.stream()
+                .map(BookingPassengerResponse::flightId)
+                .distinct()
+                .map(this::flightOrNull)
+                .filter(java.util.Objects::nonNull)
+                .filter(f -> f.departureTime() != null && f.departureTime().isAfter(
+                        com.skybook.praveen.common.time.AirportTimeZones.nowAt(f.originAirportCode())))
+                .min(java.util.Comparator.comparing(f -> f.departureTime()
+                        .atZone(com.skybook.praveen.common.time.AirportTimeZones.zoneOf(f.originAirportCode()))
+                        .toInstant()))
+                .orElseThrow(() -> new IllegalStateException(
+                        "This journey has already departed - the booking can no longer be cancelled online."));
+
+        var assessment = cancellationPolicy.assess(
+                com.skybook.praveen.common.time.AirportTimeZones.nowAt(governing.originAirportCode()),
+                governing.departureTime());
+        if (!assessment.allowed()) {
+            throw new IllegalStateException(assessment.blockedReason());
+        }
+        return assessment.refundPercent();
+    }
+
+    /**
+     * Live cancellation quote - what cancelling the whole booking RIGHT NOW
+     * refunds and withholds, with the tier boundaries for the charges chart.
+     * Never throws for policy reasons: a blocked state is reported, so the
+     * UI can show WHY alongside the schedule.
+     */
+    public com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse cancellationPreview(Long id) {
+
+        BookingResponse booking = bookingService.getBookingById(id);
+
+        List<BookingPassengerResponse> active = booking.passengers().stream()
+                .filter(p -> !p.cancelled())
+                .toList();
+
+        boolean paid = booking.payment() != null
+                && booking.payment().paymentStatus() == com.skybook.praveen.bookingservice.enums.PaymentStatus.PAID;
+
+        if (active.isEmpty()) {
+            return new com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse(
+                    false, "This booking is already cancelled.", 0, null, null, null, null,
+                    !paid, ZERO_MONEY, ZERO_MONEY, ZERO_MONEY, ZERO_MONEY, List.of());
+        }
+
+        Map<Long, FlightDetails> flightsById = new java.util.HashMap<>();
+        for (Long flightId : active.stream().map(BookingPassengerResponse::flightId).distinct().toList()) {
+            FlightDetails details = flightOrNull(flightId);
+            if (details != null && details.departureTime() != null) {
+                flightsById.put(flightId, details);
+            }
+        }
+
+        // Rows whose flight already departed (by ITS airport's clock) carry
+        // no refund value - their journey is used. The tiers key on the
+        // earliest UPCOMING flight, ordered by real instant.
+        List<BookingPassengerResponse> upcoming = active.stream()
+                .filter(p -> {
+                    FlightDetails f = flightsById.get(p.flightId());
+                    return f != null && f.departureTime().isAfter(
+                            com.skybook.praveen.common.time.AirportTimeZones.nowAt(f.originAirportCode()));
+                })
+                .toList();
+
+        FlightDetails governingFlight = upcoming.stream()
+                .map(p -> flightsById.get(p.flightId()))
+                .distinct()
+                .min(java.util.Comparator.comparing(f -> f.departureTime()
+                        .atZone(com.skybook.praveen.common.time.AirportTimeZones.zoneOf(f.originAirportCode()))
+                        .toInstant()))
+                .orElse(null);
+        java.time.LocalDateTime governing = governingFlight != null ? governingFlight.departureTime() : null;
+
+        if (governing == null) {
+            return new com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse(
+                    false, "This journey has already departed - the booking can no longer be cancelled online.",
+                    0, null, null, null, null, !paid, ZERO_MONEY, ZERO_MONEY, ZERO_MONEY, ZERO_MONEY, List.of());
+        }
+
+        var assessment = cancellationPolicy.assess(
+                com.skybook.praveen.common.time.AirportTimeZones.nowAt(governingFlight.originAirportCode()),
+                governing);
+
+        // Web check-in does NOT block a whole-booking cancel: the CANCELLED
+        // event voids every check-in and boarding pass downstream. Only the
+        // time window (and departure) closes online cancellation.
+        boolean allowed = assessment.allowed();
+        String blockedReason = assessment.blockedReason();
+
+        // Unpaid bookings cancel freely whatever the clock says - nothing was
+        // charged, so there is nothing to refund or withhold.
+        if (!paid) {
+            allowed = !active.isEmpty();
+        }
+
+        int percent = paid ? assessment.refundPercent() : 0;
+
+        List<com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse.Line> lines =
+                new ArrayList<>();
+        BigDecimal totalPaid = ZERO_MONEY;
+        BigDecimal totalRefund = ZERO_MONEY;
+        BigDecimal totalRuleFee = ZERO_MONEY;
+        for (BookingPassengerResponse row : upcoming) {
+            String fareType = row.fareType() != null ? row.fareType().name() : "FLEXI";
+            var comp = cancellationPolicy.computeRefund(
+                    List.of(new com.skybook.praveen.bookingservice.domain.CancellationPolicy.FareLine(
+                            fareType, row.fare())), percent);
+            BigDecimal refund = paid ? comp.refundAmount() : ZERO_MONEY;
+            lines.add(new com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse.Line(
+                    row.id(), row.segmentIndex(), row.firstName() + " " + row.lastName(),
+                    fareType, row.fare(), refund));
+            totalPaid = totalPaid.add(row.fare());
+            totalRefund = totalRefund.add(refund);
+            if (paid) {
+                totalRuleFee = totalRuleFee.add(comp.fareRuleFee());
+            }
+        }
+        BigDecimal timePenalty = paid
+                ? totalPaid.subtract(totalRuleFee).subtract(totalRefund)
+                : ZERO_MONEY;
+
+        return new com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse(
+                allowed, allowed ? null : blockedReason, percent, governing,
+                assessment.fullRefundUntil(), assessment.halfRefundUntil(), assessment.cancelClosesAt(),
+                !paid, totalPaid, totalRuleFee, timePenalty, totalRefund, lines);
+    }
+
+    /**
+     * Premium date change (ROUND_TRIP_MODULE.md §11): move one segment to a
+     * new flight on the SAME booking. Old seats release; replacement rows
+     * auto-hold + reserve on the new flight (Premium seats are free, so the
+     * charged surcharge is always 0 and no money moves for seats); the
+     * refreshed CONFIRMED event lets checkin-service open per-direction
+     * check-in for the new rows and close the exchanged ones.
+     */
+    public BookingResponse rebookSegment(Long bookingId, int segmentIndex, Long newFlightId) {
+
+        FlightDetails newFlight = flightServiceClient.getFlight(newFlightId);
+        if (newFlight.status() == FlightBookingStatus.CANCELLED) {
+            throw new IllegalArgumentException("Cannot move the booking onto a cancelled flight");
+        }
+
+        // Chronology stays sane against the OTHER segment, best-effort.
+        BookingResponse current = bookingService.getBookingById(bookingId);
+        for (var other : current.segments()) {
+            if (other.segmentIndex() == segmentIndex) {
+                continue;
+            }
+            FlightDetails otherFlight = flightOrNull(other.flightId());
+            if (otherFlight == null) {
+                continue;
+            }
+            boolean ok = other.segmentIndex() < segmentIndex
+                    ? newFlight.departureTime().isAfter(otherFlight.arrivalTime())
+                    : otherFlight.departureTime().isAfter(newFlight.arrivalTime());
+            if (!ok) {
+                throw new IllegalArgumentException(
+                        "The new flight clashes with the other leg of this trip - pick a date that keeps "
+                                + "the outbound before the return.");
+            }
+        }
+
+        // Seats to release AFTER the exchange commits - captured up front.
+        List<BookingPassengerResponse> oldRows = current.passengers().stream()
+                .filter(p -> !p.cancelled() && p.segmentIndex() == segmentIndex)
+                .toList();
+
+        BookingResponse rebooked = bookingService.rebookSegment(
+                bookingId, segmentIndex, newFlightId, newFlight.departureTime());
+
+        for (BookingPassengerResponse old : oldRows) {
+            if (old.seatNumber() != null && !old.seatNumber().isBlank()) {
+                inventoryServiceClient.releaseHoldQuietly(old.flightId(), old.seatNumber(),
+                        bookingId, "segment rebooked");
+                inventoryServiceClient.cancelReservationQuietly(old.flightId(), old.seatNumber(),
+                        bookingId, "segment rebooked");
+            }
+        }
+
+        // Auto-seat the replacement rows on the new flight - quiet, best
+        // effort (a seatless row picks a seat at check-in instead).
+        Map<Long, String> seatByRow = new java.util.HashMap<>();
+        for (BookingPassengerResponse row : rebooked.passengers()) {
+            if (row.cancelled() || row.segmentIndex() != segmentIndex || row.seatNumber() != null) {
+                continue;
+            }
+            try {
+                Optional<InventoryHoldDetails> hold = inventoryServiceClient.autoHoldSeat(
+                        newFlightId, bookingId, row.id(), row.travelClass());
+                if (hold.isPresent()) {
+                    inventoryServiceClient.reserveSeat(newFlightId, hold.get().seatNumber(), bookingId, row.id());
+                    seatByRow.put(row.id(), hold.get().seatNumber());
+                }
+            } catch (RuntimeException e) {
+                log.warn("Could not auto-seat rebooked row {} on flight {}: {}", row.id(), newFlightId, e.getMessage());
+            }
+        }
+        BookingResponse finalBooking = seatByRow.isEmpty()
+                ? rebooked
+                : bookingService.applySeatNumbers(bookingId, seatByRow);
+
+        bookingEventProducer.publishBookingConfirmed(finalBooking, flightsOrNull(finalBooking));
+
+        return finalBooking;
     }
 
     /**
@@ -166,22 +622,169 @@ public class BookingFacade {
 
         List<QuoteResponse.CabinQuote> cabins = inventoryServiceClient.getCabins(flightId)
                 .map(available -> available.stream()
-                        .map(cabin -> cabinQuote(cabin.travelClass(), cabin.availableSeats()))
+                        .map(cabin -> cabinQuote(cabin.travelClass(), cabin.availableSeats(), flight.departureTime()))
                         .toList())
                 .orElseGet(() -> Arrays.stream(TravelClass.values())
-                        .map(travelClass -> cabinQuote(travelClass, null))
+                        .map(travelClass -> cabinQuote(travelClass, null, flight.departureTime()))
                         .toList());
 
         return new QuoteResponse(flightId, QUOTE_CURRENCY, cabins);
     }
 
-    private QuoteResponse.CabinQuote cabinQuote(TravelClass travelClass, Integer availableSeats) {
+    private QuoteResponse.CabinQuote cabinQuote(TravelClass travelClass, Integer availableSeats,
+                                                java.time.LocalDateTime departureTime) {
         Map<FareType, BigDecimal> baseFares = new EnumMap<>(FareType.class);
         for (FareType fareType : FareType.values()) {
-            baseFares.put(fareType, fareCalculator.calculateFare(travelClass, fareType));
+            baseFares.put(fareType, fareCalculator.calculateFare(travelClass, fareType, departureTime));
         }
         BigDecimal fromFare = baseFares.values().stream().min(BigDecimal::compareTo).orElseThrow();
         return new QuoteResponse.CabinQuote(travelClass, availableSeats, baseFares, fromFare);
+    }
+
+    /**
+     * Per-date lowest fares for a route (the fare calendar): flight-service
+     * says WHICH days have bookable departures, FareCalculator says what the
+     * chosen cabin's cheapest fare costs on each - the same deterministic
+     * formula every quote and booking uses, so the calendar can never disagree
+     * with checkout. Public shopping data, like /quote.
+     */
+    public List<FareCalendarDayResponse> fareCalendar(String originAirportCode,
+                                                      String destinationAirportCode,
+                                                      java.time.LocalDate startDate,
+                                                      java.time.LocalDate endDate,
+                                                      TravelClass travelClass) {
+        return flightServiceClient.getRouteCalendar(originAirportCode, destinationAirportCode, startDate, endDate)
+                .stream()
+                .map(day -> {
+                    BigDecimal cheapest = Arrays.stream(FareType.values())
+                            .map(fareType -> fareCalculator.calculateFare(
+                                    travelClass, fareType, day.date().atStartOfDay()))
+                            .min(BigDecimal::compareTo)
+                            .orElseThrow();
+                    return new FareCalendarDayResponse(day.date(), day.flights(), cheapest, QUOTE_CURRENCY);
+                })
+                .toList();
+    }
+
+    /**
+     * Pre-check-in seat change (passenger features): after payment, before
+     * check-in, a traveller moves seats under the SAME entitlement ceiling
+     * check-in uses (§9) - Flexi/Premium move anywhere free (their picks are
+     * waived), Saver up to the surcharge they originally PAID. Stored money
+     * never moves. Hold-new-first ordering: the old seat is only released
+     * once the new one is secured, so a failure can never leave the
+     * traveller seatless.
+     */
+    public BookingResponse changeSeat(Long bookingId, Long bookingPassengerId, String seatNumber) {
+
+        BookingResponse booking = bookingService.getBookingById(bookingId);
+        BookingPassengerResponse row = booking.passengers().stream()
+                .filter(p -> p.id().equals(bookingPassengerId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("No such passenger on this booking"));
+
+        if (booking.bookingStatus() != com.skybook.praveen.bookingservice.enums.BookingStatus.CONFIRMED) {
+            throw new IllegalStateException("Seats can be changed after payment and before check-in.");
+        }
+        if (row.cancelled()) {
+            throw new IllegalStateException("This passenger has been cancelled off the booking.");
+        }
+        if (row.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.CHECKED_IN
+                || row.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.BOARDED
+                || row.checkInStatus() == com.skybook.praveen.bookingservice.enums.CheckInStatus.CLOSED) {
+            throw new IllegalStateException(
+                    "Already checked in - use the seat change at check-in instead.");
+        }
+
+        String newSeat = seatNumber.toUpperCase();
+        if (newSeat.equals(row.seatNumber())) {
+            return booking;
+        }
+
+        InventoryHoldDetails held = inventoryServiceClient.holdSeat(
+                        row.flightId(), newSeat, bookingId, bookingPassengerId, row.travelClass())
+                .orElseThrow(() -> new IllegalStateException("This flight has no seat inventory"));
+
+        if (row.fareType() == FareType.SAVER
+                && held.listedSurcharge().compareTo(row.seatSurcharge()) > 0) {
+            inventoryServiceClient.releaseHoldQuietly(row.flightId(), newSeat, bookingId,
+                    "seat change above fare ceiling");
+            throw new IllegalArgumentException(
+                    "Seat " + newSeat + " carries a " + held.listedSurcharge()
+                            + " surcharge - above the " + row.seatSurcharge()
+                            + " your Saver fare paid. Pick a seat at or below it.");
+        }
+
+        // New seat secured as a reservation (the booking is CONFIRMED), then
+        // the old one goes back to the pool.
+        inventoryServiceClient.reserveSeat(row.flightId(), newSeat, bookingId, bookingPassengerId);
+        if (row.seatNumber() != null && !row.seatNumber().isBlank()) {
+            inventoryServiceClient.releaseHoldQuietly(row.flightId(), row.seatNumber(), bookingId, "seat changed");
+            inventoryServiceClient.cancelReservationQuietly(row.flightId(), row.seatNumber(), bookingId, "seat changed");
+        }
+
+        return bookingService.updateSeatNumber(bookingId, bookingPassengerId, newSeat);
+    }
+
+    // ---------------------------------------------------------------
+    // Fare watch (passenger features)
+    // ---------------------------------------------------------------
+
+    /** Watch a route+date+cabin; the subject IS the email alerts go to. */
+    public FareAlertResponse createFareAlert(String origin, String destination,
+                                             java.time.LocalDate travelDate, TravelClass travelClass) {
+        String subject = currentSubject();
+        if (subject == null) {
+            throw new IllegalStateException("A fare alert needs a signed-in owner");
+        }
+        if (travelDate.isBefore(java.time.LocalDate.now())) {
+            throw new IllegalArgumentException("Cannot watch a date in the past");
+        }
+        FareAlert alert = fareAlertRepository.save(FareAlert.builder()
+                .ownerSubject(subject)
+                .originAirportCode(origin.toUpperCase())
+                .destinationAirportCode(destination.toUpperCase())
+                .travelDate(travelDate)
+                .travelClass(travelClass)
+                // Baseline = today's fare: the first mail is a real CHANGE,
+                // never an echo of what the user just saw on screen.
+                .lastNotifiedFare(cheapestFare(travelClass, travelDate))
+                .active(true)
+                .build());
+        return toFareAlertResponse(alert);
+    }
+
+    public List<FareAlertResponse> myFareAlerts() {
+        String subject = currentSubject();
+        return subject == null ? List.of()
+                : fareAlertRepository.findByOwnerSubjectAndActiveTrueOrderByTravelDateAsc(subject)
+                        .stream().map(this::toFareAlertResponse).toList();
+    }
+
+    public void deleteFareAlert(Long id) {
+        String subject = currentSubject();
+        FareAlert alert = fareAlertRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("No such fare alert"));
+        if (subject == null || !subject.equals(alert.getOwnerSubject())) {
+            throw new org.springframework.security.access.AccessDeniedException("Not your alert");
+        }
+        alert.setActive(false);
+        fareAlertRepository.save(alert);
+    }
+
+    /** Cheapest fare across fare families - the calendar's own formula. */
+    public BigDecimal cheapestFare(TravelClass travelClass, java.time.LocalDate date) {
+        return Arrays.stream(FareType.values())
+                .map(fareType -> fareCalculator.calculateFare(travelClass, fareType, date.atStartOfDay()))
+                .min(BigDecimal::compareTo)
+                .orElseThrow();
+    }
+
+    private FareAlertResponse toFareAlertResponse(FareAlert alert) {
+        return new FareAlertResponse(alert.getId(), alert.getOriginAirportCode(),
+                alert.getDestinationAirportCode(), alert.getTravelDate(), alert.getTravelClass(),
+                cheapestFare(alert.getTravelClass(), alert.getTravelDate()),
+                alert.getLastNotifiedFare(), QUOTE_CURRENCY);
     }
 
     /**
@@ -201,6 +804,21 @@ public class BookingFacade {
      * without route details beats a confirmation that fails because
      * flight-service was briefly down.
      */
+    /** One best-effort FlightDetails per segment, for event enrichment (§6). */
+    private List<FlightDetails> flightsOrNull(BookingResponse booking) {
+        if (booking.segments() == null || booking.segments().isEmpty()) {
+            return List.of();
+        }
+        List<FlightDetails> flights = new ArrayList<>();
+        for (var segment : booking.segments()) {
+            FlightDetails details = flightOrNull(segment.flightId());
+            if (details != null) {
+                flights.add(details);
+            }
+        }
+        return flights;
+    }
+
     private FlightDetails flightOrNull(Long flightId) {
         try {
             // Service-token call: this runs during event publication, which for the
@@ -235,23 +853,34 @@ public class BookingFacade {
      * Any failure compensates: releases the holds already taken, cancels the
      * draft (DRAFT -> CANCELLED), rethrows.
      */
+    /** A hold taken during the saga: which flight it lives on, and which seat - the unit of compensation. */
+    private record HeldSeat(Long flightId, String seatNumber) {
+    }
+
     private List<SeatAssignmentResult> holdSeatsOrCompensate(BookingResponse draft,
                                                              CreateBookingRequest request) {
 
+        // Rows are segment-major (outbound rows first, then return rows), so
+        // row i belongs to traveller i % travellerCount. ONE compensation
+        // list spans every flight (ROUND_TRIP_MODULE.md §5): any failure on
+        // either leg releases all holds taken on both. All-or-nothing.
+        int travellerCount = request.passengers().size();
         List<SeatAssignmentResult> assignments = new ArrayList<>();
-        List<String> heldSeats = new ArrayList<>();
+        List<HeldSeat> heldSeats = new ArrayList<>();
         try {
             for (int i = 0; i < draft.passengers().size(); i++) {
 
                 BookingPassengerResponse passenger = draft.passengers().get(i);
-                PassengerBookingDetail detail = request.passengers().get(i);
-                String requestedSeat = detail.seatNumber();
+                PassengerBookingDetail detail = request.passengers().get(i % travellerCount);
+                // Each leg takes its own pick: seatNumber for the outbound,
+                // returnSeatNumber for the return - absent means free AUTO.
+                String requestedSeat = requestedSeatFor(passenger.segmentIndex(), request, detail);
                 boolean manual = requestedSeat != null && !requestedSeat.isBlank();
 
                 Optional<InventoryHoldDetails> hold = manual
-                        ? inventoryServiceClient.holdSeat(draft.flightId(),
+                        ? inventoryServiceClient.holdSeat(passenger.flightId(),
                                 requestedSeat.toUpperCase(), draft.id(), passenger.id(), detail.travelClass())
-                        : inventoryServiceClient.autoHoldSeat(draft.flightId(),
+                        : inventoryServiceClient.autoHoldSeat(passenger.flightId(),
                                 draft.id(), passenger.id(), detail.travelClass());
 
                 if (hold.isEmpty()) {
@@ -264,18 +893,24 @@ public class BookingFacade {
                         return noInventoryAssignments(draft, request);
                     }
                     throw new IllegalStateException("inventory reported no inventory for flight "
-                            + draft.flightId() + " after " + heldSeats.size()
+                            + passenger.flightId() + " after " + heldSeats.size()
                             + " seat(s) were already held - inconsistent inventory state");
                 }
 
                 InventoryHoldDetails held = hold.get();
+                // Fare-family entitlement: Flexi and Premium include free seat
+                // selection - the listed surcharge stays on record, but the
+                // CHARGED amount is waived. Saver pays the listed price.
+                BigDecimal charged = passenger.fareType() == FareType.SAVER
+                        ? held.chargedSurcharge()
+                        : ZERO_MONEY;
                 assignments.add(new SeatAssignmentResult(
                         passenger.id(),
                         held.seatNumber(),
                         held.listedSurcharge(),
-                        held.chargedSurcharge(),
+                        charged,
                         SeatAssignmentMode.valueOf(held.assignmentMode())));
-                heldSeats.add(held.seatNumber());
+                heldSeats.add(new HeldSeat(passenger.flightId(), held.seatNumber()));
             }
             return assignments;
 
@@ -290,24 +925,34 @@ public class BookingFacade {
         try {
             return bookingService.finalizeSeatAssignments(draft.id(), assignments);
         } catch (RuntimeException finalizeFailure) {
-            List<String> heldSeats = assignments.stream()
-                    .map(SeatAssignmentResult::seatNumber)
-                    .filter(seat -> seat != null && !seat.isBlank())
+            // Recover each held seat's flight through its passenger row - the
+            // assignment carries only the row id, and on a round trip the
+            // seats live on two different flights.
+            Map<Long, Long> flightByRowId = new java.util.HashMap<>();
+            for (BookingPassengerResponse row : draft.passengers()) {
+                flightByRowId.put(row.id(), row.flightId());
+            }
+            List<HeldSeat> heldSeats = assignments.stream()
+                    .filter(a -> a.seatNumber() != null && !a.seatNumber().isBlank())
+                    .map(a -> new HeldSeat(flightByRowId.get(a.bookingPassengerId()), a.seatNumber()))
                     .toList();
             compensate(draft, heldSeats, "Finalization failed: " + finalizeFailure.getMessage());
             throw finalizeFailure;
         }
     }
 
-    /** Hold-if-exists fallback: seats as requested (manual) or none (auto), all charged 0. */
+    /** Hold-if-exists fallback: each leg's requested seat (manual) or none (auto), all charged 0. */
     private List<SeatAssignmentResult> noInventoryAssignments(BookingResponse draft,
                                                               CreateBookingRequest request) {
+        int travellerCount = request.passengers().size();
         List<SeatAssignmentResult> assignments = new ArrayList<>();
         for (int i = 0; i < draft.passengers().size(); i++) {
-            String requestedSeat = request.passengers().get(i).seatNumber();
+            BookingPassengerResponse row = draft.passengers().get(i);
+            PassengerBookingDetail detail = request.passengers().get(i % travellerCount);
+            String requestedSeat = requestedSeatFor(row.segmentIndex(), request, detail);
             boolean manual = requestedSeat != null && !requestedSeat.isBlank();
             assignments.add(new SeatAssignmentResult(
-                    draft.passengers().get(i).id(),
+                    row.id(),
                     manual ? requestedSeat.toUpperCase() : null,
                     ZERO_MONEY, ZERO_MONEY,
                     manual ? SeatAssignmentMode.MANUAL : SeatAssignmentMode.AUTO));
@@ -315,13 +960,31 @@ public class BookingFacade {
         return assignments;
     }
 
-    /** Release taken holds and cancel the draft (DRAFT -> CANCELLED, §5.1a). */
-    private void compensate(BookingResponse draft, List<String> heldSeats, String reason) {
-        for (String seat : heldSeats) {
-            inventoryServiceClient.releaseHoldQuietly(draft.flightId(), seat, draft.id(),
+    /**
+     * The seat the traveller asked for on a given segment: segment 0 reads
+     * seatNumber, a through-ticket onward leg reads its connectionSeatNumbers
+     * entry, and the return segment reads returnSeatNumber. Null/blank = AUTO.
+     */
+    private static String requestedSeatFor(int segmentIndex, CreateBookingRequest request,
+                                           PassengerBookingDetail detail) {
+        if (segmentIndex == 0) {
+            return detail.seatNumber();
+        }
+        int connectionLegs = request.connectionFlightIds() == null ? 0 : request.connectionFlightIds().size();
+        if (segmentIndex <= connectionLegs) {
+            List<String> seats = detail.connectionSeatNumbers();
+            return seats != null && seats.size() >= segmentIndex ? seats.get(segmentIndex - 1) : null;
+        }
+        return detail.returnSeatNumber();
+    }
+
+    /** Release taken holds - on every flight involved - and cancel the draft (DRAFT -> CANCELLED, §5.1a). */
+    private void compensate(BookingResponse draft, List<HeldSeat> heldSeats, String reason) {
+        for (HeldSeat held : heldSeats) {
+            inventoryServiceClient.releaseHoldQuietly(held.flightId(), held.seatNumber(), draft.id(),
                     "compensation - " + reason);
         }
-        bookingService.cancelBooking(draft.id(), reason);
+        bookingService.cancelBooking(draft.id(), reason, 100);
         log.warn("Draft booking {} rolled back - {}", draft.bookingReference(), reason);
     }
 
@@ -338,7 +1001,7 @@ public class BookingFacade {
                 continue;
             }
             try {
-                inventoryServiceClient.reserveSeat(booking.flightId(), seat, booking.id(), passenger.id());
+                inventoryServiceClient.reserveSeat(passenger.flightId(), seat, booking.id(), passenger.id());
             } catch (RuntimeException e) {
                 log.warn("Could not convert hold to reservation for seat {} on booking {}: {}",
                         seat, booking.bookingReference(), e.getMessage());

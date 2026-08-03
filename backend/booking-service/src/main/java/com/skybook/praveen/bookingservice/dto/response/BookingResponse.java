@@ -14,7 +14,11 @@ public record BookingResponse(
 
         Long customerId,
 
+        // DEPRECATED: segment 0's flight - read segments instead.
         Long flightId,
+
+        // The journey's legs in order (ROUND_TRIP_MODULE.md §4).
+        List<BookingSegmentResponse> segments,
 
         BookingStatus bookingStatus,
 
@@ -31,6 +35,10 @@ public record BookingResponse(
         BookingContactResponse contact,
 
         BookingPaymentResponse payment,
+
+        // E-tickets, one per traveller with a coupon per segment - empty
+        // until the booking is CONFIRMED (issued on payment capture).
+        List<TicketResponse> tickets,
 
         String createdBy,
 

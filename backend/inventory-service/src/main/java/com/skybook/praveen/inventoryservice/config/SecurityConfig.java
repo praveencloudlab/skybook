@@ -45,6 +45,15 @@ public class SecurityConfig {
                         // internal network (§7); step 10 isolates the management port.
                         .requestMatchers("/actuator/**", "/livez", "/readyz").permitAll()
 
+                        // Cabin availability feeds the now-public fare quote: a
+                        // visitor prices a trip before any account exists, so
+                        // booking-service reads this without a caller token. It
+                        // is public shopping data, exactly like the flight
+                        // schedule - and inventory stays internal-only (the
+                        // gateway never routes it tokenless from outside), so
+                        // this opens one read on the internal network, nothing more.
+                        .requestMatchers(HttpMethod.GET, "/api/inventory/flights/*/cabins").permitAll()
+
                         // Seat operations - the internal service→service surface.
                         .requestMatchers(HttpMethod.POST,
                                 "/api/inventory/hold", "/api/inventory/release",

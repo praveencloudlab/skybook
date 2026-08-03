@@ -15,11 +15,32 @@ public record BookingPassengerResponse(
 
         Long passengerId,
 
+        // Which journey leg this row is (0 = outbound, 1 = return): a
+        // passenger has one row per segment since V10 (ROUND_TRIP_MODULE.md).
+        int segmentIndex,
+
+        // The row's own flight - what seat holds, releases and reservations
+        // must target on a multi-segment booking (never the booking-level id).
+        Long flightId,
+
         String firstName,
 
         String lastName,
 
         String passportNumber,
+
+        // Full identity snapshot (title/gender/dob/nationality/expiry): what
+        // lets the frontend REBOOK this passenger onto another flight without
+        // asking them to retype documents that are already on file here.
+        String title,
+
+        String gender,
+
+        java.time.LocalDate dob,
+
+        String nationality,
+
+        java.time.LocalDate passportExpiry,
 
         TravelClass travelClass,
 
@@ -28,11 +49,16 @@ public record BookingPassengerResponse(
         String seatNumber,
 
         // Fare breakdown (SEAT_SELECTION_MODULE.md §8): the all-in `fare` is
-        // baseFare + seatSurcharge. seatSurcharge is what was actually charged
-        // (0 for an AUTO seat), not the seat's listed price.
+        // baseFare + seatSurcharge + baggageFee. seatSurcharge is what was
+        // actually charged (0 for an AUTO seat), not the seat's listed price.
         BigDecimal baseFare,
 
         BigDecimal seatSurcharge,
+
+        // Ancillary bags bought at booking, and what they actually cost.
+        int extraBags,
+
+        BigDecimal baggageFee,
 
         SeatAssignmentMode chargedSeatAssignmentMode,
 
@@ -40,7 +66,15 @@ public record BookingPassengerResponse(
 
         BigDecimal fare,
 
-        CheckInStatus checkInStatus
+        CheckInStatus checkInStatus,
+
+        // Passenger-level cancellation (business rules): true once this traveller
+        // is cancelled off the booking. The booking survives until all are.
+        boolean cancelled,
+
+        // ADULT / CHILD / INFANT, derived from date of birth - drives the
+        // guardian rule (a minor can't remain without an adult).
+        String passengerType
 
 ) {
 }

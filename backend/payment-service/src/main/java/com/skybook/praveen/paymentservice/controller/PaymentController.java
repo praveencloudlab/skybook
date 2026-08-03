@@ -96,7 +96,7 @@ public class PaymentController {
     @PatchMapping("/{id}/refund")
     public ResponseEntity<RefundResponse> refund(
             @PathVariable Long id, @Valid @RequestBody(required = false) RefundRequest request) {
-        RefundRequest effective = request != null ? request : new RefundRequest(null, null);
+        RefundRequest effective = request != null ? request : new RefundRequest(null, null, null);
         return ResponseEntity.ok(paymentFacade.refund(id, effective, ActionContext.user("payment-" + id)));
     }
 }

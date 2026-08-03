@@ -85,7 +85,7 @@ class JwtAuthenticationFilterTest {
     @Test
     void missingAuthorizationHeaderReturns401() throws Exception {
         request.setMethod("GET");
-        request.setRequestURI("/api/flights/123");
+        request.setRequestURI("/api/bookings/123");
 
         filter.doFilter(request, response, chain());
 
@@ -97,7 +97,7 @@ class JwtAuthenticationFilterTest {
     @Test
     void malformedAuthorizationHeaderReturns401() throws Exception {
         request.setMethod("GET");
-        request.setRequestURI("/api/flights/123");
+        request.setRequestURI("/api/bookings/123");
         request.addHeader("Authorization", "Basic dXNlcjpwYXNz");
 
         filter.doFilter(request, response, chain());
@@ -109,7 +109,7 @@ class JwtAuthenticationFilterTest {
     @Test
     void invalidTokenReturns401() throws Exception {
         request.setMethod("GET");
-        request.setRequestURI("/api/flights/123");
+        request.setRequestURI("/api/bookings/123");
         request.addHeader("Authorization", "Bearer bad-token");
         when(jwtValidator.validate("bad-token")).thenThrow(new InvalidTokenException("expired"));
 
@@ -123,7 +123,7 @@ class JwtAuthenticationFilterTest {
     @Test
     void validTokenForwardsTheRequestWithAuthUserHeaderAttached() throws Exception {
         request.setMethod("GET");
-        request.setRequestURI("/api/flights/123");
+        request.setRequestURI("/api/bookings/123");
         request.addHeader("Authorization", "Bearer good-token");
         when(jwtValidator.validate("good-token")).thenReturn(userPrincipal("traveler@skybook.com"));
 

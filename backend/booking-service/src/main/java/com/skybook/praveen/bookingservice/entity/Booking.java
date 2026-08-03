@@ -52,13 +52,25 @@ public class Booking extends Auditable {
 
     // Reference only - the id of the User in auth-service. No local
     // Customer table (docs section 3.7).
-    @Column(nullable = false)
+    //
+    // OPTIONAL since V6 (FRONTEND_MODULE.md §10.3): ownership is carried by
+    // ownerSubject, and nothing authorizes or looks up by this. It was NOT NULL,
+    // which forced every client to invent a meaningless number.
+    @Column
     private Long customerId;
 
-    // Single flight per booking for v1 - multi-segment itineraries are
-    // deferred (docs section 11).
+    // DEPRECATED (ROUND_TRIP_MODULE.md §3): segment 0's flight, kept one
+    // release for readers not yet on segments. The authoritative journey is
+    // the segments list below; a follow-up migration drops this column.
     @Column(nullable = false)
     private Long flightId;
+
+    // The journey's flight legs in order (0 = outbound, 1 = return). A
+    // single-flight booking is simply a one-segment journey.
+    @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("segmentIndex ASC")
+    @Builder.Default
+    private List<BookingSegment> segments = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -82,7 +94,11 @@ public class Booking extends Auditable {
     @Column(name = "owner_subject", updatable = false)
     private String ownerSubject;
 
+    // id ASC = insertion order = segment-major (ROUND_TRIP_MODULE.md §5):
+    // the facade's row<->request-detail correlation relies on a reloaded
+    // booking listing rows in exactly the order the draft created them.
     @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OrderBy("id ASC")
     @Builder.Default
     private List<BookingPassenger> passengers = new ArrayList<>();
 
@@ -91,6 +107,11 @@ public class Booking extends Auditable {
 
     @OneToOne(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private BookingPayment payment;
+
+    // E-tickets, one per traveller, issued at CONFIRMED (ROUND_TRIP_MODULE.md).
+    @OneToMany(mappedBy = "booking", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<Ticket> tickets = new ArrayList<>();
 
     // Append-only audit trail, populated by BookingStateMachine - see that
     // class for why this is populated via cascade rather than a separate save.

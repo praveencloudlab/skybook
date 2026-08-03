@@ -40,7 +40,7 @@ class BoardingPassControllerTest {
     private BoardingPassResponse response() {
         LocalDateTime now = LocalDateTime.now();
         return new BoardingPassResponse(10L, 1L, "BP-2026-K7M4Z9", "token", "Test Passenger", "SBTEST",
-                "BA178", "LHR", "JFK", "12B", "A12", now, "3", BoardingPassStatus.ACTIVE, now, null, null);
+                "BA178", "LHR", "JFK", "12B", "5", "1", "A12", now, "3", BoardingPassStatus.ACTIVE, now, null, null);
     }
 
     @Test

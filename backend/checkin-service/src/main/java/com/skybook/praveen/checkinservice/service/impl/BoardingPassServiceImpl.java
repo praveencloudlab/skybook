@@ -89,6 +89,8 @@ public class BoardingPassServiceImpl implements BoardingPassService {
                 .originAirportCode(checkIn.getOriginAirportCode())
                 .destinationAirportCode(checkIn.getDestinationAirportCode())
                 .seatNumber(checkIn.getSeatNumber())
+                .departureTerminal(checkIn.getDepartureTerminal())
+                .arrivalTerminal(checkIn.getArrivalTerminal())
                 .boardingTime(boardingTime)
                 .boardingGroup(boardingGroup)
                 .build();

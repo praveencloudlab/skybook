@@ -79,7 +79,38 @@ public class BookingEvent {
 
     private List<BookingEventPassenger> passengers;
 
+    /**
+     * The journey's legs with their passengers nested (ROUND_TRIP_MODULE.md
+     * §6). When present, consumers MUST prefer this over the top-level
+     * flight fields + flat passengers list, which are kept exactly one
+     * release as a deprecated segment-0 mirror for old consumers and
+     * replayed old events (null segments = old event, use the fallback).
+     */
+    private List<BookingEventSegment> segments;
+
     private BigDecimal totalFare;
+
+    /**
+     * CANCELLED events only: the time-tier refund percent quoted at
+     * cancellation (booking-service CancellationPolicy) - 100 = fare rules
+     * alone, 50 = half, 0 = same-day forfeiture (payment-service must NOT
+     * create a refund). Null on legacy events = 100 (old behaviour).
+     */
+    private Integer refundTierPercent;
+
+    /**
+     * PARTIALLY_CANCELLED only: the cancelled rows' fares in payment-service's
+     * compact breakdown format ("FLEXI:100.00;SAVER:80.00") - exactly what
+     * RefundCalculator parses, so payment refunds those lines (scaled by
+     * refundTierPercent) instead of the whole remaining capture.
+     */
+    private String refundBreakdown;
+
+    /**
+     * PARTIALLY_CANCELLED only: the BookingPassenger row ids THIS event
+     * cancelled - checkin-service closes exactly those check-ins.
+     */
+    private List<Long> cancelledBookingPassengerIds;
 
     private String currency;
 

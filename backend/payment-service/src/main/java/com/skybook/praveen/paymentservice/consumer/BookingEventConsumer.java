@@ -46,9 +46,57 @@ public class BookingEventConsumer {
         switch (event.getType()) {
             case CREATED -> paymentService.createFromBookingEvent(event);
             case CANCELLED -> handleBookingCancelled(event, ctx);
+            case PARTIALLY_CANCELLED -> handleBookingPartiallyCancelled(event, ctx);
             default -> log.info("Ignoring {} event for {} (not payment-relevant in v1)",
                     event.getType(), event.getBookingReference());
         }
+    }
+
+    /**
+     * Passengers/segment cancelled off a SURVIVING booking: refund exactly the
+     * cancelled rows' fare lines (the event's refundBreakdown), scaled by the
+     * cancellation-policy tier. The payment goes PARTIALLY_REFUNDED and stays
+     * live for the remaining passengers.
+     */
+    private void handleBookingPartiallyCancelled(BookingEvent event, ActionContext ctx) {
+
+        PaymentResponse payment;
+        try {
+            payment = paymentService.getByBookingId(event.getBookingId());
+        } catch (PaymentNotFoundException e) {
+            log.info("Booking {} partially cancelled but no payment exists - nothing to do",
+                    event.getBookingReference());
+            return;
+        }
+
+        if (payment.status() != PaymentStatus.CAPTURED && payment.status() != PaymentStatus.PARTIALLY_REFUNDED) {
+            log.info("Booking {} partially cancelled; payment {} is {} - no money captured for these rows, no action",
+                    event.getBookingReference(), payment.paymentReference(), payment.status());
+            return;
+        }
+
+        int tierPercent = event.getRefundTierPercent() != null ? event.getRefundTierPercent() : 100;
+        if (tierPercent == 0) {
+            log.info("Booking {} partially cancelled in the zero-refund window - fare forfeited, keeping payment {}",
+                    event.getBookingReference(), payment.paymentReference());
+            return;
+        }
+        if (event.getRefundBreakdown() == null || event.getRefundBreakdown().isBlank()) {
+            log.warn("Booking {} PARTIALLY_CANCELLED event carries no refundBreakdown - cannot refund blind, skipping",
+                    event.getBookingReference());
+            return;
+        }
+
+        java.util.List<com.skybook.praveen.paymentservice.dto.request.FareLineRequest> lines =
+                com.skybook.praveen.paymentservice.domain.RefundCalculator
+                        .parse(event.getRefundBreakdown(), java.math.BigDecimal.ZERO).stream()
+                        .map(line -> new com.skybook.praveen.paymentservice.dto.request.FareLineRequest(
+                                line.fareType(), line.amount()))
+                        .toList();
+
+        paymentFacade.refund(payment.id(),
+                new RefundRequest(lines, tierPercent,
+                        "Partial cancellation on booking " + event.getBookingReference()), ctx);
     }
 
     private void handleBookingCancelled(BookingEvent event, ActionContext ctx) {
@@ -63,9 +111,32 @@ public class BookingEventConsumer {
 
         PaymentStatus status = payment.status();
 
+        // Time-tier percent quoted at cancellation (null on legacy events = 100).
+        int tierPercent = event.getRefundTierPercent() != null ? event.getRefundTierPercent() : 100;
+
         if (status == PaymentStatus.CAPTURED || status == PaymentStatus.PARTIALLY_REFUNDED) {
+            if (tierPercent == 0) {
+                // Same-day forfeiture: the passenger was told "zero refund" -
+                // creating any refund here would contradict the quote. The
+                // payment stays CAPTURED; the money is the cancellation fee.
+                log.info("Booking {} cancelled in the zero-refund window - keeping payment {} in full",
+                        event.getBookingReference(), payment.paymentReference());
+                return;
+            }
+            // A breakdown means some of the journey already FLEW: refund only
+            // the upcoming rows' lines. No breakdown = legacy full refund of
+            // the remaining capture.
+            java.util.List<com.skybook.praveen.paymentservice.dto.request.FareLineRequest> lines =
+                    event.getRefundBreakdown() != null && !event.getRefundBreakdown().isBlank()
+                            ? com.skybook.praveen.paymentservice.domain.RefundCalculator
+                                    .parse(event.getRefundBreakdown(), java.math.BigDecimal.ZERO).stream()
+                                    .map(line -> new com.skybook.praveen.paymentservice.dto.request.FareLineRequest(
+                                            line.fareType(), line.amount()))
+                                    .toList()
+                            : null;
             paymentFacade.refund(payment.id(),
-                    new RefundRequest(null, "Booking " + event.getBookingReference() + " cancelled"), ctx);
+                    new RefundRequest(lines, tierPercent,
+                            "Booking " + event.getBookingReference() + " cancelled"), ctx);
         } else if (status == PaymentStatus.PENDING || status == PaymentStatus.AUTHORIZED
                 || status == PaymentStatus.AUTHORIZATION_FAILED || status == PaymentStatus.CAPTURE_FAILED) {
             paymentFacade.cancel(payment.id(), ctx);

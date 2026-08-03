@@ -42,8 +42,11 @@ class BookingStateMachineTest {
         // a crash-orphaned draft can never be confirmed.
         private final Map<BookingStatus, Set<BookingStatus>> validTransitions = Map.of(
                 BookingStatus.DRAFT, Set.of(BookingStatus.CREATED, BookingStatus.CANCELLED),
-                BookingStatus.CREATED, Set.of(BookingStatus.CONFIRMED, BookingStatus.CANCELLED),
-                BookingStatus.CONFIRMED, Set.of(BookingStatus.CANCELLED, BookingStatus.COMPLETED),
+                BookingStatus.CREATED, Set.of(BookingStatus.CONFIRMED, BookingStatus.PARTIALLY_CANCELLED, BookingStatus.CANCELLED),
+                BookingStatus.CONFIRMED, Set.of(BookingStatus.PARTIALLY_CANCELLED, BookingStatus.CANCELLED, BookingStatus.COMPLETED),
+                // Passenger-cancellation (business rules 9-11): shed more passengers
+                // (self-loop), lose the last one (-> CANCELLED), or fly the rest (-> COMPLETED).
+                BookingStatus.PARTIALLY_CANCELLED, Set.of(BookingStatus.PARTIALLY_CANCELLED, BookingStatus.CANCELLED, BookingStatus.COMPLETED),
                 BookingStatus.CANCELLED, Set.of(),
                 BookingStatus.COMPLETED, Set.of()
         );

@@ -41,8 +41,15 @@ public class BookingStateMachine {
         // reachable ONLY from CREATED - a crash-orphaned draft (no seat, no
         // payment) is structurally unconfirmable, not just by convention.
         BOOKING_TRANSITIONS.put(BookingStatus.DRAFT, EnumSet.of(BookingStatus.CREATED, BookingStatus.CANCELLED));
-        BOOKING_TRANSITIONS.put(BookingStatus.CREATED, EnumSet.of(BookingStatus.CONFIRMED, BookingStatus.CANCELLED));
-        BOOKING_TRANSITIONS.put(BookingStatus.CONFIRMED, EnumSet.of(BookingStatus.CANCELLED, BookingStatus.COMPLETED));
+        BOOKING_TRANSITIONS.put(BookingStatus.CREATED,
+                EnumSet.of(BookingStatus.CONFIRMED, BookingStatus.PARTIALLY_CANCELLED, BookingStatus.CANCELLED));
+        BOOKING_TRANSITIONS.put(BookingStatus.CONFIRMED,
+                EnumSet.of(BookingStatus.PARTIALLY_CANCELLED, BookingStatus.CANCELLED, BookingStatus.COMPLETED));
+        // Partial cancellation is derived from passenger states (rule 11): from it
+        // a booking can lose its last passenger (-> CANCELLED), fly its remaining
+        // passengers (-> COMPLETED), or keep shedding passengers (self-loop).
+        BOOKING_TRANSITIONS.put(BookingStatus.PARTIALLY_CANCELLED, EnumSet.of(
+                BookingStatus.PARTIALLY_CANCELLED, BookingStatus.CANCELLED, BookingStatus.COMPLETED));
         BOOKING_TRANSITIONS.put(BookingStatus.CANCELLED, EnumSet.noneOf(BookingStatus.class));
         BOOKING_TRANSITIONS.put(BookingStatus.COMPLETED, EnumSet.noneOf(BookingStatus.class));
 
@@ -137,7 +144,19 @@ public class BookingStateMachine {
         recordHistory(passenger.getBooking(), BookingHistoryField.CHECK_IN_STATUS, from, to, null, changedBy);
     }
 
+    /** Free-form audit entry for changes that aren't a status transition (e.g. a Premium date change). */
+    public void recordCustomHistory(Booking booking, String reason, String changedBy) {
+        recordHistory(booking, BookingHistoryField.BOOKING_STATUS,
+                booking.getBookingStatus(), booking.getBookingStatus(), reason, changedBy);
+    }
+
     private void recordHistory(Booking booking, BookingHistoryField field, Object from, Object to, String reason, String changedBy) {
+
+        // The column is varchar(255); a long inventory error inside a
+        // compensation reason must trim, not blow up the compensation itself.
+        String bounded = reason != null && reason.length() > 250
+                ? reason.substring(0, 250) + "…"
+                : reason;
 
         booking.getHistory().add(BookingHistory.builder()
                 .booking(booking)
@@ -146,7 +165,7 @@ public class BookingStateMachine {
                 .toValue(String.valueOf(to))
                 .changedAt(LocalDateTime.now())
                 .changedBy(changedBy)
-                .reason(reason)
+                .reason(bounded)
                 .build());
     }
 }

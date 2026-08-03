@@ -47,6 +47,15 @@ public class SecurityConfig {
                         // internal network (§7); step 10 isolates the management port.
                         .requestMatchers("/actuator/**", "/livez", "/readyz").permitAll()
 
+                        // Fare quote is public shopping data - a visitor prices a
+                        // trip before any account exists. It reads nothing owned
+                        // and creates nothing; the booking it might lead to still
+                        // needs a principal below.
+                        .requestMatchers(HttpMethod.POST, "/api/bookings/quote").permitAll()
+                        // The fare calendar is the same public shopping data,
+                        // date-by-date - it reads nothing owned.
+                        .requestMatchers(HttpMethod.GET, "/api/bookings/fare-calendar").permitAll()
+
                         // Back-office - ADMIN. list-all + search + confirm + complete.
                         .requestMatchers(HttpMethod.GET, "/api/bookings").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/bookings/search").hasRole("ADMIN")

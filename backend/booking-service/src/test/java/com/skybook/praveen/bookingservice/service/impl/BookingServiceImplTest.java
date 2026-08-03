@@ -72,7 +72,12 @@ class BookingServiceImplTest {
     private final PnrGenerator pnrGenerator = new PnrGenerator();
     private final BookingStateMachine bookingStateMachine = new BookingStateMachine();
     private final BookingValidator bookingValidator = new BookingValidator();
-    private final FareCalculator fareCalculator = new FareCalculator();
+    // Pinned clock: pricing is now demand-shaped (days to departure, weekend),
+    // so a floating now() would make expected totals depend on the run date.
+    // Tuesday 2030-06-04; NEUTRAL_DEPARTURE sits in the 1.00 baseline band.
+    private static final java.time.LocalDateTime NEUTRAL_DEPARTURE = java.time.LocalDateTime.of(2030, 7, 16, 10, 0);
+    private final FareCalculator fareCalculator = new FareCalculator(
+            java.time.Clock.fixed(java.time.Instant.parse("2030-06-04T09:00:00Z"), java.time.ZoneOffset.UTC));
 
     private BookingServiceImpl bookingService;
 
@@ -80,7 +85,9 @@ class BookingServiceImplTest {
     void setUp() {
         bookingService = new BookingServiceImpl(
                 bookingRepository, bookingPassengerRepository,
-                pnrGenerator, bookingStateMachine, bookingValidator, fareCalculator, DRAFT_TTL_MINUTES);
+                pnrGenerator, bookingStateMachine, bookingValidator, fareCalculator,
+                new com.skybook.praveen.bookingservice.domain.CancellationPolicy(new java.math.BigDecimal("30"), 72, 24, 2),
+                DRAFT_TTL_MINUTES);
     }
 
     // ---------------------------------------------------------------
@@ -93,13 +100,13 @@ class BookingServiceImplTest {
                 LocalDate.of(1990, 1, 1), "FEMALE", "GBR",
                 "P1234567", LocalDate.of(2032, 1, 1),
                 "jane@example.com", "+441234567890",
-                travelClass, fareType, seatNumber
+                travelClass, fareType, seatNumber, null, null, null, null
         );
     }
 
     private CreateBookingRequest createRequest(List<PassengerBookingDetail> passengers) {
         return new CreateBookingRequest(
-                100L, 1L, passengers,
+                100L, 1L, null, null, passengers,
                 new BookingContactRequest("John Doe", "john@example.com", "+441234567891"),
                 null
         );
@@ -107,6 +114,17 @@ class BookingServiceImplTest {
 
     private void stubSaveReturnsArgument() {
         when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    private List<com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg> oneWay(LocalDateTime departure) {
+        return List.of(new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(1L, "LHR", departure, 0, true));
+    }
+
+    private List<com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg> roundTripLegs(
+            LocalDateTime outbound, LocalDateTime inbound) {
+        return List.of(
+                new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(1L, "LHR", outbound, 0, true),
+                new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(2L, "DXB", inbound, 1, true));
     }
 
     // ---------------------------------------------------------------
@@ -124,7 +142,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com");
+            BookingResponse response = bookingService.createDraftBooking(request, oneWay(NEUTRAL_DEPARTURE), "owner@test.com");
 
             assertThat(response.bookingReference()).matches("^SB[23456789ABCDEFGHJKMNPQRSTUVWXYZ]{4}$");
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.DRAFT);
@@ -144,6 +162,108 @@ class BookingServiceImplTest {
         }
 
         @Test
+        void departedOrImminentFlightsAreRejectedOutright() {
+            when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
+
+            CreateBookingRequest request = createRequest(
+                    List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
+
+            // Departed two hours ago.
+            assertThatThrownBy(() -> bookingService.createDraftBooking(
+                    request, oneWay(java.time.LocalDateTime.now().minusHours(2)), "owner@test.com"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("closed");
+
+            // Departs in 30 minutes - inside the 60-minute booking cutoff.
+            assertThatThrownBy(() -> bookingService.createDraftBooking(
+                    request, oneWay(java.time.LocalDateTime.now().plusMinutes(30)), "owner@test.com"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("closed");
+
+            // A round trip whose RETURN leg is somehow in the past dies too.
+            CreateBookingRequest roundTrip = new CreateBookingRequest(
+                    100L, 1L, 2L, null,
+                    List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)),
+                    new BookingContactRequest("John Doe", "john@example.com", "+441234567891"),
+                    null);
+            assertThatThrownBy(() -> bookingService.createDraftBooking(
+                    roundTrip, roundTripLegs(NEUTRAL_DEPARTURE, java.time.LocalDateTime.now().minusDays(1)), "owner@test.com"))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("closed");
+        }
+
+        @Test
+        void throughTicketConnectionChargesBagsOncePerDirection() {
+            when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
+            stubSaveReturnsArgument();
+
+            // 1-stop same-carrier through-ticket: legs 1+2 are BOTH direction
+            // 0; the traveller buys 1 extra bag, which is checked THROUGH -
+            // charged on the first leg only, never per leg.
+            PassengerBookingDetail withBag = new PassengerBookingDetail(
+                    "Mr", "Jane", null, "Doe",
+                    LocalDate.of(1990, 1, 1), "FEMALE", "GBR",
+                    "P1234567", LocalDate.of(2032, 1, 1),
+                    "jane@example.com", "+441234567890",
+                    TravelClass.ECONOMY, FareType.FLEXI, null, null, null, 1, null);
+            CreateBookingRequest request = new CreateBookingRequest(
+                    100L, 1L, null, List.of(2L), List.of(withBag),
+                    new BookingContactRequest("John Doe", "john@example.com", "+441234567891"),
+                    null);
+            List<com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg> journey = List.of(
+                    new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(
+                            1L, "LHR", NEUTRAL_DEPARTURE, 0, true),
+                    new com.skybook.praveen.bookingservice.service.BookingService.JourneyLeg(
+                            2L, "DXB", NEUTRAL_DEPARTURE.plusHours(10), 0, false));
+
+            BookingResponse response = bookingService.createDraftBooking(request, journey, "owner@test.com");
+
+            assertThat(response.segments()).hasSize(2);
+            assertThat(response.passengers()).hasSize(2);
+            // Leg 1 carries the bag + fee; leg 2 carries neither.
+            assertThat(response.passengers().get(0).extraBags()).isEqualTo(1);
+            assertThat(response.passengers().get(0).baggageFee()).isEqualByComparingTo("40.00");
+            assertThat(response.passengers().get(1).extraBags()).isZero();
+            assertThat(response.passengers().get(1).baggageFee()).isEqualByComparingTo("0.00");
+            // Both legs priced (same neutral band: 100 each) + one bag fee.
+            assertThat(response.totalFare()).isEqualByComparingTo("240.00");
+        }
+
+        @Test
+        void roundTripDraftCreatesTwoSegmentsWithPerLegPricing() {
+            when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
+            stubSaveReturnsArgument();
+
+            // returnFlightId present => segment 1, one row per traveller per
+            // segment, each priced against ITS OWN departure (both dates sit
+            // in the neutral 1.00 demand band here, so legs price equally).
+            CreateBookingRequest request = new CreateBookingRequest(
+                    100L, 1L, 2L, null,
+                    List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)),
+                    new BookingContactRequest("John Doe", "john@example.com", "+441234567891"),
+                    null);
+
+            BookingResponse response = bookingService.createDraftBooking(
+                    request, roundTripLegs(NEUTRAL_DEPARTURE, NEUTRAL_DEPARTURE.plusDays(7)), "owner@test.com");
+
+            assertThat(response.segments()).hasSize(2);
+            assertThat(response.segments().get(0).segmentIndex()).isZero();
+            assertThat(response.segments().get(0).flightId()).isEqualTo(1L);
+            assertThat(response.segments().get(1).segmentIndex()).isEqualTo(1);
+            assertThat(response.segments().get(1).flightId()).isEqualTo(2L);
+            // Segment-major rows: outbound row first, then the return row.
+            assertThat(response.passengers()).hasSize(2);
+            assertThat(response.passengers().get(0).segmentIndex()).isZero();
+            assertThat(response.passengers().get(0).flightId()).isEqualTo(1L);
+            assertThat(response.passengers().get(1).segmentIndex()).isEqualTo(1);
+            assertThat(response.passengers().get(1).flightId()).isEqualTo(2L);
+            // Same traveller identity on both rows; combined total, ONE booking.
+            assertThat(response.passengers().get(1).passportNumber())
+                    .isEqualTo(response.passengers().get(0).passportNumber());
+            assertThat(response.totalFare()).isEqualByComparingTo("200.00");
+        }
+
+        @Test
         void sumsUpBaseFaresAcrossMultiplePassengers() {
             when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
             stubSaveReturnsArgument();
@@ -153,7 +273,7 @@ class BookingServiceImplTest {
                     passengerDetail("12B", TravelClass.BUSINESS, FareType.SAVER)   // 350 * 0.85 = 297.50
             ));
 
-            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com");
+            BookingResponse response = bookingService.createDraftBooking(request, oneWay(NEUTRAL_DEPARTURE), "owner@test.com");
 
             assertThat(response.passengers()).hasSize(2);
             assertThat(response.totalFare()).isEqualByComparingTo("397.50");
@@ -171,7 +291,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail(null, TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com");
+            BookingResponse response = bookingService.createDraftBooking(request, oneWay(NEUTRAL_DEPARTURE), "owner@test.com");
 
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.DRAFT);
             assertThat(response.passengers().get(0).seatNumber()).isNull();
@@ -179,19 +299,21 @@ class BookingServiceImplTest {
 
         @Test
         void rejectsWhenPassportExpiresBeforeTravelDate() {
-            LocalDateTime departureTime = LocalDateTime.of(2026, 6, 1, 10, 0);
+            // Future departure (the bookability guard fires first otherwise);
+            // the passport expires between now and travel.
+            LocalDateTime departureTime = LocalDateTime.now().plusMonths(6);
 
             PassengerBookingDetail expiredPassport = new PassengerBookingDetail(
                     "Mr", "Jane", null, "Doe",
                     LocalDate.of(1990, 1, 1), "FEMALE", "GBR",
-                    "P1234567", LocalDate.of(2026, 5, 1), // expires before departure
+                    "P1234567", LocalDate.now().plusMonths(3), // expires before departure
                     "jane@example.com", "+441234567890",
-                    TravelClass.ECONOMY, FareType.FLEXI, "12A"
+                    TravelClass.ECONOMY, FareType.FLEXI, "12A", null, null, null, null
             );
 
             CreateBookingRequest request = createRequest(List.of(expiredPassport));
 
-            assertThatThrownBy(() -> bookingService.createDraftBooking(request, departureTime, "owner@test.com"))
+            assertThatThrownBy(() -> bookingService.createDraftBooking(request, oneWay(departureTime), "owner@test.com"))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("passport");
 
@@ -205,7 +327,7 @@ class BookingServiceImplTest {
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            assertThatThrownBy(() -> bookingService.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com"))
+            assertThatThrownBy(() -> bookingService.createDraftBooking(request, oneWay(NEUTRAL_DEPARTURE), "owner@test.com"))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("unique PNR");
         }
@@ -221,12 +343,14 @@ class BookingServiceImplTest {
 
             BookingServiceImpl serviceWithMockedPnr = new BookingServiceImpl(
                     bookingRepository, bookingPassengerRepository,
-                    mockPnrGenerator, bookingStateMachine, bookingValidator, fareCalculator, DRAFT_TTL_MINUTES);
+                    mockPnrGenerator, bookingStateMachine, bookingValidator, fareCalculator,
+                    new com.skybook.praveen.bookingservice.domain.CancellationPolicy(new java.math.BigDecimal("30"), 72, 24, 2),
+                    DRAFT_TTL_MINUTES);
 
             CreateBookingRequest request = createRequest(
                     List.of(passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI)));
 
-            BookingResponse response = serviceWithMockedPnr.createDraftBooking(request, LocalDateTime.now().plusDays(30), "owner@test.com");
+            BookingResponse response = serviceWithMockedPnr.createDraftBooking(request, oneWay(NEUTRAL_DEPARTURE), "owner@test.com");
 
             assertThat(response.bookingReference()).isEqualTo("SBBBBB");
         }
@@ -580,7 +704,7 @@ class BookingServiceImplTest {
             when(bookingRepository.findById(1L)).thenReturn(Optional.of(booking));
             stubSaveReturnsArgument();
 
-            BookingResponse response = bookingService.cancelBooking(1L, "change of plans");
+            BookingResponse response = bookingService.cancelBooking(1L, "change of plans", 100);
 
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.CANCELLED);
             assertThat(response.payment().paymentStatus()).isEqualTo(PaymentStatus.REFUNDED);
@@ -596,7 +720,7 @@ class BookingServiceImplTest {
             when(bookingRepository.findById(1L)).thenReturn(Optional.of(booking));
             stubSaveReturnsArgument();
 
-            BookingResponse response = bookingService.cancelBooking(1L, null);
+            BookingResponse response = bookingService.cancelBooking(1L, null, 100);
 
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.CANCELLED);
             assertThat(response.payment().paymentStatus()).isEqualTo(PaymentStatus.PENDING);

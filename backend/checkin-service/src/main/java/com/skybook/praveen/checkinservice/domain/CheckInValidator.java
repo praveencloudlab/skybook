@@ -43,6 +43,40 @@ public class CheckInValidator {
         this.gateClosesMinutesBeforeDeparture = gateClosesMinutesBeforeDeparture;
     }
 
+    /**
+     * The status to DISPLAY for a check-in, reconciled against the clock.
+     *
+     * <p>Check-in window opening is event-driven ({@code openWindow}) with no
+     * scheduler yet, so a row created before its window opens stays stored as
+     * {@code NOT_OPEN} even after the clock passes the open time - which made the
+     * UI say "check-in opens around &lt;a past date&gt;". This derives what the
+     * window actually is now (using the same configured offsets as
+     * {@link #validateCheckInWindowOpen}), for read/display only - it never
+     * mutates the row. Terminal states (checked in, boarded, cancelled) are left
+     * exactly as stored.
+     */
+    public CheckInStatus effectiveStatus(CheckIn checkIn, LocalDateTime now) {
+        CheckInStatus stored = checkIn.getStatus();
+        LocalDateTime departureTime = checkIn.getDepartureTime();
+        if (departureTime == null
+                || stored == CheckInStatus.CHECKED_IN
+                || stored == CheckInStatus.BOARDED
+                || stored == CheckInStatus.CANCELLED
+                || stored == CheckInStatus.NO_SHOW) {
+            return stored;
+        }
+        LocalDateTime opensAt = departureTime.minusHours(opensHoursBeforeDeparture);
+        LocalDateTime closesAt = departureTime.minusMinutes(closesMinutesBeforeDeparture);
+        if (!now.isBefore(closesAt)) {
+            // Window has closed and the passenger never checked in.
+            return CheckInStatus.NO_SHOW;
+        }
+        if (!now.isBefore(opensAt)) {
+            return CheckInStatus.OPEN;
+        }
+        return stored; // still genuinely before the window
+    }
+
     /** Design doc section 5.1/5.2: window opens N hours before departure, closes M minutes before. */
     public void validateCheckInWindowOpen(CheckIn checkIn, LocalDateTime now) {
 

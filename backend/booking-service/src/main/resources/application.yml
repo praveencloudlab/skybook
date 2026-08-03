@@ -157,3 +157,6 @@ skybook:
     topics:
       # Consumed by PaymentEventConsumer - PAYMENT_SUCCEEDED confirms bookings.
       payment-events: skybook.payment.events
+      # Consumed by CheckInEventConsumer - mirrors per-passenger check-in state
+      # onto BookingPassenger.checkInStatus (arms the cancel guard).
+      checkin-events: skybook.checkin.events

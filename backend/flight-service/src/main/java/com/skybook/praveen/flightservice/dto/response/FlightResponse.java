@@ -12,6 +12,9 @@ public record FlightResponse(
         String destinationAirportCode,
         LocalDateTime departureTime,
         LocalDateTime arrivalTime,
+        /** The carrier's terminal at each end (TerminalPolicy) - null on pre-terminal rows. */
+        String departureTerminal,
+        String arrivalTerminal,
         FlightStatus status,
         Long scheduleId,
         String createdBy,

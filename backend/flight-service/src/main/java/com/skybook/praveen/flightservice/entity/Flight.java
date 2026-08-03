@@ -12,6 +12,15 @@ import java.time.LocalDateTime;
         uniqueConstraints = @UniqueConstraint(
                 name = "uk_flight_number_departure_time",
                 columnNames = {"flight_number", "departure_time"}
+        ),
+        // Route+window searches, the itinerary engine's 2-day scans and the
+        // fare calendar all filter on exactly this triple; at full-mesh seed
+        // volume (~440k rows) a sequential scan per search is not viable.
+        // ddl-auto: update creates it on fresh installs; 06_full_mesh.sql
+        // creates it (IF NOT EXISTS) on existing databases.
+        indexes = @Index(
+                name = "idx_flights_route_departure",
+                columnList = "origin_airport_code, destination_airport_code, departure_time"
         )
 )
 @Getter
@@ -45,6 +54,15 @@ public class Flight extends Auditable {
 
     @Column(nullable = false)
     private LocalDateTime arrivalTime;
+
+    // Real terminal assignments (TerminalPolicy): the carrier's terminal at
+    // each end - e.g. EK at LHR = T3, at DXB = T3; BA at LHR = T5. Nullable
+    // for rows created before this column existed (backfilled by the seeds).
+    @Column(length = 4)
+    private String departureTerminal;
+
+    @Column(length = 4)
+    private String arrivalTerminal;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

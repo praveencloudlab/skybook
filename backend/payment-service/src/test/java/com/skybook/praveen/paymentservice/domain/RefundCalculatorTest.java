@@ -103,4 +103,24 @@ class RefundCalculatorTest {
         assertThat(RefundCalculator.serialize(List.of())).isNull();
         assertThat(RefundCalculator.serialize(null)).isNull();
     }
+
+    @Test
+    void timeTierScalesWhatTheFareRulesLeft() {
+        // Saver 100: rules keep 30 -> 70 refundable; 50% tier -> 35 back, 65 kept.
+        var comp = calculator.compute(
+                List.of(new RefundCalculator.FareLine("SAVER", new BigDecimal("100.00"))), 50);
+
+        assertThat(comp.refundAmount()).isEqualByComparingTo("35.00");
+        assertThat(comp.cancellationFee()).isEqualByComparingTo("65.00");
+    }
+
+    @Test
+    void hundredPercentTierMatchesTheLegacyComputation() {
+        List<RefundCalculator.FareLine> lines = List.of(
+                new RefundCalculator.FareLine("SAVER", new BigDecimal("80.00")),
+                new RefundCalculator.FareLine("FLEXI", new BigDecimal("120.00")));
+
+        assertThat(calculator.compute(lines, 100).refundAmount())
+                .isEqualByComparingTo(calculator.compute(lines).refundAmount());
+    }
 }

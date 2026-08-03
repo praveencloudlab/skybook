@@ -56,7 +56,37 @@ public record PassengerBookingDetail(
         @NotNull(message = "Fare type is required")
         FareType fareType,
 
-        String seatNumber
+        String seatNumber,
+
+        /**
+         * Seat picks for the through-ticket connection legs, aligned by index
+         * with CreateBookingRequest.connectionFlightIds (entry i = the seat on
+         * connection leg i). Null list, short list or blank entry = free AUTO
+         * assignment on that leg, exactly like seatNumber.
+         */
+        @jakarta.validation.constraints.Size(max = 2, message = "At most 2 connection-leg seats")
+        java.util.List<String> connectionSeatNumbers,
+
+        /**
+         * Round trip only (ROUND_TRIP_MODULE.md §4): the seat picked for the
+         * RETURN leg. Same optional semantics as seatNumber - absent means
+         * free auto-assignment on the return flight.
+         */
+        String returnSeatNumber,
+
+        /** Extra checked bags to buy (ancillary). Null/absent means none. */
+        @jakarta.validation.constraints.Min(value = 0, message = "extraBags cannot be negative")
+        @jakarta.validation.constraints.Max(value = 5, message = "At most 5 extra bags per passenger")
+        Integer extraBags,
+
+        /**
+         * Extra bags for the RETURN direction of a round trip (per-direction
+         * bags). Null falls back to extraBags - the same count both ways,
+         * exactly the pre-feature behaviour - so old clients are unchanged.
+         */
+        @jakarta.validation.constraints.Min(value = 0, message = "returnExtraBags cannot be negative")
+        @jakarta.validation.constraints.Max(value = 5, message = "At most 5 extra bags per passenger")
+        Integer returnExtraBags
 
 ) {
 }

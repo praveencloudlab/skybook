@@ -1,187 +1,202 @@
 package com.skybook.praveen.notificationservice.service;
 
 import com.skybook.praveen.common.event.CheckInEvent;
-import com.skybook.praveen.notificationservice.service.AirlineLookup.AirlineBrand;
 import org.springframework.stereotype.Component;
 
-import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 
 /**
- * Renders the downloadable/printable boarding pass as strict XHTML for
- * TicketPdfRenderer (same generic HTML-to-PDF renderer TicketPdfTemplate
- * uses - openhtmltopdf parses with an XML parser, so every tag must close
- * and every attribute must be quoted, and Unicode symbols like the plane
- * emoji are avoided since the base-14 PDF fonts don't cover them).
+ * Renders the emailed boarding pass as strict XHTML for TicketPdfRenderer
+ * (openhtmltopdf parses with an XML parser, so every tag must close and every
+ * attribute must be quoted; the base-14 PDF fonts carry no plane/arrow/circled
+ * glyphs, so decorations use &amp;middot; runs and CSS border triangles).
  *
- * Styled as a modern "mobile boarding pass" card: airline-branded gradient
- * header with a monogram badge (AirlineLookup - no real logo asset exists
- * anywhere in the system), large IATA route type, chip-style
- * seat/gate/boarding-time/group cards, a decorative faux-barcode strip next
- * to the real QR code, and a dashed tear-line to read as a physical pass
- * stub rather than a plain document.
- *
- * Deliberately its own template rather than reusing TicketPdfTemplate - a
- * boarding pass is a different, simpler document (single passenger, gate/
- * seat/boarding-time focused) than a full e-ticket/itinerary.
+ * <p>This is the SAME design as the frontend pass (BoardingPassCard/printable):
+ * the red SkyBook ticket - red 56px headers with the cabin badge, uppercase
+ * passenger + red PNR, light-blue airport boxes with code + full name, a
+ * two-row operational grid (FLIGHT/DATE/DEPARTS/BOARDING and
+ * GATE/SEAT/CABIN/BOARDING GROUP), the gate-arrival notice with the issue
+ * stamp, and a dashed tear-off stub carrying the QR. Field values, the derived
+ * boarding clock and the TBA gate all come from {@link BoardingDisplay} so the
+ * email matches what the passenger sees on screen, value for value.
  */
 @Component
 public class BoardingPassPdfTemplate {
 
-    private static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm");
+    private static final String RED = "#e11b22";
+    private static final String BADGE_RED = "#ea484e";
+    private static final String BLUE = "#cfe0f5";
+    private static final String INK = "#0f172a";
+    private static final String LABEL = "#94a3b8";
 
     public String render(CheckInEvent event, byte[] qrPng) {
 
-        AirlineBrand brand = AirlineLookup.forFlightNumber(event.getFlightNumber());
-        String originCity = AirportCityLookup.cityFor(event.getOriginAirportCode());
-        String destinationCity = AirportCityLookup.cityFor(event.getDestinationAirportCode());
+        String pnr = nvl(event.getBookingReference(), "-");
+        String passenger = nvl(event.getPassengerName(), "-").toUpperCase();
+        String fromCode = nvl(event.getOriginAirportCode(), "-");
+        String toCode = nvl(event.getDestinationAirportCode(), "-");
+        String cabin = BoardingDisplay.cabinLabel(event.getTravelClass());
+        String departDate = BoardingDisplay.date(event.getDepartureTime());
+        String departTime = BoardingDisplay.clock(event.getDepartureTime());
+        String boardTime = BoardingDisplay.clock(BoardingDisplay.effectiveBoarding(event));
+        String gateBy = BoardingDisplay.clock(BoardingDisplay.gateBy(event));
+        String gate = nvl(event.getGate(), "TBA");
+        String group = nvl(event.getBoardingGroup(), "-");
+        String depTerminal = nvl(event.getDepartureTerminal(), "TBA");
+        String fromTerminalLine = event.getDepartureTerminal() != null && !event.getDepartureTerminal().isBlank()
+                ? " &#183; <b>Terminal " + escape(event.getDepartureTerminal()) + "</b>" : "";
+        String toTerminalLine = event.getArrivalTerminal() != null && !event.getArrivalTerminal().isBlank()
+                ? " &#183; <b>Terminal " + escape(event.getArrivalTerminal()) + "</b>" : "";
+        String issued = BoardingDisplay.stamp(event.getIssuedAt() != null ? event.getIssuedAt() : event.getOccurredAt());
+        String passNumber = nvl(event.getBoardingPassNumber(), "-");
 
-        String qrDataUri = qrPng != null
-                ? "data:image/png;base64," + Base64.getEncoder().encodeToString(qrPng)
-                : null;
+        String qrImg = qrPng != null
+                ? "<img src=\"data:image/png;base64," + Base64.getEncoder().encodeToString(qrPng)
+                + "\" width=\"112\" height=\"112\" alt=\"Boarding pass QR code\"/>"
+                : "";
 
         return """
                 <html xmlns="http://www.w3.org/1999/xhtml">
                 <head>
                 <style>
-                  @page { size: A4; margin: 28px 34px; }
-                  body { font-family: Helvetica, Arial, sans-serif; color: #1f2328; font-size: 11px; }
+                  @page { size: A4; margin: 26px 26px; }
+                  body { font-family: Helvetica, Arial, sans-serif; color: %s; font-size: 11px; margin: 0; }
                   table { border-collapse: collapse; }
+                  .lbl { font-size: 8px; font-weight: bold; letter-spacing: 0.5px; color: %s; }
+                  .val { font-size: 13px; font-weight: bold; color: %s; margin-top: 2px; }
+                  .mono { font-family: Courier, monospace; }
                 </style>
                 </head>
                 <body>
 
-                  <table width="100%%" style="background-image: linear-gradient(100deg, %s, %s); border-radius: 14px 14px 0 0;">
+                  <table width="100%%" style="border:1px solid #e5e7eb;border-radius:16px;">
                     <tr>
-                      <td style="padding:20px 24px;width:60%%;">
-                        <div style="color:#ffffff;font-size:23px;font-weight:bold;letter-spacing:0.5px;">SkyBook</div>
-                        <div style="color:#ffffff;font-size:10px;letter-spacing:3px;margin-top:2px;opacity:0.85;">MOBILE BOARDING PASS</div>
-                      </td>
-                      <td style="padding:20px 24px;width:40%%;text-align:right;vertical-align:middle;">
-                        <table style="float:right;">
+                      <!-- Main coupon -->
+                      <td style="width:70%%;vertical-align:top;padding:0;">
+                        <table width="100%%" style="background-color:%s;border-radius:15px 0 0 0;">
                           <tr>
-                            <td style="text-align:right;padding-right:12px;">
-                              <div style="color:#ffffff;font-size:12px;font-weight:bold;">%s</div>
-                              <div style="color:#ffffff;font-size:8px;letter-spacing:1px;opacity:0.8;">OPERATED BY</div>
-                            </td>
-                            <td>
-                              <table style="width:42px;height:42px;background-color:#ffffff;border-radius:21px;">
-                                <tr><td style="text-align:center;vertical-align:middle;height:42px;color:%s;font-size:14px;font-weight:bold;">%s</td></tr>
-                              </table>
+                            <td style="height:56px;vertical-align:middle;padding:0 20px;color:#ffffff;font-size:21px;font-weight:bold;font-style:italic;">SkyBook</td>
+                            <td style="height:56px;vertical-align:middle;text-align:center;color:#ffffff;font-size:13px;font-weight:bold;letter-spacing:3px;">BOARDING PASS</td>
+                            <td style="height:56px;vertical-align:middle;text-align:right;padding:0 20px;">
+                              <span style="background-color:%s;border-radius:5px;padding:4px 11px;font-size:10px;font-weight:bold;letter-spacing:1px;color:#ffffff;">%s</span>
                             </td>
                           </tr>
                         </table>
-                      </td>
-                    </tr>
-                  </table>
-
-                  <table width="100%%" style="background-color:#ffffff;border:1px solid #d7dce1;border-top:none;border-radius:0 0 14px 14px;">
-                    <tr>
-                      <td style="padding:20px 24px 4px;">
 
                         <table width="100%%">
                           <tr>
-                            <td>
-                              <div style="font-size:9px;color:#8b949e;letter-spacing:1px;">PASSENGER</div>
-                              <div style="font-size:17px;font-weight:bold;">%s</div>
+                            <td style="padding:16px 20px 4px;vertical-align:bottom;">
+                              <div class="lbl" style="letter-spacing:1px;">PASSENGER</div>
+                              <div style="font-size:21px;font-weight:bold;letter-spacing:1px;color:%s;">%s</div>
                             </td>
-                            <td style="text-align:right;">
-                              <div style="font-size:9px;color:#8b949e;letter-spacing:1px;">BOOKING REFERENCE</div>
-                              <div style="font-size:19px;font-weight:bold;letter-spacing:3px;color:%s;">%s</div>
+                            <td style="padding:16px 20px 4px;text-align:right;vertical-align:bottom;">
+                              <div class="lbl" style="letter-spacing:1px;">BOOKING REF (PNR)</div>
+                              <div class="mono" style="font-size:18px;font-weight:bold;color:%s;">%s</div>
                             </td>
                           </tr>
                         </table>
 
-                        <table width="100%%" style="margin-top:20px;">
+                        <table width="100%%" style="margin-top:8px;">
                           <tr>
-                            <td style="width:32%%;text-align:center;">
-                              <div style="font-size:30px;font-weight:bold;letter-spacing:1px;color:#1f2328;">%s</div>
-                              <div style="font-size:10px;color:#57606a;margin-top:2px;">%s</div>
-                            </td>
-                            <td style="width:36%%;text-align:center;vertical-align:middle;">
-                              <div style="font-size:10px;color:%s;font-weight:bold;letter-spacing:1px;">FLIGHT %s</div>
-                              <table width="100%%" style="margin-top:8px;">
+                            <td style="padding:0 20px;">
+                              <table width="100%%">
                                 <tr>
-                                  <td style="border-top:2px dashed %s;font-size:0;line-height:0;">&#160;</td>
-                                  <td style="width:0;">
-                                    <div style="width:0;height:0;border-top:6px solid transparent;border-bottom:6px solid transparent;border-left:9px solid %s;"></div>
+                                  <td style="width:45%%;background-color:%s;border-radius:8px;padding:9px 13px;">
+                                    <div class="mono" style="font-size:21px;font-weight:bold;color:%s;">%s</div>
+                                    <div style="font-size:10px;color:#334155;margin-top:3px;">%s%s</div>
+                                  </td>
+                                  <td style="width:10%%;text-align:center;">
+                                    <div style="width:0;height:0;border-top:6px solid transparent;border-bottom:6px solid transparent;border-left:10px solid %s;margin:0 auto;"></div>
+                                  </td>
+                                  <td style="width:45%%;background-color:%s;border-radius:8px;padding:9px 13px;">
+                                    <div class="mono" style="font-size:21px;font-weight:bold;color:%s;">%s</div>
+                                    <div style="font-size:10px;color:#334155;margin-top:3px;">%s%s</div>
                                   </td>
                                 </tr>
                               </table>
                             </td>
-                            <td style="width:32%%;text-align:center;">
-                              <div style="font-size:30px;font-weight:bold;letter-spacing:1px;color:#1f2328;">%s</div>
-                              <div style="font-size:10px;color:#57606a;margin-top:2px;">%s</div>
-                            </td>
                           </tr>
                         </table>
 
-                        <table width="100%%" style="margin-top:20px;">
+                        <table width="100%%" style="margin-top:14px;">
                           <tr>
-                            <td style="width:20%%;padding:0 4px 0 0;">
-                              <table width="100%%" style="background-color:#f6f8fa;border-radius:8px;">
-                                <tr><td style="height:3px;background-color:%s;border-radius:8px 8px 0 0;"></td></tr>
-                                <tr><td style="padding:9px 10px;">
-                                  <div style="font-size:8px;color:#8b949e;letter-spacing:1px;">SEAT</div>
-                                  <div style="font-size:16px;font-weight:bold;margin-top:2px;">%s</div>
-                                </td></tr>
-                              </table>
-                            </td>
-                            <td style="width:20%%;padding:0 4px;">
-                              <table width="100%%" style="background-color:#f6f8fa;border-radius:8px;">
-                                <tr><td style="height:3px;background-color:%s;border-radius:8px 8px 0 0;"></td></tr>
-                                <tr><td style="padding:9px 10px;">
-                                  <div style="font-size:8px;color:#8b949e;letter-spacing:1px;">GROUP</div>
-                                  <div style="font-size:16px;font-weight:bold;margin-top:2px;">%s</div>
-                                </td></tr>
-                              </table>
-                            </td>
-                            <td style="width:20%%;padding:0 4px;">
-                              <table width="100%%" style="background-color:#f6f8fa;border-radius:8px;">
-                                <tr><td style="height:3px;background-color:%s;border-radius:8px 8px 0 0;"></td></tr>
-                                <tr><td style="padding:9px 10px;">
-                                  <div style="font-size:8px;color:#8b949e;letter-spacing:1px;">GATE</div>
-                                  <div style="font-size:16px;font-weight:bold;margin-top:2px;">%s</div>
-                                </td></tr>
-                              </table>
-                            </td>
-                            <td style="width:40%%;padding:0 0 0 4px;">
-                              <table width="100%%" style="background-color:#f6f8fa;border-radius:8px;">
-                                <tr><td style="height:3px;background-color:%s;border-radius:8px 8px 0 0;"></td></tr>
-                                <tr><td style="padding:9px 10px;">
-                                  <div style="font-size:8px;color:#8b949e;letter-spacing:1px;">BOARDING TIME</div>
-                                  <div style="font-size:16px;font-weight:bold;margin-top:2px;">%s</div>
-                                </td></tr>
+                            <td style="padding:0 20px;">
+                              <table width="100%%">
+                                <tr>
+                                  <td style="width:25%%;"><div class="lbl">FLIGHT</div><div class="val mono">%s</div></td>
+                                  <td style="width:25%%;"><div class="lbl">DATE</div><div class="val">%s</div></td>
+                                  <td style="width:25%%;"><div class="lbl">DEPARTS</div><div class="val">%s</div></td>
+                                  <td style="width:25%%;"><div class="lbl">BOARDING</div><div class="val" style="color:%s;">%s</div></td>
+                                </tr>
+                                <tr><td colspan="4" style="height:13px;"></td></tr>
+                                <tr>
+                                  <td><div class="lbl">TERMINAL</div><div class="val">%s</div></td>
+                                  <td><div class="lbl">GATE</div><div class="val">%s</div></td>
+                                  <td><div class="lbl">SEAT</div><div class="val mono">%s</div></td>
+                                  <td><div class="lbl">CABIN</div><div class="val">%s</div></td>
+                                </tr>
+                                <tr><td colspan="4" style="height:13px;"></td></tr>
+                                <tr>
+                                  <td colspan="4"><div class="lbl">BOARDING GROUP</div><div class="val">%s</div></td>
+                                </tr>
                               </table>
                             </td>
                           </tr>
                         </table>
 
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:18px 0;">
-                        <table width="100%%">
+                        <table width="100%%" style="margin-top:14px;border-top:1px solid #eef1f5;">
                           <tr>
-                            <td style="width:6%%;"></td>
-                            <td style="border-top:2px dashed #d7dce1;font-size:0;line-height:0;">&#160;</td>
-                            <td style="width:6%%;"></td>
+                            <td style="padding:10px 20px;" class="mono">
+                              <span style="color:%s;font-weight:bold;font-size:10px;">NOTICE:</span>
+                              <span style="font-size:10px;color:#64748b;">Please arrive at the boarding gate by %s, 30 minutes before boarding begins at %s. The gate closes before departure and late passengers may be offloaded.</span>
+                            </td>
+                            <td style="padding:10px 20px;text-align:right;white-space:nowrap;vertical-align:top;" class="mono">
+                              <span style="font-size:10px;color:#64748b;">Issued %s</span>
+                            </td>
                           </tr>
                         </table>
                       </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:0 24px 22px;">
+
+                      <!-- Perforated tear-off stub -->
+                      <td style="width:30%%;vertical-align:top;padding:0;border-left:2px dashed #cbd5e1;">
+                        <table width="100%%" style="background-color:%s;border-radius:0 15px 0 0;">
+                          <tr>
+                            <td style="height:56px;vertical-align:middle;text-align:center;color:#ffffff;font-size:12px;font-weight:bold;letter-spacing:1px;">&#183;&#183;&#183; BOARDING PASS &#183;&#183;&#183;</td>
+                          </tr>
+                        </table>
                         <table width="100%%">
                           <tr>
-                            <td style="width:56%%;vertical-align:middle;">
-                              <div style="font-size:8px;color:#8b949e;letter-spacing:1px;margin-bottom:8px;">BOARDING PASS NO. %s</div>
-                              <table>%s</table>
-                            </td>
-                            <td style="width:6%%;"></td>
-                            <td style="width:38%%;text-align:center;vertical-align:top;padding:10px 12px;background-color:#f6f8fa;border-radius:8px;">
-                              %s
-                              <div style="font-size:8px;color:#57606a;margin-top:6px;">Scan at the gate</div>
+                            <td style="padding:14px 16px;">
+                              <div style="font-size:7px;font-weight:bold;color:%s;letter-spacing:0.5px;">PASSENGER</div>
+                              <div style="font-size:15px;font-weight:bold;color:%s;margin-bottom:10px;">%s</div>
+
+                              <table width="100%%" style="margin-bottom:10px;">
+                                <tr>
+                                  <td style="vertical-align:middle;">
+                                    <div style="font-size:7px;font-weight:bold;color:%s;">FLIGHT</div>
+                                    <div class="mono" style="font-size:12px;font-weight:bold;color:%s;">%s</div>
+                                  </td>
+                                  <td style="text-align:right;vertical-align:middle;">
+                                    <table style="float:right;"><tr>
+                                      <td class="mono" style="font-size:17px;font-weight:bold;color:%s;">%s</td>
+                                      <td style="padding:0 4px;"><div style="width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:8px solid %s;"></div></td>
+                                      <td class="mono" style="font-size:17px;font-weight:bold;color:%s;">%s</td>
+                                    </tr></table>
+                                  </td>
+                                </tr>
+                              </table>
+
+                              <table width="100%%" style="margin-bottom:12px;">
+                                <tr>
+                                  <td><div style="font-size:7px;font-weight:bold;color:%s;">SEAT</div><div class="mono" style="font-size:12px;font-weight:bold;color:%s;">%s</div></td>
+                                  <td><div style="font-size:7px;font-weight:bold;color:%s;">GRP</div><div style="font-size:12px;font-weight:bold;color:%s;">%s</div></td>
+                                  <td><div style="font-size:7px;font-weight:bold;color:%s;">BOARD</div><div style="font-size:12px;font-weight:bold;color:%s;">%s</div></td>
+                                </tr>
+                              </table>
+
+                              <div style="text-align:center;">%s</div>
+                              <div class="mono" style="text-align:center;font-size:9px;letter-spacing:1px;color:#334155;margin-top:6px;">%s</div>
+                              <div style="text-align:center;font-size:9px;color:#64748b;margin-top:2px;">PNR <b>%s</b></div>
                             </td>
                           </tr>
                         </table>
@@ -189,72 +204,38 @@ public class BoardingPassPdfTemplate {
                     </tr>
                   </table>
 
-                  <div style="margin-top:14px;padding:12px 16px;background-color:#f6f8fa;border:1px solid #e5e7eb;border-radius:8px;font-size:9px;color:#57606a;line-height:1.6;">
-                    <div style="font-weight:bold;color:#1f2328;font-size:10px;margin-bottom:4px;">BOARDING NOTES</div>
-                    <div>- Arrive at the gate at least 20 minutes before boarding time.</div>
-                    <div>- Carry a valid photo ID matching the name on this pass.</div>
-                    <div>- This pass becomes invalid once used or if the flight is cancelled.</div>
-                  </div>
-
-                  <div style="margin-top:12px;font-size:9px;color:#8b949e;text-align:center;">
+                  <div style="margin-top:12px;font-size:9px;color:%s;text-align:center;">
                     This is a computer-generated boarding pass and does not require a signature.
                   </div>
 
                 </body>
                 </html>
                 """.formatted(
-                brand.primaryColor(), brand.secondaryColor(),
-                escape(brand.displayName()), brand.primaryColor(), escape(brand.code()),
-                escape(nvl(event.getPassengerName(), "-")),
-                brand.primaryColor(), escape(nvl(event.getBookingReference(), "-")),
-                escape(nvl(event.getOriginAirportCode(), "-")),
-                escape(nvl(originCity, "")),
-                brand.primaryColor(), escape(nvl(event.getFlightNumber(), "-")),
-                brand.secondaryColor(),
-                brand.secondaryColor(),
-                escape(nvl(event.getDestinationAirportCode(), "-")),
-                escape(nvl(destinationCity, "")),
-                brand.primaryColor(), escape(nvl(event.getSeatNumber(), "-")),
-                brand.secondaryColor(), escape(nvl(event.getBoardingGroup(), "-")),
-                brand.primaryColor(), escape(nvl(event.getGate(), "TBA")),
-                brand.secondaryColor(),
-                escape(event.getBoardingTime() != null ? event.getBoardingTime().format(DISPLAY_TIME) : "-"),
-                escape(nvl(event.getBoardingPassNumber(), "-")),
-                barcodeCells(nvl(event.getBoardingPassNumber(), event.getBookingReference())),
-                qrDataUri != null
-                        ? "<img src=\"" + qrDataUri + "\" width=\"104\" height=\"104\" alt=\"Boarding pass QR code\"/>"
-                        : "");
-    }
-
-    /**
-     * Purely decorative faux-barcode (the QR code carries the real payload) -
-     * a row of <td> bars with deterministic pseudo-random widths derived
-     * from the boarding pass number, so the same pass always renders the
-     * same "barcode". Built from plain table cells rather than a CSS
-     * repeating-gradient since openhtmltopdf's support for
-     * repeating-linear-gradient is unreliable, while table/background-color
-     * is guaranteed to render.
-     */
-    private static String barcodeCells(String seed) {
-        StringBuilder cells = new StringBuilder("<tr>");
-        long state = 0;
-        for (int i = 0; i < seed.length(); i++) {
-            state = state * 31 + seed.charAt(i);
-        }
-        if (state < 0) {
-            state = -state;
-        }
-        for (int i = 0; i < 40; i++) {
-            state = (state * 1103515245L + 12345L) & 0x7FFFFFFFL;
-            int width = 1 + (int) (state % 3);
-            boolean bar = (state % 5) != 0;
-            cells.append("<td style=\"width:").append(width)
-                    .append("px;height:34px;background-color:")
-                    .append(bar ? "#1f2328" : "#ffffff")
-                    .append(";\"></td>");
-        }
-        cells.append("</tr>");
-        return cells.toString();
+                INK, LABEL, INK,
+                // main header
+                RED, BADGE_RED, escape(cabin.toUpperCase()),
+                // passenger + pnr
+                INK, escape(passenger), RED, escape(pnr),
+                // airports (terminal lines are pre-escaped fragments)
+                BLUE, INK, escape(fromCode), escape(BoardingDisplay.airportLabel(fromCode)), fromTerminalLine,
+                RED,
+                BLUE, INK, escape(toCode), escape(BoardingDisplay.airportLabel(toCode)), toTerminalLine,
+                // grid row 1
+                escape(nvl(event.getFlightNumber(), "-")), escape(departDate), escape(departTime), RED, escape(boardTime),
+                // grid row 2 + boarding group
+                escape(depTerminal), escape(gate), escape(nvl(event.getSeatNumber(), "-")), escape(cabin), escape(group),
+                // notice + issued
+                RED, escape(gateBy), escape(boardTime), escape(issued),
+                // stub
+                RED,
+                LABEL, INK, escape(passenger),
+                LABEL, INK, escape(nvl(event.getFlightNumber(), "-")),
+                INK, escape(fromCode), RED, INK, escape(toCode),
+                LABEL, INK, escape(nvl(event.getSeatNumber(), "-")),
+                LABEL, INK, escape(group),
+                LABEL, RED, escape(boardTime),
+                qrImg, escape(passNumber), escape(pnr),
+                LABEL);
     }
 
     private static String nvl(String value, String fallback) {

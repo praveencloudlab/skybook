@@ -22,25 +22,31 @@ public class TicketPdfTemplate {
 
     public String render(BookingEvent event, byte[] qrPng) {
 
+        // Multi-segment: group traveller rows per leg (a row here is one
+        // COUPON of the traveller's ticket - ROUND_TRIP_MODULE.md).
         StringBuilder passengerRows = new StringBuilder();
-        if (event.getPassengers() != null) {
-            for (BookingEventPassenger p : event.getPassengers()) {
+        if (event.getSegments() != null && event.getSegments().size() > 1) {
+            for (var segment : event.getSegments()) {
                 passengerRows.append("""
                         <tr>
-                          <td style="padding:8px 10px;border-top:1px solid #d7dce1;">%s</td>
-                          <td style="padding:8px 10px;border-top:1px solid #d7dce1;text-align:center;">%s</td>
-                          <td style="padding:8px 10px;border-top:1px solid #d7dce1;">%s</td>
-                          <td style="padding:8px 10px;border-top:1px solid #d7dce1;">%s</td>
-                          <td style="padding:8px 10px;border-top:1px solid #d7dce1;">%s</td>
-                          <td style="padding:8px 10px;border-top:1px solid #d7dce1;text-align:right;">%s</td>
+                          <td colspan="7" style="padding:7px 10px;border-top:1px solid #d7dce1;background-color:#eef2f7;font-weight:bold;color:#0b3d91;">
+                            Coupon %s &#8226; %s &#8594; %s (%s)
+                          </td>
                         </tr>
                         """.formatted(
-                        escape(p.getName()),
-                        escape(nvl(p.getSeatNumber(), "-")),
-                        escape(pretty(p.getTravelClass())),
-                        escape(pretty(p.getFareType())),
-                        escape(pretty(nvl(p.getCheckInStatus(), "NOT_OPEN"))),
-                        money(p.getFare(), event.getCurrency())));
+                        segment.getSegmentIndex() != null ? segment.getSegmentIndex() + 1 : 1,
+                        escape(nvl(segment.getOriginAirportCode(), "?")),
+                        escape(nvl(segment.getDestinationAirportCode(), "?")),
+                        escape(segmentLabel(segment.getSegmentIndex()))));
+                if (segment.getPassengers() != null) {
+                    for (BookingEventPassenger p : segment.getPassengers()) {
+                        passengerRows.append(passengerRow(p, event.getCurrency()));
+                    }
+                }
+            }
+        } else if (event.getPassengers() != null) {
+            for (BookingEventPassenger p : event.getPassengers()) {
+                passengerRows.append(passengerRow(p, event.getCurrency()));
             }
         }
 
@@ -80,29 +86,13 @@ public class TicketPdfTemplate {
                     </tr>
                   </table>
 
-                  <table width="100%%" style="margin-top:14px;border:1px solid #d7dce1;">
-                    <tr>
-                      <td style="padding:16px 18px;width:32%%;text-align:center;">
-                        <div style="font-size:24px;font-weight:bold;letter-spacing:1px;">%s</div>
-                        <div style="font-size:10px;color:#57606a;">%s</div>
-                        <div style="font-size:10px;color:#57606a;margin-top:6px;">Departs<br/>%s</div>
-                      </td>
-                      <td style="padding:16px 10px;width:36%%;text-align:center;color:#0b3d91;font-size:12px;">
-                        Flight %s
-                        <div style="font-size:16px;margin-top:4px;">&gt;&gt;&gt;&gt;&gt;&gt;</div>
-                      </td>
-                      <td style="padding:16px 18px;width:32%%;text-align:center;">
-                        <div style="font-size:24px;font-weight:bold;letter-spacing:1px;">%s</div>
-                        <div style="font-size:10px;color:#57606a;">%s</div>
-                        <div style="font-size:10px;color:#57606a;margin-top:6px;">Arrives<br/>%s</div>
-                      </td>
-                    </tr>
-                  </table>
+                  %s
 
                   <div style="margin-top:16px;font-size:11px;font-weight:bold;color:#57606a;text-transform:uppercase;letter-spacing:1px;">Travellers</div>
                   <table width="100%%" style="margin-top:6px;border:1px solid #d7dce1;">
                     <tr style="background-color:#f6f8fa;color:#57606a;font-size:9px;">
                       <td style="padding:8px 10px;">NAME</td>
+                      <td style="padding:8px 10px;">E-TICKET</td>
                       <td style="padding:8px 10px;text-align:center;">SEAT</td>
                       <td style="padding:8px 10px;">CLASS</td>
                       <td style="padding:8px 10px;">FARE TYPE</td>
@@ -141,13 +131,7 @@ public class TicketPdfTemplate {
                 """.formatted(
                 escape(nvl(event.getBookingReference(), "-")),
                 escape(nvl(event.getBookingDate(), "-")),
-                escape(nvl(event.getOriginAirportCode(), "-")),
-                escape(nvl(AirportCityLookup.cityFor(event.getOriginAirportCode()), "")),
-                escape(nvl(event.getDepartureTime(), "-")),
-                escape(nvl(event.getFlightNumber(), "-")),
-                escape(nvl(event.getDestinationAirportCode(), "-")),
-                escape(nvl(AirportCityLookup.cityFor(event.getDestinationAirportCode()), "")),
-                escape(nvl(event.getArrivalTime(), "-")),
+                routeTables(event),
                 passengerRows,
                 money(event.getTotalFare(), event.getCurrency()),
                 "PAID".equals(event.getPaymentStatus()) ? "#1a7f37" : "#b45309",
@@ -157,9 +141,111 @@ public class TicketPdfTemplate {
                         : "");
     }
 
+    /** One route table per segment when the event carries them, else the legacy single table. */
+    private static String routeTables(BookingEvent event) {
+        if (event.getSegments() != null && !event.getSegments().isEmpty()) {
+            StringBuilder tables = new StringBuilder();
+            for (var segment : event.getSegments()) {
+                String label = event.getSegments().size() > 1
+                        ? segmentLabel(segment.getSegmentIndex()) + " - Flight "
+                        : "Flight ";
+                tables.append(routeTable(
+                        segment.getOriginAirportCode(), segment.getDepartureTime(),
+                        label + nvl(segment.getFlightNumber(), "-"),
+                        segment.getDestinationAirportCode(), segment.getArrivalTime(),
+                        segment.getDepartureTerminal(), segment.getArrivalTerminal()));
+            }
+            return tables.toString();
+        }
+        return routeTable(event.getOriginAirportCode(), event.getDepartureTime(),
+                "Flight " + nvl(event.getFlightNumber(), "-"),
+                event.getDestinationAirportCode(), event.getArrivalTime(), null, null);
+    }
+
+    private static String routeTable(String origin, String departureTime,
+                                     String flightLabel, String destination, String arrivalTime,
+                                     String departureTerminal, String arrivalTerminal) {
+        // Real terminals from the event (flight-service TerminalPolicy);
+        // old events carry none and print the city alone.
+        String originCity = nvl(AirportCityLookup.cityFor(origin), "");
+        String destinationCity = nvl(AirportCityLookup.cityFor(destination), "");
+        if (departureTerminal != null && !departureTerminal.isBlank()) {
+            originCity = originCity + " - Terminal " + departureTerminal;
+        }
+        if (arrivalTerminal != null && !arrivalTerminal.isBlank()) {
+            destinationCity = destinationCity + " - Terminal " + arrivalTerminal;
+        }
+        return """
+                  <table width="100%%" style="margin-top:14px;border:1px solid #d7dce1;">
+                    <tr>
+                      <td style="padding:16px 18px;width:32%%;text-align:center;">
+                        <div style="font-size:24px;font-weight:bold;letter-spacing:1px;">%s</div>
+                        <div style="font-size:10px;color:#57606a;">%s</div>
+                        <div style="font-size:10px;color:#57606a;margin-top:6px;">Departs<br/>%s</div>
+                      </td>
+                      <td style="padding:16px 10px;width:36%%;text-align:center;color:#0b3d91;font-size:12px;">
+                        %s
+                        <div style="font-size:16px;margin-top:4px;">&gt;&gt;&gt;&gt;&gt;&gt;</div>
+                      </td>
+                      <td style="padding:16px 18px;width:32%%;text-align:center;">
+                        <div style="font-size:24px;font-weight:bold;letter-spacing:1px;">%s</div>
+                        <div style="font-size:10px;color:#57606a;">%s</div>
+                        <div style="font-size:10px;color:#57606a;margin-top:6px;">Arrives<br/>%s</div>
+                      </td>
+                    </tr>
+                  </table>
+                """.formatted(
+                escape(nvl(origin, "-")),
+                escape(originCity),
+                escape(nvl(departureTime, "-")),
+                escape(flightLabel),
+                escape(nvl(destination, "-")),
+                escape(destinationCity),
+                escape(nvl(arrivalTime, "-")));
+    }
+
+    /** Displayed 125-XXXXXXXXXX from the raw 13 digits; "-" pre-ticketing. */
+    private static String prettyTicket(String ticketNumber) {
+        if (ticketNumber == null || ticketNumber.isBlank()) {
+            return "-";
+        }
+        return ticketNumber.length() > 3
+                ? ticketNumber.substring(0, 3) + "-" + ticketNumber.substring(3)
+                : ticketNumber;
+    }
+
+    private static String segmentLabel(Integer segmentIndex) {
+        if (segmentIndex == null || segmentIndex == 0) {
+            return "Outbound";
+        }
+        return segmentIndex == 1 ? "Return" : "Leg " + (segmentIndex + 1);
+    }
+
+    private static String passengerRow(BookingEventPassenger p, String currency) {
+        return """
+                <tr>
+                  <td style="padding:8px 10px;border-top:1px solid #d7dce1;">%s</td>
+                  <td style="padding:8px 10px;border-top:1px solid #d7dce1;">%s</td>
+                  <td style="padding:8px 10px;border-top:1px solid #d7dce1;text-align:center;">%s</td>
+                  <td style="padding:8px 10px;border-top:1px solid #d7dce1;">%s</td>
+                  <td style="padding:8px 10px;border-top:1px solid #d7dce1;">%s</td>
+                  <td style="padding:8px 10px;border-top:1px solid #d7dce1;">%s</td>
+                  <td style="padding:8px 10px;border-top:1px solid #d7dce1;text-align:right;">%s</td>
+                </tr>
+                """.formatted(
+                escape(p.getName()),
+                escape(prettyTicket(p.getTicketNumber())),
+                escape(nvl(p.getSeatNumber(), "-")),
+                escape(pretty(p.getTravelClass())),
+                escape(pretty(p.getFareType())),
+                escape(pretty(nvl(p.getCheckInStatus(), "NOT_OPEN"))),
+                money(p.getFare(), currency));
+    }
+
     private static String money(BigDecimal amount, String currency) {
         if (amount == null) return "-";
-        return (currency != null ? currency + " " : "") + amount;
+        String symbol = "GBP".equals(currency) ? "&#163;" : "USD".equals(currency) ? "US$" : (currency != null ? currency + " " : "");
+        return symbol + amount;
     }
 
     private static String pretty(String enumName) {

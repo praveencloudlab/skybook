@@ -63,6 +63,8 @@ public class CheckInServiceImpl implements CheckInService {
                 .originAirportCode(request.originAirportCode())
                 .destinationAirportCode(request.destinationAirportCode())
                 .departureTime(request.departureTime())
+                .departureTerminal(request.departureTerminal())
+                .arrivalTerminal(request.arrivalTerminal())
                 .passengerName(request.passengerName())
                 .contactEmail(request.contactEmail())
                 .seatNumber(request.seatNumber())
@@ -87,13 +89,24 @@ public class CheckInServiceImpl implements CheckInService {
     @Override
     @Transactional(readOnly = true)
     public CheckInResponse getById(Long id) {
-        return CheckInMapper.toResponse(findCheckInOrThrow(id));
+        return toResponseWithLiveStatus(findCheckInOrThrow(id));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<CheckInResponse> getByBookingId(Long bookingId) {
-        return checkInRepository.findByBookingId(bookingId).stream().map(CheckInMapper::toResponse).toList();
+        return checkInRepository.findByBookingId(bookingId).stream()
+                .map(this::toResponseWithLiveStatus).toList();
+    }
+
+    /**
+     * Read-path mapping that shows the status reconciled against the clock, since
+     * there is no scheduler advancing NOT_OPEN -> OPEN -> NO_SHOW. Display only -
+     * the stored row is never changed here.
+     */
+    private CheckInResponse toResponseWithLiveStatus(CheckIn checkIn) {
+        return CheckInMapper.toResponse(checkIn, validator.effectiveStatus(checkIn,
+                com.skybook.praveen.common.time.AirportTimeZones.nowAt(checkIn.getOriginAirportCode())));
     }
 
     @Override
@@ -131,7 +144,10 @@ public class CheckInServiceImpl implements CheckInService {
                     "USER", "API", null, "Check-in window opened implicitly");
         }
 
-        validator.validateCheckInWindowOpen(checkIn, LocalDateTime.now());
+        // The window is anchored to the DEPARTURE AIRPORT's clock - a JFK
+        // check-in must not open/close on London time (AirportTimeZones).
+        validator.validateCheckInWindowOpen(checkIn,
+                com.skybook.praveen.common.time.AirportTimeZones.nowAt(checkIn.getOriginAirportCode()));
         validator.validateDocumentVerified(checkIn);
 
         stateMachine.transition(checkIn, CheckInStatus.CHECKED_IN, CheckInHistoryType.CHECKED_IN,
@@ -203,9 +219,37 @@ public class CheckInServiceImpl implements CheckInService {
 
     @Override
     @Transactional
+    public java.util.Optional<CheckInResponse> cancelForBookingPassenger(Long bookingPassengerId, String reason) {
+
+        return checkInRepository.findByBookingPassengerId(bookingPassengerId)
+                .filter(checkIn -> stateMachine.canTransition(checkIn.getStatus(), CheckInStatus.CANCELLED))
+                .map(checkIn -> {
+                    stateMachine.transition(checkIn, CheckInStatus.CANCELLED, CheckInHistoryType.CANCELLED,
+                            "KAFKA", "BOOKING_EVENT", null, reason);
+                    checkInRepository.save(checkIn);
+                    log.info("Cancelled check-in {} for booking passenger {} ({})",
+                            checkIn.getId(), bookingPassengerId, reason);
+                    return CheckInMapper.toResponse(checkIn);
+                });
+    }
+
+    @Override
+    @Transactional
     public List<CheckInResponse> sweepNoShows(LocalDateTime departureCutoff) {
 
-        List<CheckIn> overdue = checkInRepository.findByStatusInAndDepartureTimeBefore(SWEEPABLE, departureCutoff);
+        // The cutoff arrives as server-now + gate-close offset. Departures are
+        // AIRPORT-LOCAL, so recover the offset and judge each row by its own
+        // airport's clock: a JFK passenger must not be no-showed on London
+        // time (hours early), and a SYD one must not be missed for hours.
+        // The query over-fetches by the widest possible zone spread (14h) and
+        // the per-row filter decides.
+        long offsetMinutes = java.time.Duration.between(LocalDateTime.now(), departureCutoff).toMinutes();
+        List<CheckIn> overdue = checkInRepository
+                .findByStatusInAndDepartureTimeBefore(SWEEPABLE, departureCutoff.plusHours(14)).stream()
+                .filter(checkIn -> checkIn.getDepartureTime() != null && checkIn.getDepartureTime().isBefore(
+                        com.skybook.praveen.common.time.AirportTimeZones.nowAt(checkIn.getOriginAirportCode())
+                                .plusMinutes(offsetMinutes)))
+                .toList();
 
         for (CheckIn checkIn : overdue) {
             stateMachine.transition(checkIn, CheckInStatus.NO_SHOW, CheckInHistoryType.NO_SHOW,

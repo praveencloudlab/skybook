@@ -1,0 +1,161 @@
+import { useCallback, useMemo } from 'react';
+import { bookingsApi, type Booking } from '../../api/bookings';
+import type { Payment } from '../../api/payments';
+import { Alert } from '../../components/Alert';
+import { Button } from '../../components/Button';
+import { money } from '../../lib/format';
+import { usePolledResource } from '../../lib/usePolledResource';
+
+/**
+ * Confirmation (FRONTEND_MODULE.md §5 screen 7, §3).
+ *
+ * <p>The payment is captured, but the booking is not CONFIRMED yet: booking
+ * -service learns that by consuming the payment event. This screen is where that
+ * wait is made honest.
+ *
+ * <p>The PNR is shown <b>immediately and prominently</b>, before the confirmed
+ * status arrives. It exists the moment the booking does, it is what a passenger
+ * needs to find the booking again, and withholding it behind a spinner would be
+ * the worst possible moment to make someone feel their money went nowhere.
+ */
+export function ConfirmationPage({
+  booking,
+  payment,
+  onDone,
+}: {
+  booking: Booking;
+  payment: Payment;
+  onDone: () => void;
+}) {
+  const fetchBooking = useCallback(
+    (signal: AbortSignal) => bookingsApi.byId(booking.id, signal),
+    [booking.id],
+  );
+
+  const isConfirmed = useMemo(
+    () => (value: Booking) => value.bookingStatus === 'CONFIRMED',
+    [],
+  );
+
+  const confirmation = usePolledResource<Booking>({
+    fetch: fetchBooking,
+    isReady: isConfirmed,
+    enabled: true,
+  });
+
+  const current = confirmation.data ?? booking;
+
+  return (
+    <main className="mx-auto max-w-2xl px-6 py-12">
+      <div className="card rise-in p-8 shadow-[var(--shadow-lift)]">
+        <span className="grid h-14 w-14 place-items-center rounded-full bg-emerald-50 ring-8 ring-emerald-50/60">
+          <svg viewBox="0 0 24 24" className="h-7 w-7 fill-emerald-600" aria-hidden="true">
+            <path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" />
+          </svg>
+        </span>
+        <p className="mt-4 text-sm font-semibold text-emerald-700">Payment received</p>
+
+        <h1 className="display mt-1 text-3xl text-slate-900">
+          Your booking reference
+        </h1>
+
+        {/* The PNR, large and copyable. It is the one thing worth remembering. */}
+        <p className="tabular mt-4 inline-block rounded-2xl bg-brand-50 px-5 py-3 font-mono text-3xl font-bold tracking-[0.2em] text-brand-700 ring-1 ring-inset ring-brand-100">
+          {booking.bookingReference}
+        </p>
+      {(current.segments?.length ?? 0) > 1 ? (
+        <p className="tabular mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 ring-1 ring-inset ring-emerald-200">
+          Round trip on one booking — outbound and return both travel under this reference.
+        </p>
+      ) : null}
+
+        <dl className="mt-6 space-y-2 text-sm">
+          <div className="flex justify-between">
+            <dt className="text-slate-600">Paid</dt>
+            <dd className="tabular font-medium text-slate-900">
+              {money(payment.capturedAmount ?? payment.amount, payment.currency)}
+            </dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-slate-600">Payment reference</dt>
+            <dd className="font-mono text-slate-900">{payment.paymentReference}</dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-slate-600">Seat</dt>
+            <dd className="text-slate-900">
+              {current.passengers[0]?.seatNumber ?? 'Assigned at check-in'}
+            </dd>
+          </div>
+          <div className="flex justify-between">
+            <dt className="text-slate-600">Status</dt>
+            <dd className="font-medium text-slate-900">{current.bookingStatus}</dd>
+          </div>
+        </dl>
+
+        {/* E-tickets appear once the booking confirms (issued on capture). */}
+        {(current.tickets?.length ?? 0) > 0 ? (
+          <div className="mt-5 rounded-xl bg-slate-50 px-4 py-3 text-sm ring-1 ring-inset ring-slate-100">
+            <p className="mb-1 font-semibold text-slate-700">E-ticket{current.tickets!.length > 1 ? 's' : ''}</p>
+            {current.tickets!.map((ticket) => {
+              const owner = current.passengers.find((p) => p.passengerId === ticket.passengerId);
+              return (
+                <p key={ticket.id} className="flex justify-between text-slate-900">
+                  <span>{owner ? `${owner.firstName} ${owner.lastName}` : 'Traveller'}</span>
+                  <span className="tabular font-mono">
+                    {ticket.ticketNumber.slice(0, 3)}-{ticket.ticketNumber.slice(3)}
+                  </span>
+                </p>
+              );
+            })}
+          </div>
+        ) : null}
+
+        <div className="mt-6">
+          {confirmation.status === 'working' ? (
+            <Alert tone="info">
+              Confirming your booking — this usually takes a few seconds.
+            </Alert>
+          ) : null}
+
+          {confirmation.status === 'ready' ? (
+            <Alert tone="info">Confirmed. A confirmation email is on its way.</Alert>
+          ) : null}
+
+          {/*
+            Timed out is NOT failed, and must not read like it. The payment
+            succeeded and the booking exists; only our wait ran out. Saying
+            "something went wrong" here would frighten someone whose booking is
+            perfectly fine.
+          */}
+          {confirmation.status === 'timedOut' ? (
+            <div className="space-y-2">
+              <Alert tone="warning">
+                Your payment went through and your booking is saved. It is taking longer than usual
+                to confirm — this does not affect your seat.
+              </Alert>
+              <Button variant="secondary" onClick={confirmation.start}>
+                Check again
+              </Button>
+            </div>
+          ) : null}
+
+          {confirmation.status === 'failed' ? (
+            <div className="space-y-2">
+              <Alert tone="warning">
+                We could not check the status just now. Your payment went through and your booking is
+                saved under {booking.bookingReference}.
+              </Alert>
+              <Button variant="secondary" onClick={confirmation.start}>
+                Try again
+              </Button>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-8 flex justify-end">
+          <Button onClick={onDone}>Done</Button>
+        </div>
+      </div>
+    </main>
+  );
+}

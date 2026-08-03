@@ -68,7 +68,7 @@ class CheckInFacadeTest {
     private BoardingPassResponse boardingPass(String number) {
         LocalDateTime now = LocalDateTime.now();
         return new BoardingPassResponse(20L, 1L, number, "token", "Test Passenger", "SBTEST",
-                "BA178", "LHR", "JFK", "12B", null, null, "3", BoardingPassStatus.ACTIVE, now, null, null);
+                "BA178", "LHR", "JFK", "12B", "5", "1", null, null, "3", BoardingPassStatus.ACTIVE, now, null, null);
     }
 
     @Test

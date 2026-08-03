@@ -88,6 +88,14 @@ public class CheckIn extends Auditable {
     @Column(name = "departure_time", updatable = false)
     private LocalDateTime departureTime;
 
+    // Real terminal snapshot from the booking event (flight-service
+    // TerminalPolicy). Null on check-ins created before the terminals feature.
+    @Column(name = "departure_terminal", length = 4, updatable = false)
+    private String departureTerminal;
+
+    @Column(name = "arrival_terminal", length = 4, updatable = false)
+    private String arrivalTerminal;
+
     // Passenger snapshot from BookingEventPassenger.
     @Column(name = "passenger_name", nullable = false, updatable = false, length = 200)
     private String passengerName;

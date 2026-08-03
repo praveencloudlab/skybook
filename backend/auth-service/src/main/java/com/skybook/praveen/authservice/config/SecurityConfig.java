@@ -89,7 +89,20 @@ public class SecurityConfig {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
+                        // logout is public on purpose: it only expires a cookie, and
+                        // a user whose token has already lapsed must still be able
+                        // to sign out rather than being stuck with a stale cookie.
+                        // (/me is deliberately NOT here - it must require a valid
+                        // token, since answering "who are you" to an anonymous
+                        // caller is the whole thing it must not do.)
+                        .requestMatchers("/api/auth/register", "/api/auth/login", "/api/auth/logout")
+                        .permitAll()
+                        // Password reset is pre-authentication by definition: the
+                        // caller cannot sign in, which is the whole reason they are
+                        // here. forgot-password never confirms whether an account
+                        // exists; reset-password succeeds only against a valid token.
+                        .requestMatchers("/api/auth/forgot-password", "/api/auth/reset-password")
+                        .permitAll()
                         .requestMatchers("/actuator/**", "/livez", "/readyz").permitAll()
                         .anyRequest().authenticated()
                 )

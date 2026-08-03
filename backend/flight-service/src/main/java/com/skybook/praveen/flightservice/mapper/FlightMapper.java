@@ -12,13 +12,21 @@ public final class FlightMapper {
     }
 
     public static Flight toEntity(CreateFlightRequest request) {
+        String airline = request.airlineCode().toUpperCase();
+        String origin = request.originAirportCode().toUpperCase();
+        String destination = request.destinationAirportCode().toUpperCase();
         return Flight.builder()
                 .flightNumber(request.flightNumber().toUpperCase())
-                .airlineCode(request.airlineCode().toUpperCase())
-                .originAirportCode(request.originAirportCode().toUpperCase())
-                .destinationAirportCode(request.destinationAirportCode().toUpperCase())
+                .airlineCode(airline)
+                .originAirportCode(origin)
+                .destinationAirportCode(destination)
                 .departureTime(request.departureTime())
                 .arrivalTime(request.arrivalTime())
+                // Every scheduled flight gets its carrier's REAL terminals
+                // (TerminalPolicy) - the e-ticket prints these, so they must
+                // never be invented downstream.
+                .departureTerminal(com.skybook.praveen.flightservice.domain.TerminalPolicy.terminalFor(airline, origin))
+                .arrivalTerminal(com.skybook.praveen.flightservice.domain.TerminalPolicy.terminalFor(airline, destination))
                 .status(FlightStatus.SCHEDULED)
                 .build();
     }
@@ -32,6 +40,8 @@ public final class FlightMapper {
                 flight.getDestinationAirportCode(),
                 flight.getDepartureTime(),
                 flight.getArrivalTime(),
+                flight.getDepartureTerminal(),
+                flight.getArrivalTerminal(),
                 flight.getStatus(),
                 flight.getSchedule() != null ? flight.getSchedule().getId() : null,
                 flight.getCreatedBy(),

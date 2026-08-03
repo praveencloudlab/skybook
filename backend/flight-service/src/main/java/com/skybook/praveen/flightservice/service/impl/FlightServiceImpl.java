@@ -3,6 +3,7 @@ package com.skybook.praveen.flightservice.service.impl;
 import com.skybook.praveen.flightservice.dto.request.CreateFlightRequest;
 import com.skybook.praveen.flightservice.dto.request.UpdateFlightRequest;
 import com.skybook.praveen.flightservice.dto.response.FlightResponse;
+import com.skybook.praveen.flightservice.dto.response.RouteCalendarDayResponse;
 import com.skybook.praveen.flightservice.entity.Flight;
 import com.skybook.praveen.flightservice.enums.FlightStatus;
 import com.skybook.praveen.flightservice.exception.FlightNotFoundException;
@@ -19,6 +20,11 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class FlightServiceImpl implements FlightService {
+
+    // Public shopping cutoff: booking closes 60 minutes before scheduled
+    // departure (check-in shuts at 45). Applied to itineraries and the route
+    // calendar - never to admin reads, which must see departed flights.
+    static final long BOOKING_CUTOFF_MINUTES = 60;
 
     private final FlightRepository flightRepository;
 
@@ -156,6 +162,148 @@ public class FlightServiceImpl implements FlightService {
                         end)
                 .stream()
                 .map(FlightMapper::toResponse)
+                .toList();
+    }
+
+    @Override
+    public List<com.skybook.praveen.flightservice.dto.response.ItineraryResponse> getItineraries(
+            String originAirportCode,
+            String destinationAirportCode,
+            LocalDate departureDate) {
+
+        String origin = originAirportCode.toUpperCase();
+        String destination = destinationAirportCode.toUpperCase();
+
+        // Public shopping must not offer what can no longer be bought: a leg
+        // that has departed, or departs within the booking cutoff (booking
+        // closes 60 minutes before scheduled departure - check-in desks shut
+        // at 45). Admin's /search stays unfiltered on purpose: back-office
+        // needs to see today's departed flights to run them.
+        LocalDateTime bookableFrom = LocalDateTime.now().plusMinutes(BOOKING_CUTOFF_MINUTES);
+
+        // One window covers every possible leg: first legs depart on the
+        // requested date; onward legs may run into the next day (overnight
+        // arrivals), and a second connection the day after that.
+        List<Flight> window = flightRepository.findByDepartureTimeBetween(
+                        departureDate.atStartOfDay(),
+                        departureDate.plusDays(2).atStartOfDay())
+                .stream()
+                .filter(f -> f.getStatus() != FlightStatus.CANCELLED)
+                .filter(f -> f.getDepartureTime().isAfter(bookableFrom))
+                .toList();
+
+        java.util.Map<String, List<Flight>> byOrigin = new java.util.HashMap<>();
+        for (Flight f : window) {
+            byOrigin.computeIfAbsent(f.getOriginAirportCode(), k -> new java.util.ArrayList<>()).add(f);
+        }
+
+        // A same-carrier junction is a PROTECTED connection (the airline owns
+        // the transfer and checks bags through), so it needs less slack than a
+        // self-transfer where the passenger collects and re-checks bags.
+        long minLayoverSameCarrier = 45;
+        long minLayoverSelfTransfer = 60;
+        long maxLayover = 420;  // 7h - beyond this nobody calls it a connection
+        long maxTotal = 40 * 60;
+
+        List<com.skybook.praveen.flightservice.dto.response.ItineraryResponse> results = new java.util.ArrayList<>();
+
+        java.util.function.BiFunction<Flight, Flight, Long> layover = (a, b) ->
+                java.time.Duration.between(a.getArrivalTime(), b.getDepartureTime()).toMinutes();
+        java.util.function.BiFunction<Flight, Flight, Long> minLayover = (a, b) ->
+                a.getAirlineCode().equals(b.getAirlineCode()) ? minLayoverSameCarrier : minLayoverSelfTransfer;
+
+        for (Flight first : byOrigin.getOrDefault(origin, List.of())) {
+            if (!first.getDepartureTime().toLocalDate().equals(departureDate)) {
+                continue;
+            }
+            // Direct.
+            if (first.getDestinationAirportCode().equals(destination)) {
+                results.add(itinerary(List.of(first), List.of()));
+                continue;
+            }
+            // 1 stop and 2 stops.
+            for (Flight second : byOrigin.getOrDefault(first.getDestinationAirportCode(), List.of())) {
+                long wait1 = layover.apply(first, second);
+                if (wait1 < minLayover.apply(first, second) || wait1 > maxLayover) {
+                    continue;
+                }
+                if (second.getDestinationAirportCode().equals(destination)) {
+                    results.add(itinerary(List.of(first, second), List.of(wait1)));
+                    continue;
+                }
+                if (second.getDestinationAirportCode().equals(origin)) {
+                    continue;
+                }
+                for (Flight third : byOrigin.getOrDefault(second.getDestinationAirportCode(), List.of())) {
+                    if (!third.getDestinationAirportCode().equals(destination)) {
+                        continue;
+                    }
+                    long wait2 = layover.apply(second, third);
+                    if (wait2 < minLayover.apply(second, third) || wait2 > maxLayover) {
+                        continue;
+                    }
+                    results.add(itinerary(List.of(first, second, third), List.of(wait1, wait2)));
+                }
+            }
+        }
+
+        return results.stream()
+                .filter(i -> i.totalDurationMinutes() <= maxTotal)
+                .sorted(java.util.Comparator.comparingLong(
+                        com.skybook.praveen.flightservice.dto.response.ItineraryResponse::totalDurationMinutes))
+                .limit(20)
+                .toList();
+    }
+
+    private com.skybook.praveen.flightservice.dto.response.ItineraryResponse itinerary(
+            List<Flight> legs, List<Long> layovers) {
+        long total = java.time.Duration.between(
+                legs.get(0).getDepartureTime(),
+                legs.get(legs.size() - 1).getArrivalTime()).toMinutes();
+        return new com.skybook.praveen.flightservice.dto.response.ItineraryResponse(
+                legs.stream().map(FlightMapper::toResponse).toList(),
+                legs.size() - 1,
+                total,
+                layovers,
+                legs.stream().map(Flight::getAirlineCode).distinct().count() == 1);
+    }
+
+    @Override
+    public List<RouteCalendarDayResponse> getRouteCalendar(
+            String originAirportCode,
+            String destinationAirportCode,
+            LocalDate startDate,
+            LocalDate endDate) {
+
+        if (endDate.isBefore(startDate)) {
+            throw new IllegalArgumentException("endDate must not be before startDate");
+        }
+        // Three visible months plus paging slack; the cap keeps a single public,
+        // tokenless call from walking the whole year of schedule.
+        if (startDate.plusDays(124).isBefore(endDate)) {
+            throw new IllegalArgumentException("Calendar range must not exceed 124 days");
+        }
+
+        // Same bookability cutoff as itineraries: the calendar must not price
+        // a "today" whose remaining departures have already left.
+        LocalDateTime bookableFrom = LocalDateTime.now().plusMinutes(BOOKING_CUTOFF_MINUTES);
+
+        return flightRepository
+                .findByOriginAirportCodeAndDestinationAirportCodeAndDepartureTimeBetween(
+                        originAirportCode.toUpperCase(),
+                        destinationAirportCode.toUpperCase(),
+                        startDate.atStartOfDay(),
+                        endDate.plusDays(1).atStartOfDay().minusNanos(1))
+                .stream()
+                .filter(flight -> flight.getStatus() != FlightStatus.CANCELLED)
+                .filter(flight -> flight.getDepartureTime().isAfter(bookableFrom))
+                .collect(java.util.stream.Collectors.groupingBy(
+                        flight -> flight.getDepartureTime().toLocalDate(),
+                        java.util.TreeMap::new,
+                        java.util.stream.Collectors.counting()))
+                .entrySet()
+                .stream()
+                .map(entry -> new RouteCalendarDayResponse(entry.getKey(), entry.getValue().intValue()))
                 .toList();
     }
 

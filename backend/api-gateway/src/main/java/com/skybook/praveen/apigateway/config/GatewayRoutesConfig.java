@@ -35,12 +35,38 @@ public class GatewayRoutesConfig {
 
     @Bean
     public RouterFunction<ServerResponse> authServiceRoute(ServicesProperties services) {
-        // Only the two public auth endpoints are routed (SECURITY_HARDENING_MODULE.md
-        // §3.3): the wildcard is dropped so /api/auth/service-token is NOT reachable
-        // through the public edge - it is internal-network only, on the
-        // client-credential chain.
+        // Auth endpoints are listed EXPLICITLY, never by wildcard
+        // (SECURITY_HARDENING_MODULE.md §3.3): /api/auth/service-token must stay
+        // unreachable from the public edge - it lives on the internal-only
+        // client-credential chain. Adding a new auth endpoint therefore means
+        // adding it here on purpose, which is exactly the point.
+        //
+        // logout and me exist for the browser session cookie (FRONTEND_MODULE.md
+        // §10.1): because the cookie is httpOnly, JavaScript can neither clear it
+        // nor read who it belongs to, so both have to be server round-trips.
         return route("auth-service")
-                .route(path("/api/auth/register", "/api/auth/login"), http(services.getAuthService().getBaseUrl()))
+                .route(path("/api/auth/register", "/api/auth/login",
+                                "/api/auth/logout", "/api/auth/me",
+                                // Password reset: pre-authentication, so both are
+                                // also in the gateway's PUBLIC_PATHS. Listed here
+                                // explicitly like every other auth path - the
+                                // wildcard is deliberately never used, so
+                                // /api/auth/service-token stays off the edge.
+                                "/api/auth/forgot-password", "/api/auth/reset-password"),
+                        http(services.getAuthService().getBaseUrl()))
+                .filter(new DownstreamErrorHandlingFilter())
+                .build();
+    }
+
+    @Bean
+    public RouterFunction<ServerResponse> profileRoute(ServicesProperties services) {
+        // Passenger profile + saved travellers (FRONTEND_MODULE.md Module 14),
+        // served by auth-service (it owns the users table). A wildcard is fine
+        // here - unlike /api/auth, this prefix has no internal-only endpoint to
+        // keep off the edge, and every path requires a valid session (gated by
+        // the gateway JWT filter, since it is NOT in PUBLIC_PATHS).
+        return route("profile")
+                .route(path("/api/profile/**"), http(services.getAuthService().getBaseUrl()))
                 .filter(new DownstreamErrorHandlingFilter())
                 .build();
     }

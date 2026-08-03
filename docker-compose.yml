@@ -76,6 +76,9 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-skybook-auth}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-skybook-api}
       SKYBOOK_BOOTSTRAP_ADMIN_EMAIL: ${SKYBOOK_BOOTSTRAP_ADMIN_EMAIL:-}
+      # Where the SPA lives, so the password-reset email links back to it. The
+      # container serves the front end on :3000; override for other origins.
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:3000}
       # Service-client registry secrets (SECURITY_HARDENING_MODULE.md §3.3/§10):
       # auth hashes these into the client registry so booking/checkin/inventory
       # can obtain ROLE_SERVICE tokens. Required - no committed default. payment
@@ -256,6 +259,17 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MAIL_USERNAME: ${MAIL_USERNAME}
       MAIL_PASSWORD: ${MAIL_PASSWORD}
+      # Deliver mail to the local Mailpit sink by default so the demo actually
+      # shows booking confirmations (view them at http://localhost:8025). Without
+      # this the service falls back to its application.yml default of real Gmail,
+      # which fails with placeholder credentials and drops every email silently.
+      # A real deployment overrides SPRING_MAIL_* with genuine SMTP settings.
+      SPRING_MAIL_HOST: ${SPRING_MAIL_HOST:-mailpit}
+      SPRING_MAIL_PORT: ${SPRING_MAIL_PORT:-1025}
+      SPRING_MAIL_USERNAME: ${SPRING_MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${SPRING_MAIL_PASSWORD:-}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH:-false}
+      SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE: ${SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE:-false}
       JAVA_OPTS: -javaagent:/otel/opentelemetry-javaagent-2.14.0.jar
       OTEL_SERVICE_NAME: notification-service
       OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4317
@@ -274,12 +288,30 @@ services:
         condition: service_healthy
       otel-agent:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9085/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  # Local mail sink for the demo (§ notification): catches every outbound email
+  # so booking confirmations, tickets and password resets are viewable at
+  # http://localhost:8025 instead of needing a real SMTP account. Mailpit rather
+  # than MailHog (unmaintained since 2020) - same role and API shape.
+  mailpit:
+    image: axllent/mailpit:v1.21.8
+    expose:
+      - "1025"   # SMTP - notification-service sends here
+    ports:
+      - "8025:8025"   # web UI + HTTP API
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   payment-service:
     build:
@@ -414,6 +446,38 @@ services:
     # No depends_on the app services themselves - DownstreamErrorHandlingFilter
     # already turns "downstream not up yet" into a clean 502 instead of the
     # gateway needing them up first (API_GATEWAY_MODULE.md's own design).
+
+
+  # The passenger-facing SPA (FRONTEND_MODULE.md §8). nginx serves the built
+  # static bundle and proxies /api to the gateway, so the browser sees ONE
+  # origin - which is what lets the session cookie be SameSite=Lax rather than
+  # SameSite=None (§10.1). Port 3000 was reserved for this when observability
+  # deliberately put Grafana on 3001.
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    read_only: true
+    # mode=1777 matters: a tmpfs mounts root-owned by default, and nginx runs as
+    # the non-root 'nginx' user - without it the worker cannot create
+    # /var/cache/nginx/client_temp and the container dies on startup.
+    tmpfs:
+      - /tmp:mode=1777
+      - /var/cache/nginx:mode=1777
+      - /var/run:mode=1777
+    healthcheck:
+      # 127.0.0.1, not localhost: the read-only rootfs stops nginx's entrypoint
+      # adding its IPv6 listener, so localhost (::1) is refused inside.
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   # ---------------- Observability (OBSERVABILITY_MODULE.md) ----------------
 

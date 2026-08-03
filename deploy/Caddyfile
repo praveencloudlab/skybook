@@ -1,0 +1,15 @@
+# SkyBook's one public door (docker-compose.prod.yml mounts this).
+# SKYBOOK_DOMAIN comes from .env - Caddy obtains and renews the Let's
+# Encrypt certificate for it automatically. Everything routes to the
+# frontend, whose nginx serves the SPA and proxies /api to the gateway.
+{$SKYBOOK_DOMAIN} {
+	encode gzip
+	reverse_proxy frontend:3000
+
+	header {
+		# The SPA is served over HTTPS only once a cert exists.
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+}

@@ -4,6 +4,7 @@ import com.skybook.praveen.bookingservice.domain.SeatAssignmentResult;
 import com.skybook.praveen.bookingservice.dto.request.BookingSearchRequest;
 import com.skybook.praveen.bookingservice.dto.request.CreateBookingRequest;
 import com.skybook.praveen.bookingservice.dto.response.BookingResponse;
+import com.skybook.praveen.bookingservice.dto.response.CancelPassengersResponse;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,15 +23,28 @@ public interface BookingService {
      * only, and NO BookingPayment row - the facade needs the committed
      * booking/passenger IDs before it can take inventory holds.
      *
-     * @param flightDepartureTime supplied by the caller (BookingFacade, after
-     *                            validating the flight with flight-service) -
-     *                            this service needs it for passport-validity
-     *                            checks but must not fetch it itself.
-     * @param ownerSubject        the authenticated JWT subject captured as the
-     *                            booking owner (SECURITY_HARDENING_MODULE.md §4.2).
+     * @param journey      the journey's legs in segment order, one per flight,
+     *                      built by BookingFacade AFTER validating each flight
+     *                      with flight-service - this service needs departure
+     *                      times for pricing/passport/bookability checks but
+     *                      must not fetch flights itself. A one-way is one leg;
+     *                      a round trip adds a direction-1 leg; a same-carrier
+     *                      through-ticket adds direction-0 connection legs.
+     * @param ownerSubject the authenticated JWT subject captured as the
+     *                     booking owner (SECURITY_HARDENING_MODULE.md §4.2).
      */
-    BookingResponse createDraftBooking(CreateBookingRequest request, LocalDateTime flightDepartureTime,
+    BookingResponse createDraftBooking(CreateBookingRequest request, List<JourneyLeg> journey,
                                        String ownerSubject);
+
+    /**
+     * One leg of the journey being booked (ROUND_TRIP_MODULE.md §3 + the
+     * through-ticketing extension). directionStart marks the first leg of a
+     * direction: baggage fees charge once per DIRECTION, never per leg - a
+     * through-ticket checks bags through its connection.
+     */
+    record JourneyLeg(Long flightId, String originAirportCode, LocalDateTime departureTime,
+                      int direction, boolean directionStart) {
+    }
 
     /**
      * Stage 3 (§5.1): ONE transaction that synchronizes all money fields from
@@ -44,11 +58,39 @@ public interface BookingService {
     /** Cancels DRAFT bookings older than the configured TTL (stale-draft sweep, §5.1a). Returns how many. */
     int cancelStaleDrafts();
 
+    /**
+     * Cancel one whole segment - "drop the return" (ROUND_TRIP_MODULE.md §7).
+     * Only segmentIndex >= 1 may be cancelled alone: dropping the outbound
+     * while flying the return is the no-show pattern airlines void tickets
+     * over. All the segment's active rows cancel, their coupons go REFUNDED,
+     * and the booking derives PARTIALLY_CANCELLED (or CANCELLED if nothing
+     * remains).
+     */
+    CancelPassengersResponse cancelSegment(Long bookingId, int segmentIndex, int refundPercent);
+
+    /**
+     * Premium date change (ROUND_TRIP_MODULE.md §11): move ONE segment to a
+     * new flight, keeping the same booking and tickets. Old rows cancel with
+     * coupons CANCELLED (exchanged, not refunded); replacement rows are
+     * created seatless on the new flight priced at ITS departure; each
+     * ticket gains a fresh OPEN coupon; totalFare and the payment snapshot
+     * adjust by the fare difference (simulated processor). Guarded to
+     * PREMIUM rows - other fare families change dates via cancel + rebook.
+     */
+    BookingResponse rebookSegment(Long bookingId, int segmentIndex, Long newFlightId,
+                                  LocalDateTime newDepartureTime);
+
+    /** Write the seats the facade holds+reserves for freshly rebooked rows (seat only - Premium seat picks are free). */
+    BookingResponse applySeatNumbers(Long bookingId, java.util.Map<Long, String> seatByRowId);
+
     BookingResponse getBookingById(Long id);
 
     BookingResponse getBookingByReference(String bookingReference);
 
     List<BookingResponse> getAllBookings();
+
+    /** Bookings owned by one authenticated subject, newest first (§4.2). */
+    List<BookingResponse> getBookingsForOwner(String ownerSubject);
 
     List<BookingResponse> searchBookings(BookingSearchRequest criteria);
 
@@ -63,12 +105,52 @@ public interface BookingService {
     /** Event-driven confirmation: records the real payment reference from payment-service. */
     PaymentConfirmation confirmBookingFromPayment(Long bookingId, String paymentReference);
 
-    BookingResponse cancelBooking(Long id, String reason);
+    /**
+     * refundPercent is the time-tier multiplier (CancellationPolicy) computed
+     * by the facade: 100 keeps today's behaviour, 0 means the fare is
+     * forfeited - the payment mirror then stays PAID (money kept, nothing to
+     * refund) and coupons close as CANCELLED rather than REFUNDED.
+     */
+    BookingResponse cancelBooking(Long id, String reason, int refundPercent);
+
+    /**
+     * Cancel specific passengers off a booking. The booking survives with its
+     * remaining passengers; only when the last one is cancelled does the booking
+     * itself become CANCELLED. Enforces the guardian rule (a minor cannot remain
+     * without an adult). Returns the updated booking, the refund calculated for
+     * the cancelled passengers, and whether the booking was emptied.
+     */
+    CancelPassengersResponse cancelPassengers(Long bookingId, java.util.List<Long> bookingPassengerIds,
+                                              int refundPercent);
 
     BookingResponse completeBooking(Long id);
 
     /** bookingPassengerId identifies the passenger's line item within this booking (not Passenger.id). */
     BookingResponse checkInPassenger(Long bookingId, Long bookingPassengerId);
 
+    /**
+     * Pre-check-in seat change (passenger features): writes the row's new
+     * seat AFTER the facade has secured it with inventory. The paid
+     * surcharge is untouched - the entitlement ceiling was enforced by the
+     * caller, and stored money never moves on a seat change.
+     */
+    BookingResponse updateSeatNumber(Long bookingId, Long bookingPassengerId, String seatNumber);
+
     BookingResponse boardPassenger(Long bookingId, Long bookingPassengerId);
+
+    /**
+     * Mirror checkin-service's authoritative per-passenger state onto the
+     * {@code BookingPassenger.checkInStatus} read-model (consumed from
+     * CheckInEvent). This is what arms the "a checked-in passenger cannot be
+     * cancelled online" guard in {@link #cancelPassengers} - without it the
+     * read-model stays NOT_OPEN forever and the guard never fires.
+     */
+    /**
+     * seatNumber: the seat on the event (nullable) - check-in may move the
+     * passenger, and the mirror must track it so a later cancel releases the
+     * seat they actually hold, not the one they booked.
+     */
+    void applyCheckInStatus(Long bookingId, Long bookingPassengerId,
+                            com.skybook.praveen.bookingservice.enums.CheckInStatus target,
+                            String seatNumber);
 }

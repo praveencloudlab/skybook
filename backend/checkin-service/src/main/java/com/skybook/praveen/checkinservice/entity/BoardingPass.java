@@ -79,6 +79,14 @@ public class BoardingPass extends Auditable {
     @Column(name = "seat_number", length = 5, updatable = false)
     private String seatNumber;
 
+    // The departure terminal printed on the pass (real passes lead with it).
+    @Column(name = "departure_terminal", length = 4, updatable = false)
+    private String departureTerminal;
+
+    // Where the passenger LANDS - shown under the destination airport.
+    @Column(name = "arrival_terminal", length = 4, updatable = false)
+    private String arrivalTerminal;
+
     @Column(length = 10)
     private String gate;
 

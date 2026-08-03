@@ -28,4 +28,13 @@ public class ResilientFlightClient {
     public FlightDetails getFlight(Long flightId) {
         return feignClient.getFlight(flightId);
     }
+
+    @Bulkhead(name = "flight")
+    @CircuitBreaker(name = "flight")
+    @Retry(name = "flight-read")
+    public java.util.List<RouteCalendarDay> getRouteCalendar(
+            String originAirportCode, String destinationAirportCode,
+            java.time.LocalDate startDate, java.time.LocalDate endDate) {
+        return feignClient.getRouteCalendar(originAirportCode, destinationAirportCode, startDate, endDate);
+    }
 }

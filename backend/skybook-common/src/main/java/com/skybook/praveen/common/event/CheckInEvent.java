@@ -46,6 +46,16 @@ public class CheckInEvent {
 
     private String seatNumber;
 
+    /**
+     * Flight departure, snapshotted from the CheckIn - lets the boarding-pass
+     * email show DATE/DEPARTS and derive the boarding clock exactly like the
+     * frontend pass does, without a synchronous flight-service call.
+     */
+    private LocalDateTime departureTime;
+
+    /** Cabin (ECONOMY/PREMIUM_ECONOMY/BUSINESS/FIRST) for the pass's badge. */
+    private String travelClass;
+
     /** Set on PASSENGER_CHECKED_IN / BOARDING_PASS_GENERATED. */
     private String boardingPassNumber;
 
@@ -62,6 +72,18 @@ public class CheckInEvent {
     private String boardingGroup;
 
     private String gate;
+
+    /**
+     * Real terminals (flight-service TerminalPolicy), snapshotted onto the
+     * pass at issue - the emailed boarding pass must show the SAME terminals
+     * as the on-screen one. Null on pre-terminals events.
+     */
+    private String departureTerminal;
+
+    private String arrivalTerminal;
+
+    /** When checkin-service issued the pass - the "Issued" stamp on the document. */
+    private LocalDateTime issuedAt;
 
     private LocalDateTime occurredAt;
 }
