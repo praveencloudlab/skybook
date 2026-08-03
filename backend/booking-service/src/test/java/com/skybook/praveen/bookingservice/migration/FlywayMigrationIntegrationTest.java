@@ -3,12 +3,15 @@ package com.skybook.praveen.bookingservice.migration;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -60,9 +63,17 @@ class FlywayMigrationIntegrationTest {
     void freshDatabaseGetsBaselinePlusDeltasAndSurvivesHibernateValidate() {
         // Reaching here at all means ddl-auto: validate accepted the
         // Flyway-built schema. Now prove every migration actually ran.
-        // BUMP THIS when adding a migration - it is deliberately exact, so a
-        // migration that silently fails to apply is caught rather than ignored.
-        final int expectedMigrations = 6;
+        //
+        // The expected count is derived from the migration scripts on the
+        // classpath rather than hard-coded. That still catches the case this
+        // test exists for - a migration that silently fails to apply, leaving
+        // fewer rows in the history than there are scripts - but it no longer
+        // has to be bumped by hand, which is how it came to assert 6 while
+        // thirteen migrations existed and failed the build on merge.
+        int expectedMigrations = countMigrationScripts();
+        assertThat(expectedMigrations)
+                .as("migration scripts found on the classpath")
+                .isGreaterThanOrEqualTo(13);
 
         List<Map<String, Object>> applied = jdbc.queryForList(
                 "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank");
@@ -72,6 +83,17 @@ class FlywayMigrationIntegrationTest {
             assertThat(applied.get(i))
                     .containsEntry("version", String.valueOf(i + 1))
                     .containsEntry("success", true);
+        }
+    }
+
+    /** Counts V*.sql migration scripts packaged with the service. */
+    private int countMigrationScripts() {
+        try {
+            Resource[] scripts = new PathMatchingResourcePatternResolver()
+                    .getResources("classpath*:db/migration/V*__*.sql");
+            return scripts.length;
+        } catch (IOException cause) {
+            throw new IllegalStateException("Could not enumerate migration scripts", cause);
         }
     }
 

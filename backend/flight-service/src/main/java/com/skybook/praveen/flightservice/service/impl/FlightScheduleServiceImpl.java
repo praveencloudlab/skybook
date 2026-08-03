@@ -13,8 +13,9 @@ import com.skybook.praveen.flightservice.mapper.FlightScheduleMapper;
 import com.skybook.praveen.flightservice.repository.FlightRepository;
 import com.skybook.praveen.flightservice.repository.FlightScheduleRepository;
 import com.skybook.praveen.flightservice.service.FlightScheduleService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,11 +26,28 @@ import java.util.List;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class FlightScheduleServiceImpl implements FlightScheduleService {
 
     private final FlightScheduleRepository flightScheduleRepository;
     private final FlightRepository flightRepository;
+
+    /**
+     * The proxied reference to this bean. Calling generateFlights() directly
+     * from generateFlightsForAllActiveSchedules() would go through {@code this}
+     * and bypass the transaction proxy entirely, leaving each generation with
+     * no transaction at all - so the nightly sweep is routed back through the
+     * proxy instead. {@code @Lazy} breaks the self-referential construction.
+     */
+    private final FlightScheduleService self;
+
+    @Autowired
+    FlightScheduleServiceImpl(FlightScheduleRepository flightScheduleRepository,
+                              FlightRepository flightRepository,
+                              @Lazy FlightScheduleService self) {
+        this.flightScheduleRepository = flightScheduleRepository;
+        this.flightRepository = flightRepository;
+        this.self = self;
+    }
 
     @Override
     @Transactional
@@ -242,7 +260,8 @@ public class FlightScheduleServiceImpl implements FlightScheduleService {
         List<FlightSchedule> activeSchedules =
                 flightScheduleRepository.findByStatus(ScheduleStatus.ACTIVE);
 
-        activeSchedules.forEach(schedule -> generateFlights(schedule.getId(), null));
+        // Through the proxy, so each schedule generates in its own transaction.
+        activeSchedules.forEach(schedule -> self.generateFlights(schedule.getId(), null));
     }
 
     private String buildScheduleCode(FlightSchedule schedule) {
