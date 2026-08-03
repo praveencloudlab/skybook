@@ -91,8 +91,12 @@ class AuditableTest {
             entity.setCreatedBy("praveen");
             other.setCreatedBy("praveen");
 
+            // Identity semantics: two rows carrying identical audit values are
+            // still distinct objects, because Auditable deliberately does not
+            // override equals. isSameAs rather than isEqualTo(entity), which
+            // asserts nothing - a value compared against itself always passes.
             assertThat(entity).isNotEqualTo(other);
-            assertThat(entity).isEqualTo(entity);
+            assertThat(entity).isSameAs(entity);
         }
     }
 
