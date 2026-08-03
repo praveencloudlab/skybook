@@ -145,6 +145,24 @@
     <build>
         <pluginManagement>
             <plugins>
+                <!--
+                    Pinned deliberately. `mvn sonar:sonar` with no version
+                    resolves whatever is newest at build time, so an analysis
+                    that worked yesterday can break today with no commit behind
+                    it - the same trap that made us pin Failsafe (§CI_CD). The
+                    plugin itself warns about this: "Using an unspecified
+                    version ... may introduce breaking analysis changes at an
+                    unwanted time."
+
+                    Note the groupId: org.codehaus.mojo:sonar-maven-plugin is
+                    relocated to org.sonarsource.scanner.maven, so the old
+                    coordinate resolves with a relocation warning on every run.
+                -->
+                <plugin>
+                    <groupId>org.sonarsource.scanner.maven</groupId>
+                    <artifactId>sonar-maven-plugin</artifactId>
+                    <version>4.0.0.4121</version>
+                </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
