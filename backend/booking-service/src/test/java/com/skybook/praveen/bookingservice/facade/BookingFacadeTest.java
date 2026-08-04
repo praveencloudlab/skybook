@@ -356,6 +356,21 @@ class BookingFacadeTest {
         }
 
         @Test
+        void aCancelledReturnFlightIsRejectedBeforeAnyDraft() {
+            stubFlightOk();
+            when(flightServiceClient.getFlight(20L)).thenReturn(new FlightDetails(
+                    20L, "AI132", "DEL", "LHR",
+                    returnFlight.departureTime(), returnFlight.arrivalTime(),
+                    null, null, FlightBookingStatus.CANCELLED));
+
+            assertThatThrownBy(() -> facade.createBooking(request))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("cancelled return flight");
+
+            verify(bookingService, never()).createDraftBooking(any(), any(), any());
+        }
+
+        @Test
         void returnDepartingBeforeOutboundArrivalIsRejectedBeforeAnyDraft() {
             stubFlightOk();
             FlightDetails tooEarly = new FlightDetails(20L, "AI132", "DEL", "LHR",

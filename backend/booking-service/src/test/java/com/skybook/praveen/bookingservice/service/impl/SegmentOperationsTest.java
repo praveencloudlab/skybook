@@ -187,4 +187,154 @@ class SegmentOperationsTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Premium");
     }
+
+    @Test
+    void droppingTheLastLiveSegmentCancelsTheBookingAndRefundsIt() {
+        Booking booking = roundTrip(FareType.FLEXI);
+        booking.getPassengers().get(0).setCancelled(true);
+        when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+        CancelPassengersResponse result = bookingService.cancelSegment(7L, 1, 100);
+
+        assertThat(result.bookingCancelled()).isTrue();
+        assertThat(booking.getBookingStatus()).isEqualTo(BookingStatus.CANCELLED);
+        assertThat(booking.getPayment().getPaymentStatus()).isEqualTo(PaymentStatus.REFUNDED);
+    }
+
+    @Test
+    void aSegmentThatIsNotOnTheBookingIsRejected() {
+        Booking booking = roundTrip(FareType.FLEXI);
+        when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> bookingService.cancelSegment(7L, 5, 100))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("has no segment 5");
+    }
+
+    @Test
+    void aSegmentWhoseRowsAreAllCancelledCannotBeCancelledAgain() {
+        Booking booking = roundTrip(FareType.FLEXI);
+        booking.getPassengers().get(1).setCancelled(true);
+        when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> bookingService.cancelSegment(7L, 1, 100))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("already fully cancelled");
+    }
+
+    @Test
+    void aCheckedInReturnCanNoLongerBeDroppedOnline() {
+        Booking booking = roundTrip(FareType.FLEXI);
+        booking.getPassengers().get(1).setCheckInStatus(CheckInStatus.CHECKED_IN);
+        when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> bookingService.cancelSegment(7L, 1, 100))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("already checked in on this flight");
+    }
+
+    @Test
+    void onlyAConfirmedOrPartiallyCancelledBookingCanChangeDates() {
+        Booking booking = roundTrip(FareType.PREMIUM);
+        booking.setBookingStatus(BookingStatus.CREATED);
+        when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> bookingService.rebookSegment(7L, 1, 30L,
+                LocalDateTime.of(2030, 7, 23, 10, 0)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Only a confirmed booking");
+    }
+
+    @Test
+    void aPartiallyCancelledBookingMayStillMoveItsRemainingLeg() {
+        Booking booking = roundTrip(FareType.PREMIUM);
+        booking.setBookingStatus(BookingStatus.PARTIALLY_CANCELLED);
+        when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+        BookingResponse result = bookingService.rebookSegment(7L, 1, 30L,
+                LocalDateTime.of(2030, 7, 23, 10, 0));
+
+        assertThat(result.segments().get(1).flightId()).isEqualTo(30L);
+    }
+
+    @Test
+    void aSegmentThatWasAlreadyCancelledHasNothingToRebook() {
+        Booking booking = roundTrip(FareType.PREMIUM);
+        booking.getPassengers().get(1).setCancelled(true);
+        when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> bookingService.rebookSegment(7L, 1, 30L,
+                LocalDateTime.of(2030, 7, 23, 10, 0)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("nothing to rebook");
+    }
+
+    @Test
+    void aCheckedInLegCanNoLongerChangeDatesOnline() {
+        Booking booking = roundTrip(FareType.PREMIUM);
+        booking.getPassengers().get(1).setCheckInStatus(CheckInStatus.CHECKED_IN);
+        when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> bookingService.rebookSegment(7L, 1, 30L,
+                LocalDateTime.of(2030, 7, 23, 10, 0)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("already checked in on this flight");
+    }
+
+    @Test
+    void rebookingASegmentThatIsNotOnTheBookingIsRejected() {
+        Booking booking = roundTrip(FareType.PREMIUM);
+        when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+        assertThatThrownBy(() -> bookingService.rebookSegment(7L, 5, 30L,
+                LocalDateTime.of(2030, 7, 23, 10, 0)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("has no segment 5");
+    }
+
+    @Test
+    void rowsOfANotYetFlushedSegmentAreMatchedByReference() {
+        // Before the aggregate is flushed the segment has no id, so rows can
+        // only be matched by object identity - drop-the-return must still
+        // find exactly the return's rows.
+        Booking booking = roundTrip(FareType.FLEXI);
+        booking.getSegments().get(1).setId(null);
+        when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+        CancelPassengersResponse result = bookingService.cancelSegment(7L, 1, 100);
+
+        assertThat(result.cancelledRowIds()).containsExactly(101L);
+        assertThat(booking.getPassengers().get(0).isCancelled()).isFalse();
+    }
+
+    @Test
+    void aNotYetFlushedSegmentCanStillChangeItsDate() {
+        Booking booking = roundTrip(FareType.PREMIUM);
+        booking.getSegments().get(1).setId(null);
+        when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+        bookingService.rebookSegment(7L, 1, 30L, LocalDateTime.of(2030, 7, 23, 10, 0));
+
+        assertThat(booking.getPassengers()).hasSize(3);
+        assertThat(booking.getPassengers().get(1).isCancelled()).isTrue();
+        assertThat(booking.getPassengers().get(2).getFlightId()).isEqualTo(30L);
+    }
+
+    @Test
+    void aRebookedRowIsMatchedToItsTicketByTravellerIdNotByInstance() {
+        // A reloaded aggregate hands back a different Passenger object for
+        // the same traveller; identity alone would leave the new leg
+        // couponless, so the id comparison is what keeps the ticket whole.
+        Booking booking = roundTrip(FareType.PREMIUM);
+        booking.getTickets().get(0).setPassenger(Passenger.builder().id(42L)
+                .firstName("Pax").lastName("Test").dob(LocalDate.of(1990, 1, 1)).build());
+        when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+        bookingService.rebookSegment(7L, 1, 30L, LocalDateTime.of(2030, 7, 23, 10, 0));
+
+        List<TicketCoupon> coupons = booking.getTickets().get(0).getCoupons();
+        assertThat(coupons).hasSize(3);
+        assertThat(coupons.get(2).getCouponNumber()).isEqualTo(3);
+        assertThat(coupons.get(2).getStatus()).isEqualTo(CouponStatus.OPEN);
+    }
 }
