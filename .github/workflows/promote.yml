@@ -322,6 +322,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: dr
+    env:
+      # The drill proves backup/restore, not a particular release, so it runs
+      # :latest. Set at JOB level deliberately: compose gives the process
+      # environment precedence over --env-file, so the workflow-level
+      # IMAGE_TAG - which on a Monday schedule is whatever commit happens to
+      # sit at head, images or not - must be shadowed here, not appended to a
+      # file it would override anyway.
+      IMAGE_TAG: latest
     steps:
       - uses: actions/checkout@v4
       - name: Per-run secrets
@@ -333,7 +341,6 @@ jobs:
         run: bash .github/scripts/observability-dirs.sh
       - name: Stand up a stack to lose
         run: |
-          echo "IMAGE_TAG=latest" >> .env
           docker compose --env-file .env --env-file deploy/environments/dev.env \
             -f docker-compose.yml -f docker-compose.ladder.yml pull -q
           docker compose --env-file .env --env-file deploy/environments/dev.env \
