@@ -6,8 +6,8 @@
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=praveencloudlab_skybook&metric=coverage)](https://sonarcloud.io/project/overview?id=praveencloudlab_skybook)
 
 A portfolio project by **Praveenreddy Somireddy** — an airline reservations platform, built end to end as a working demonstration
-of production engineering practice: eight Spring Boot microservices behind an
-API gateway, PostgreSQL and Kafka underneath, a React web client in front, and
+of production engineering practice: eight Spring Boot applications - one API
+gateway and seven domain services, PostgreSQL and Kafka underneath, a React web client in front, and
 the machinery around it — CI/CD with an eight-environment promotion ladder,
 nightly end-to-end certification, load thresholds, observability, and a weekly
 disaster-recovery drill that actually restores.
