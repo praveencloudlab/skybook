@@ -472,8 +472,19 @@ public class BookingServiceImpl implements BookingService {
             }
         }
 
+        // Subtract what is ACTUALLY being cancelled, not what the caller named.
+        // toCancel expanded the selection to every segment row belonging to
+        // those travellers; filtering by the raw ids instead left a traveller's
+        // other legs sitting in "remaining" while they were being cancelled -
+        // which inflated the booking total and the payment mirror by those
+        // fares, and, for the last traveller on a round trip, left
+        // remaining non-empty so the booking was marked PARTIALLY_CANCELLED
+        // with every row cancelled and the remainder never refunded.
+        Set<Long> toCancelRowIds = toCancel.stream()
+                .map(BookingPassenger::getId)
+                .collect(Collectors.toSet());
         List<BookingPassenger> remaining = active.stream()
-                .filter(bp -> !ids.contains(bp.getId()))
+                .filter(bp -> !toCancelRowIds.contains(bp.getId()))
                 .toList();
 
         // Guardian rule: a child/infant cannot remain on the booking without an
@@ -499,9 +510,7 @@ public class BookingServiceImpl implements BookingService {
             bp.setCancelled(true);
             bp.setCheckInStatus(CheckInStatus.CLOSED);
         }
-        Set<Long> cancelledRowIds = toCancel.stream().map(BookingPassenger::getId)
-                .collect(java.util.stream.Collectors.toSet());
-        refundCoupons(booking, row -> cancelledRowIds.contains(row.getId()), refundPercent > 0);
+        refundCoupons(booking, row -> toCancelRowIds.contains(row.getId()), refundPercent > 0);
 
         boolean bookingCancelled = remaining.isEmpty();
         if (bookingCancelled) {

@@ -429,6 +429,43 @@ class CancelPassengersTest {
             assertThat(booking.getTickets().get(1).getStatus()).isEqualTo(TicketStatus.ISSUED);
             assertThat(booking.getTickets().get(1).getCoupons())
                     .allMatch(coupon -> coupon.getStatus() == CouponStatus.OPEN);
+
+            // What is left to fly is Ben's two legs and nothing else. Ada's
+            // return row must not be counted as remaining just because the
+            // caller happened to name her outbound one.
+            assertThat(booking.getTotalFare()).isEqualByComparingTo("200.00");
+            assertThat(booking.getPayment().getAmount()).isEqualByComparingTo("200.00");
+        }
+
+        @Test
+        void cancellingTheOnlyTravellerOnARoundTripCancelsTheWholeBooking() {
+            // The failure this guards against is silent and expensive: the
+            // selection expands to both legs, so nothing is left to fly - but
+            // if "remaining" is derived from the caller's raw ids, the return
+            // row still counts as remaining. The booking then settles as
+            // PARTIALLY_CANCELLED carrying a non-zero balance, so the
+            // remainder is never refunded and check-ins are never closed.
+            Booking booking = booking(BookingStatus.CONFIRMED, PaymentStatus.PAID);
+            BookingSegment outbound = segment(booking, 1L, 0, 0, 10L);
+            BookingSegment inbound = segment(booking, 2L, 1, 1, 20L);
+            Passenger ada = traveller(41L, "Ada", 35);
+            BookingPassenger adaOut = row(booking, 100L, ada, outbound, FareType.FLEXI, "100.00", CheckInStatus.NOT_OPEN);
+            BookingPassenger adaBack = row(booking, 101L, ada, inbound, FareType.FLEXI, "100.00", CheckInStatus.NOT_OPEN);
+            ticket(booking, 1L, ada, adaOut, adaBack);
+            when(bookingRepository.findById(7L)).thenReturn(Optional.of(booking));
+
+            CancelPassengersResponse result = bookingService.cancelPassengers(7L, List.of(100L), 100);
+
+            assertThat(result.bookingCancelled()).isTrue();
+            assertThat(booking.getBookingStatus()).isEqualTo(BookingStatus.CANCELLED);
+            assertThat(result.refundAmount()).isEqualByComparingTo("200.00");
+            // Reaching REFUNDED is the point: stranded in PARTIALLY_CANCELLED
+            // the payment stays PAID and the money is never returned. The fare
+            // itself is left standing as the historical record, the same as
+            // every other whole-cancel path - the ledger lives in
+            // payment-service.
+            assertThat(booking.getPayment().getPaymentStatus()).isEqualTo(PaymentStatus.REFUNDED);
+            assertThat(booking.getTickets()).allMatch(t -> t.getStatus() == TicketStatus.REFUNDED);
         }
     }
 }
