@@ -39,7 +39,16 @@ public final class AirportTimeZones {
             Map.entry("DEL", ZoneId.of("Asia/Kolkata")),
             Map.entry("HKG", ZoneId.of("Asia/Hong_Kong")),
             Map.entry("SIN", ZoneId.of("Asia/Singapore")),
-            Map.entry("SYD", ZoneId.of("Australia/Sydney")));
+            Map.entry("SYD", ZoneId.of("Australia/Sydney")),
+            Map.entry("HYD", ZoneId.of("Asia/Kolkata")),
+            Map.entry("MAA", ZoneId.of("Asia/Kolkata")),
+            Map.entry("BLR", ZoneId.of("Asia/Kolkata")),
+            Map.entry("CCU", ZoneId.of("Asia/Kolkata")),
+            Map.entry("LAX", ZoneId.of("America/Los_Angeles")),
+            Map.entry("SFO", ZoneId.of("America/Los_Angeles")),
+            Map.entry("ORD", ZoneId.of("America/Chicago")),
+            Map.entry("DFW", ZoneId.of("America/Chicago")),
+            Map.entry("MIA", ZoneId.of("America/New_York")));
 
     private AirportTimeZones() {
     }

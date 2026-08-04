@@ -5,7 +5,7 @@
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=praveencloudlab_skybook&metric=alert_status)](https://sonarcloud.io/project/overview?id=praveencloudlab_skybook)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=praveencloudlab_skybook&metric=coverage)](https://sonarcloud.io/project/overview?id=praveencloudlab_skybook)
 
-An airline reservations platform, built end to end as a working demonstration
+A portfolio project by **Praveenreddy Somireddy** — an airline reservations platform, built end to end as a working demonstration
 of production engineering practice: eight Spring Boot microservices behind an
 API gateway, PostgreSQL and Kafka underneath, a React web client in front, and
 the machinery around it — CI/CD with an eight-environment promotion ladder,
@@ -90,7 +90,7 @@ curl http://localhost:8080/actuator/health   # gateway
 
 ### Sample data
 
-The stack ships with a year of bookable flights (30 named routes plus a full
+The stack ships with a year of bookable flights (120+ curated route entries across 29 airports - UK, Europe, Gulf, six Indian internationals, seven US gateways, Africa, Asia, Australia - plus a full
 mesh, daily departures, today → +12 months), a fleet, real seat maps, and
 per-flight inventory — enough to search and book end to end out of the box.
 See [`docs/SEED_DATA.md`](docs/SEED_DATA.md); re-seed any environment with
@@ -104,7 +104,7 @@ Everything below is produced by machinery on every push, and the links are the
 proof rather than the claim:
 
 - **[SonarCloud quality gate](https://sonarcloud.io/project/overview?id=praveencloudlab_skybook): passing** — 91% coverage, zero open bugs, zero vulnerabilities, security and reliability at A. The eight CSRF findings were closed with written justifications beside the code, not waved through.
-- **1,586 backend tests** (unit + integration via Testcontainers) run in [CI](.github/workflows/ci.yml) on every push, plus 55 frontend Vitest tests.
+- **1,722 backend test executions** (1,698 unit/slice + 24 Testcontainers integration) run in [CI](.github/workflows/ci.yml) on every push, plus 55 frontend Vitest tests.
 - **Nightly e2e certification** ([e2e.yml](.github/workflows/e2e.yml)) drives the whole customer journey through the gateway against the composed fleet — including a genuine double-sell race, email into the sink, and a distributed trace asserted across the Kafka hop.
 - **Images are scanned before they are pushed** (Trivy, HIGH/CRITICAL gate) and published to GHCR as multi-arch manifests (amd64 for CI, arm64 for the production VM).
 

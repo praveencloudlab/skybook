@@ -25,8 +25,8 @@ classified AS (
   SELECT t.flight_id,
     CASE
       -- the non-UK endpoint decides the mission
-      WHEN far.code IN ('SYD', 'SIN', 'HKG', 'JNB') THEN (SELECT a350 FROM ids)
-      WHEN far.code IN ('JFK', 'ATL', 'DEL', 'BOM', 'NBO') THEN (SELECT b789 FROM ids)
+      WHEN far.code IN ('SYD', 'SIN', 'HKG', 'JNB', 'LAX', 'SFO') THEN (SELECT a350 FROM ids)
+      WHEN far.code IN ('JFK', 'ATL', 'DEL', 'BOM', 'NBO', 'ORD', 'DFW', 'MIA', 'HYD', 'MAA', 'BLR', 'CCU') THEN (SELECT b789 FROM ids)
       WHEN far.code = 'DXB' THEN (SELECT b777 FROM ids)
       WHEN far.code IN ('DOH', 'AUH') THEN (SELECT b789 FROM ids)
       -- short-haul (Europe + UK domestic): alternate the narrow-bodies

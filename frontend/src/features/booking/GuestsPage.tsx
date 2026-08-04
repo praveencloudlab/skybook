@@ -56,6 +56,7 @@ export function GuestsPage({
   const { subject, signedIn } = useSession();
   const [errors, setErrors] = useState<Record<string, string>[]>(() => paxTypes.map(() => ({})));
   const [contactError, setContactError] = useState<string | undefined>();
+  const [phoneError, setPhoneError] = useState<string | undefined>();
 
   // Saved travellers (passenger features): one click fills the next empty
   // guest form from the profile's address book - no retyping documents for
@@ -197,10 +198,11 @@ export function GuestsPage({
                 autoComplete="email"
               />
               <Field
-                label="Phone (optional)"
+                label="Phone"
                 type="tel"
                 value={contactPhone}
                 onChange={(e) => onContactPhoneChange(e.target.value)}
+                error={phoneError}
                 placeholder="+44 7700 900123"
                 autoComplete="tel"
               />

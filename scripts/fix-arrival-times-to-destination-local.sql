@@ -51,7 +51,12 @@ BEGIN
         ('DXB','Asia/Dubai'),       ('AUH','Asia/Dubai'),
         ('DOH','Asia/Qatar'),       ('BOM','Asia/Kolkata'),
         ('DEL','Asia/Kolkata'),     ('HKG','Asia/Hong_Kong'),
-        ('SIN','Asia/Singapore'),   ('SYD','Australia/Sydney'))
+        ('SIN','Asia/Singapore'),   ('SYD','Australia/Sydney'),
+        ('HYD','Asia/Kolkata'),     ('MAA','Asia/Kolkata'),
+        ('BLR','Asia/Kolkata'),     ('CCU','Asia/Kolkata'),
+        ('LAX','America/Los_Angeles'), ('SFO','America/Los_Angeles'),
+        ('ORD','America/Chicago'),  ('DFW','America/Chicago'),
+        ('MIA','America/New_York'))
     UPDATE flights f
        SET arrival_time = (f.arrival_time AT TIME ZONE oz.zone) AT TIME ZONE dz.zone
       FROM zones oz, zones dz

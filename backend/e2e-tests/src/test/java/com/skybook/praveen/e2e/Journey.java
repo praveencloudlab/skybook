@@ -100,7 +100,7 @@ public final class Journey {
                 .contentType("application/json")
                 .body("""
                         {"customerId":9001,"flightId":%d,"passengers":[%s],
-                         "contact":{"contactName":"E2E Passenger","contactEmail":"%s"}}"""
+                         "contact":{"contactName":"E2E Passenger","contactEmail":"%s","contactPhone":"+44 7700 900123"}}"""
                         .formatted(flightId, passenger, user.email()))
                 .when()
                 .post("/api/bookings");

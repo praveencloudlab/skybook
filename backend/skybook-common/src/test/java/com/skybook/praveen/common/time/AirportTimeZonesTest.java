@@ -64,7 +64,16 @@ class AirportTimeZonesTest {
                 "DEL, Asia/Kolkata",
                 "HKG, Asia/Hong_Kong",
                 "SIN, Asia/Singapore",
-                "SYD, Australia/Sydney"
+                "SYD, Australia/Sydney",
+                "HYD, Asia/Kolkata",
+                "MAA, Asia/Kolkata",
+                "BLR, Asia/Kolkata",
+                "CCU, Asia/Kolkata",
+                "LAX, America/Los_Angeles",
+                "SFO, America/Los_Angeles",
+                "ORD, America/Chicago",
+                "DFW, America/Chicago",
+                "MIA, America/New_York"
         })
         @DisplayName("each seeded airport code maps to the documented ZoneId")
         void seededAirportCodeMapsToItsZone(String airportCode, String expectedZone) {
@@ -114,7 +123,16 @@ class AirportTimeZonesTest {
                 "BOM, +05:30",
                 "SIN, +08:00",
                 "HKG, +08:00",
-                "SYD, +11:00"
+                "SYD, +11:00",
+                "HYD, +05:30",
+                "MAA, +05:30",
+                "BLR, +05:30",
+                "CCU, +05:30",
+                "LAX, -08:00",
+                "SFO, -08:00",
+                "ORD, -06:00",
+                "DFW, -06:00",
+                "MIA, -05:00"
         })
         @DisplayName("a January noon resolves to the airport's real winter offset")
         void winterOffsetsSpanTheNetwork(String airportCode, String expectedOffset) {
@@ -164,7 +182,7 @@ class AirportTimeZonesTest {
         }
 
         @ParameterizedTest(name = "{0} holds one offset all year")
-        @ValueSource(strings = {"DXB", "AUH", "DOH", "DEL", "BOM", "SIN", "HKG", "JNB", "NBO", "IST"})
+        @ValueSource(strings = {"DXB", "AUH", "DOH", "DEL", "BOM", "HYD", "MAA", "BLR", "CCU", "SIN", "HKG", "JNB", "NBO", "IST"})
         @DisplayName("the non-observing airports keep a single offset all year")
         void nonObservingAirportsNeverShift(String airportCode) {
             assertThat(offsetAt(airportCode, JANUARY)).isEqualTo(offsetAt(airportCode, JULY));

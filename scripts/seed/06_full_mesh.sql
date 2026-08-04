@@ -1,7 +1,7 @@
 BEGIN;
 
 -- Full-mesh schedule (Skyscanner-style coverage): EVERY directed pair of the
--- 20 known airports gets 3 daily 'SB' (SkyBook Air) departures for a year
+-- 29 known airports gets 3 daily 'SB' (SkyBook Air) departures for a year
 -- from CURRENT_DATE - so a fresh install is dense from its install day, and
 -- every origin/destination a visitor can pick returns real bookable flights.
 --
@@ -19,25 +19,38 @@ INSERT INTO mesh_airports VALUES
   ('DEL','SASIA'), ('BOM','SASIA'),
   ('HKG','EASIA'), ('SIN','EASIA'),
   ('SYD','OCE'),
-  ('JFK','NAM'), ('ATL','NAM'),
+  ('JFK','NAME'), ('ATL','NAME'), ('MIA','NAME'),
+  ('ORD','NAMC'), ('DFW','NAMC'),
+  ('LAX','NAMW'), ('SFO','NAMW'),
+  ('HYD','SASIA'), ('MAA','SASIA'), ('BLR','SASIA'), ('CCU','SASIA'),
   ('JNB','AFR'), ('NBO','AFR');
 
 -- Approximate block times (minutes) between regions; symmetric.
 CREATE TEMP TABLE region_dur (r1 varchar(6), r2 varchar(6), mins int);
 INSERT INTO region_dur VALUES
+  ('UK','NAME',490),   ('UK','NAMC',560),   ('UK','NAMW',660),
+  ('EU','NAME',510),   ('EU','NAMC',580),   ('EU','NAMW',690),
+  ('TR','NAME',630),   ('TR','NAMC',700),   ('TR','NAMW',790),
+  ('GULF','NAME',800), ('GULF','NAMC',860), ('GULF','NAMW',960),
+  ('SASIA','NAME',870),('SASIA','NAMC',890),('SASIA','NAMW',940),
+  ('EASIA','NAME',950),('EASIA','NAMC',880),('EASIA','NAMW',780),
+  ('OCE','NAME',1230), ('OCE','NAMC',1120), ('OCE','NAMW',830),
+  ('AFR','NAME',900),  ('AFR','NAMC',960),  ('AFR','NAMW',1080),
+  ('NAME','NAME',130), ('NAMC','NAMC',135), ('NAMW','NAMW',85),
+  ('NAME','NAMC',160), ('NAME','NAMW',330), ('NAMC','NAMW',225),
   ('UK','UK',75),      ('UK','EU',100),    ('UK','TR',250),   ('UK','GULF',420),
-  ('UK','SASIA',540),  ('UK','EASIA',740), ('UK','OCE',1290), ('UK','NAM',490),  ('UK','AFR',600),
+  ('UK','SASIA',540),  ('UK','EASIA',740), ('UK','OCE',1290),   ('UK','AFR',600),
   ('EU','EU',90),      ('EU','TR',180),    ('EU','GULF',360), ('EU','SASIA',500),
-  ('EU','EASIA',720),  ('EU','OCE',1260),  ('EU','NAM',500),  ('EU','AFR',620),
+  ('EU','EASIA',720),  ('EU','OCE',1260),    ('EU','AFR',620),
   ('TR','TR',60),      ('TR','GULF',240),  ('TR','SASIA',380),('TR','EASIA',600),
-  ('TR','OCE',1150),   ('TR','NAM',630),   ('TR','AFR',500),
+  ('TR','OCE',1150),      ('TR','AFR',500),
   ('GULF','GULF',70),  ('GULF','SASIA',200),('GULF','EASIA',440),
-  ('GULF','OCE',840),  ('GULF','NAM',780), ('GULF','AFR',480),
+  ('GULF','OCE',840),   ('GULF','AFR',480),
   ('SASIA','SASIA',90),('SASIA','EASIA',330),('SASIA','OCE',750),
-  ('SASIA','NAM',900), ('SASIA','AFR',540),
-  ('EASIA','EASIA',220),('EASIA','OCE',480),('EASIA','NAM',950),('EASIA','AFR',640),
-  ('OCE','OCE',90),    ('OCE','NAM',1200), ('OCE','AFR',840),
-  ('NAM','NAM',140),   ('NAM','AFR',900),
+   ('SASIA','AFR',540),
+  ('EASIA','EASIA',220),('EASIA','OCE',480),('EASIA','AFR',640),
+  ('OCE','OCE',90),     ('OCE','AFR',840),
+     
   ('AFR','AFR',240);
 
 -- Directed pairs with a stable id (drives the SB flight number) and duration.

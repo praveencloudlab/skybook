@@ -11,6 +11,13 @@
 
     <name>SkyBook Backend</name>
 
+    <developers>
+        <developer>
+            <name>Praveenreddy Somireddy</name>
+            <roles><role>Author - architecture, implementation, testing, CI/CD, deployment</role></roles>
+        </developer>
+    </developers>
+
     <properties>
         <java.version>21</java.version>
         <spring.boot.version>3.5.16</spring.boot.version>

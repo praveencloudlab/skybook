@@ -34,7 +34,7 @@ BOOKING=$(curl -sf -X POST "$GATEWAY/api/bookings" "${AUTH[@]}" -H 'Content-Type
   \"passengers\":[{\"title\":\"Ms\",\"firstName\":\"Uat\",\"lastName\":\"Acceptance\",\"dob\":\"1991-04-02\",
     \"nationality\":\"GBR\",\"passportNumber\":\"U${RANDOM}X\",\"passportExpiry\":\"2032-01-01\",
     \"travelClass\":\"ECONOMY\",\"fareType\":\"SAVER\"}],
-  \"contact\":{\"contactName\":\"Uat Acceptance\",\"contactEmail\":\"$WHO\"}}")
+  \"contact\":{\"contactName\":\"Uat Acceptance\",\"contactEmail\":\"$WHO\",\"contactPhone\":\"+44 7700 900123\"}}")
 BOOKING_ID=$(J "$BOOKING" id '[0-9]*')
 PNR=$(J "$BOOKING" bookingReference '"[A-Z0-9]*"')
 echo "   booking ${BOOKING_ID}, record locator ${PNR}"
