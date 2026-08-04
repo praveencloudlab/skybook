@@ -1,0 +1,46 @@
+# STAGING overlay - the prod shape, made able to stand BESIDE prod.
+#
+#   docker compose --env-file deploy/environments/staging.env \
+#     -f docker-compose.yml -f docker-compose.ladder.yml -f docker-compose.staging.yml
+#
+# Same discipline as docker-compose.prod.yml - everything bound to loopback,
+# nothing reachable except through the VM itself - with the two differences
+# that let a rehearsal coexist with the show:
+#
+#  * shifted host ports, so prod keeps 3000/8080 while staging answers on
+#    3100/8180 for the smoke test;
+#  * no Caddy. There is one public TLS door on this VM and it belongs to prod;
+#    80/443 cannot be held by two processes. The certificate path is exercised
+#    by prod's own health verification instead. Stated as the honest limit of
+#    a one-VM estate rather than papered over.
+#
+# Observability stays unpublished entirely: a transient environment that lives
+# for minutes has logs, and nobody will be dashboarding it.
+
+services:
+
+  frontend:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:${STAGING_FRONTEND_PORT:-3100}:3000"
+
+  api-gateway:
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:${STAGING_GATEWAY_PORT:-8180}:8080"
+
+  mailpit:
+    ports: !override
+      - "127.0.0.1:8125:8025"
+
+  prometheus:
+    ports: !override []
+
+  loki:
+    ports: !override []
+
+  tempo:
+    ports: !override []
+
+  grafana:
+    ports: !override []

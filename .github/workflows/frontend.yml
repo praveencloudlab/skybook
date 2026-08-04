@@ -128,9 +128,43 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push scanned image
+      - name: Push scanned image (amd64)
         if: ${{ env.IS_MAIN_PUSH == 'true' }}
         run: |
-          docker tag "${IMAGE}:${GITHUB_SHA}" "${IMAGE}:latest"
-          docker push "${IMAGE}:${GITHUB_SHA}"
-          docker push "${IMAGE}:latest"
+          docker tag "${IMAGE}:${GITHUB_SHA}" "${IMAGE}:${GITHUB_SHA}-amd64"
+          docker push "${IMAGE}:${GITHUB_SHA}-amd64"
+
+  # arm64 sibling + manifest, for the same reason as the backend matrix: the
+  # production VM is arm64 and promotion means pulling the certified artifact,
+  # not rebuilding it there. nginx serving static files builds in seconds on
+  # the free arm64 runners.
+  docker-arm64-and-manifest:
+    name: arm64 build & multi-arch manifest
+    needs: docker-build-scan-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/skybook-frontend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push (arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}-arm64
+      - name: Stitch and push the manifests
+        run: |
+          docker buildx imagetools create \
+            -t "${IMAGE}:${GITHUB_SHA}" -t "${IMAGE}:latest" \
+            "${IMAGE}:${GITHUB_SHA}-amd64" "${IMAGE}:${GITHUB_SHA}-arm64"

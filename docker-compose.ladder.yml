@@ -1,0 +1,73 @@
+# Environment-ladder overlay: run the PROMOTED images, not a local build.
+#
+#   docker compose --env-file deploy/environments/<env>.env \
+#     -f docker-compose.yml -f docker-compose.ladder.yml up -d
+#
+# This file is the build-once-promote-many mechanism (ENVIRONMENTS.md). CI
+# builds every image once per commit, scans it, and pushes it to GHCR tagged
+# with that commit's SHA. Every environment above LOCAL then runs those exact
+# digests by setting IMAGE_TAG - DEV through PROD all execute the same bytes,
+# and "it worked in QA" is a statement about the artifact, not about a
+# hopefully-similar rebuild.
+#
+# LOCAL is the one environment that deliberately does NOT use this overlay:
+# a developer's inner loop needs `--build` and the base file provides it.
+#
+# The two knobs below every backend service are the only per-environment
+# configuration that is not already a first-class variable in the base file,
+# and both are standard Spring relaxed binding - no code change involved:
+#   SPRING_PROFILES_ACTIVE  the environment's name, visible in logs and
+#                           actuator, so a log line can never be mistaken
+#                           for another environment's
+#   LOGGING_LEVEL_ROOT      noisy in DEV, terse in PROD
+
+x-ladder-env: &ladder-env
+  SPRING_PROFILES_ACTIVE: ${SKYBOOK_ENV:?set SKYBOOK_ENV in the env file}
+  LOGGING_LEVEL_ROOT: ${LOG_LEVEL:-INFO}
+
+services:
+
+  auth-service:
+    image: ghcr.io/praveencloudlab/skybook-auth-service:${IMAGE_TAG:?set IMAGE_TAG to the commit SHA being promoted}
+    environment:
+      <<: *ladder-env
+
+  flight-service:
+    image: ghcr.io/praveencloudlab/skybook-flight-service:${IMAGE_TAG}
+    environment:
+      <<: *ladder-env
+
+  booking-service:
+    image: ghcr.io/praveencloudlab/skybook-booking-service:${IMAGE_TAG}
+    environment:
+      <<: *ladder-env
+
+  inventory-service:
+    image: ghcr.io/praveencloudlab/skybook-inventory-service:${IMAGE_TAG}
+    environment:
+      <<: *ladder-env
+
+  notification-service:
+    image: ghcr.io/praveencloudlab/skybook-notification-service:${IMAGE_TAG}
+    environment:
+      <<: *ladder-env
+
+  payment-service:
+    image: ghcr.io/praveencloudlab/skybook-payment-service:${IMAGE_TAG}
+    environment:
+      <<: *ladder-env
+
+  checkin-service:
+    image: ghcr.io/praveencloudlab/skybook-checkin-service:${IMAGE_TAG}
+    environment:
+      <<: *ladder-env
+
+  api-gateway:
+    image: ghcr.io/praveencloudlab/skybook-api-gateway:${IMAGE_TAG}
+    environment:
+      <<: *ladder-env
+
+  # The frontend rides its own workflow (frontend.yml), so its tag is
+  # independent: a backend promotion does not imply a frontend change.
+  frontend:
+    image: ghcr.io/praveencloudlab/skybook-frontend:${FRONTEND_IMAGE_TAG:-latest}

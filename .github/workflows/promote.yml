@@ -1,0 +1,369 @@
+# The environment ladder (docs/ENVIRONMENTS.md).
+#
+#   LOCAL → DEV → SIT → TEST/QA → UAT → PERF → STAGING → PROD
+#                                                      ↘ DR (weekly drill)
+#
+# One principle carries the whole file: BUILD ONCE, PROMOTE MANY. ci.yml has
+# already built, scanned and pushed every image to GHCR tagged with the commit
+# SHA before this workflow starts. Each environment below runs those exact
+# digests - nothing is ever rebuilt on the way to production, so what QA
+# certified is bit-for-bit what PROD runs.
+#
+# Ephemeral environments (dev/sit/qa/perf) are composed per run on the runner,
+# with per-run secrets - the same pattern the nightly certification proved.
+# The standing environments (staging, prod) live on the Oracle VM and their
+# jobs activate once the repository variable DEPLOY_SSH_READY is 'true' and
+# the SSH secrets exist (ENVIRONMENTS.md §6 is the setup checklist). Until
+# then the ladder still runs and gates everything up to UAT.
+
+name: Promote
+
+on:
+  # Follows CI: a commit only enters the ladder after build+verify+scan+push
+  # succeeded for it.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Commit SHA to promote (defaults to the branch head)'
+        required: false
+  schedule:
+    - cron: '0 4 * * 1'   # 04:00 UTC Monday - the DR drill
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  # The artifact under promotion. workflow_run hands us the exact SHA that CI
+  # just built; dispatch may name one; the drill only needs any recent image.
+  IMAGE_TAG: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha
+              || inputs.image_tag || github.sha }}
+
+jobs:
+
+  # =========================================================== DEV
+  # First landing. Question answered: does the promoted artifact boot and
+  # serve its front door at all?
+  dev:
+    name: DEV — deploy & smoke
+    if: github.event_name != 'schedule'
+        && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ env.IMAGE_TAG }}' }
+
+      - name: Per-run secrets
+        run: bash .github/scripts/ephemeral-env.sh
+
+      - name: Log in to GHCR
+        run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+      - name: Prepare bind mounts
+        run: bash .github/scripts/observability-dirs.sh
+
+      - name: Stand up DEV from the promoted images
+        run: |
+          set -a && source deploy/environments/dev.env && set +a
+          export IMAGE_TAG="${IMAGE_TAG}"
+          docker compose --env-file .env --env-file deploy/environments/dev.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml pull -q
+          docker compose --env-file .env --env-file deploy/environments/dev.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml up -d --no-build
+
+      - name: Wait until healthy
+        run: bash .github/scripts/wait-healthy.sh skybook-dev
+
+      - name: Seed reference data
+        run: bash scripts/seed/seed.sh skybook-dev-postgres-1
+
+      - name: Smoke — the front door answers
+        run: bash .github/scripts/smoke.sh http://localhost:8080 http://localhost:3000
+
+      - name: DEV logs on failure
+        if: failure()
+        run: docker compose -p skybook-dev logs --tail 80
+
+  # =========================================================== SIT
+  # System integration. Question answered: do the services agree with EACH
+  # OTHER - gateway to service, service to service, service to bus, bus to
+  # mail sink - for the promoted set as a set?
+  sit:
+    name: SIT — cross-service integration
+    needs: dev
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: sit
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ env.IMAGE_TAG }}' }
+      - name: Per-run secrets
+        run: bash .github/scripts/ephemeral-env.sh
+      - name: Log in to GHCR
+        run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+      - name: Prepare bind mounts
+        run: bash .github/scripts/observability-dirs.sh
+      - name: Stand up SIT
+        run: |
+          docker compose --env-file .env --env-file deploy/environments/sit.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml pull -q
+          docker compose --env-file .env --env-file deploy/environments/sit.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml up -d --no-build
+      - name: Wait until healthy
+        run: bash .github/scripts/wait-healthy.sh skybook-sit
+      - name: Seed reference data
+        run: bash scripts/seed/seed.sh skybook-sit-postgres-1
+
+      - name: Integration probes
+        run: bash .github/scripts/sit-probes.sh
+      - name: SIT logs on failure
+        if: failure()
+        run: docker compose -p skybook-sit logs --tail 80
+
+  # =========================================================== TEST / QA
+  # The certification environment: the full end-to-end suite - the one the
+  # nightly runs - executed against the PROMOTED images instead of a fresh
+  # source build. This is the strongest claim the ladder makes: the artifact
+  # heading for production has passed the customer-journey certification.
+  qa:
+    name: TEST/QA — e2e certification
+    needs: sit
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: qa
+    env:
+      E2E_ADMIN_EMAIL: ci-admin@skybook.com
+      E2E_ADMIN_PASSWORD: CiAdminPassw0rd!
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ env.IMAGE_TAG }}' }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: maven }
+      - name: Per-run secrets
+        run: bash .github/scripts/ephemeral-env.sh
+      - name: Log in to GHCR
+        run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+      - name: Prepare bind mounts
+        run: bash .github/scripts/observability-dirs.sh
+      - name: Stand up QA (promoted images + certification overrides)
+        run: |
+          docker compose --env-file .env --env-file deploy/environments/qa.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml -f docker-compose.e2e.yml pull -q
+          docker compose --env-file .env --env-file deploy/environments/qa.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml -f docker-compose.e2e.yml up -d --no-build
+      - name: Wait until healthy
+        run: bash .github/scripts/wait-healthy.sh skybook-qa
+      - name: Seed reference data
+        run: bash scripts/seed/seed.sh skybook-qa-postgres-1
+
+      - name: Register the certification admin, then re-bootstrap auth
+        run: |
+          curl -sf -X POST http://localhost:8080/api/auth/register \
+            -H 'Content-Type: application/json' \
+            -d "{\"fullName\":\"CI Admin\",\"email\":\"${E2E_ADMIN_EMAIL}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}"
+          echo "SKYBOOK_BOOTSTRAP_ADMIN_EMAIL=${E2E_ADMIN_EMAIL}" >> .env
+          docker compose --env-file .env --env-file deploy/environments/qa.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml -f docker-compose.e2e.yml up -d auth-service
+          for i in $(seq 1 30); do
+            docker compose -p skybook-qa ps auth-service --format '{{.Status}}' | grep -q healthy && break
+            sleep 5
+          done
+      - name: Run the certification suite
+        working-directory: backend
+        run: mvn -B -pl e2e-tests -Pe2e verify
+      - name: QA logs on failure
+        if: failure()
+        run: docker compose -p skybook-qa logs --tail 100
+
+  # =========================================================== PERF
+  # Load, with thresholds as the gate. The budgets live in perf/k6/journey.js
+  # next to their calibration rationale; breaching any of them stops the
+  # promotion here, before a human ever looks at UAT.
+  perf:
+    name: PERF — k6 load with thresholds
+    needs: qa
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: perf
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ env.IMAGE_TAG }}' }
+      - name: Per-run secrets
+        run: bash .github/scripts/ephemeral-env.sh
+      - name: Log in to GHCR
+        run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+      - name: Prepare bind mounts
+        run: bash .github/scripts/observability-dirs.sh
+      - name: Stand up PERF
+        run: |
+          docker compose --env-file .env --env-file deploy/environments/perf.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml -f docker-compose.perf.yml pull -q
+          docker compose --env-file .env --env-file deploy/environments/perf.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml -f docker-compose.perf.yml up -d --no-build
+      - name: Wait until healthy
+        run: bash .github/scripts/wait-healthy.sh skybook-perf
+      - name: Seed reference data
+        run: bash scripts/seed/seed.sh skybook-perf-postgres-1
+
+      - name: k6 — thresholds are the gate
+        run: |
+          docker run --rm -i --network skybook-perf_default \
+            -e BASE=http://api-gateway:8080 grafana/k6 run - < perf/k6/journey.js \
+            | tee k6-summary.txt
+      - name: Upload the k6 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: 'perf-k6-${{ env.IMAGE_TAG }}', path: k6-summary.txt, retention-days: 30 }
+
+  # =========================================================== UAT
+  # The human gate. This job runs the acceptance journey and uploads the
+  # evidence; the GitHub environment 'uat' carries a required-reviewer rule
+  # (ENVIRONMENTS.md §6), so the ladder PAUSES here until a person approves -
+  # that approval, against recorded evidence, is the acceptance sign-off.
+  uat:
+    name: UAT — acceptance evidence & sign-off
+    needs: perf
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: uat
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ env.IMAGE_TAG }}' }
+      - name: Per-run secrets
+        run: bash .github/scripts/ephemeral-env.sh
+      - name: Log in to GHCR
+        run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+      - name: Prepare bind mounts
+        run: bash .github/scripts/observability-dirs.sh
+      - name: Stand up UAT
+        run: |
+          docker compose --env-file .env --env-file deploy/environments/uat.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml pull -q
+          docker compose --env-file .env --env-file deploy/environments/uat.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml up -d --no-build
+      - name: Wait until healthy
+        run: bash .github/scripts/wait-healthy.sh skybook-uat
+      - name: Seed reference data
+        run: bash scripts/seed/seed.sh skybook-uat-postgres-1
+
+      - name: Acceptance journey (search → register → book → pay → check trip)
+        run: bash .github/scripts/uat-journey.sh | tee uat-evidence.txt
+      - name: Upload acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with: { name: 'uat-evidence-${{ env.IMAGE_TAG }}', path: uat-evidence.txt, retention-days: 90 }
+
+  # =========================================================== STAGING
+  # Dress rehearsal on the production VM: same host, same architecture, same
+  # secrets, promoted images, transient project on shifted ports. Torn down
+  # after the smoke - a one-VM estate cannot afford a standing twin, and
+  # docker-compose.staging.yml documents that trade honestly.
+  staging:
+    name: STAGING — rehearsal on the prod VM
+    needs: uat
+    if: vars.DEPLOY_SSH_READY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy transient staging over SSH
+        env:
+          SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          SSH_HOST: ${{ secrets.VM_SSH_HOST }}
+          SSH_USER: ${{ secrets.VM_SSH_USER }}
+        run: |
+          mkdir -p ~/.ssh && echo "$SSH_KEY" > ~/.ssh/id && chmod 600 ~/.ssh/id
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/id "$SSH_USER@$SSH_HOST" bash -s "${IMAGE_TAG}" < .github/scripts/staging-on-vm.sh
+
+  # =========================================================== PROD
+  # The promotion itself: pull the certified digests on the VM, roll the
+  # stack, verify health through the real front door, then take the
+  # post-deploy backup so the restore point brackets the release.
+  prod:
+    name: PROD — promote the certified artifact
+    needs: staging
+    if: vars.DEPLOY_SSH_READY == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy prod over SSH
+        env:
+          SSH_KEY: ${{ secrets.VM_SSH_KEY }}
+          SSH_HOST: ${{ secrets.VM_SSH_HOST }}
+          SSH_USER: ${{ secrets.VM_SSH_USER }}
+        run: |
+          mkdir -p ~/.ssh && echo "$SSH_KEY" > ~/.ssh/id && chmod 600 ~/.ssh/id
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/id "$SSH_USER@$SSH_HOST" bash -s "${IMAGE_TAG}" < .github/scripts/prod-on-vm.sh
+
+  # =========================================================== DR
+  # The weekly drill, and the only rung most ladders skip: prove the backups
+  # RESTORE. Seeds a stack, backs it up, destroys the database volume
+  # entirely, restores from the archive, and verifies row counts against the
+  # manifest plus a live API read. An untested backup is a hope; this makes
+  # it a fact, weekly, in public.
+  dr-drill:
+    name: DR — backup/destroy/restore drill
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: dr
+    steps:
+      - uses: actions/checkout@v4
+      - name: Per-run secrets
+        run: bash .github/scripts/ephemeral-env.sh
+      - name: Log in to GHCR
+        run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+      - name: Prepare bind mounts
+        run: bash .github/scripts/observability-dirs.sh
+      - name: Stand up a stack to lose
+        run: |
+          echo "IMAGE_TAG=latest" >> .env
+          docker compose --env-file .env --env-file deploy/environments/dev.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml pull -q
+          docker compose --env-file .env --env-file deploy/environments/dev.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml up -d --no-build
+      - name: Wait until healthy
+        run: bash .github/scripts/wait-healthy.sh skybook-dev
+      - name: Seed reference data
+        run: bash scripts/seed/seed.sh skybook-dev-postgres-1
+
+      - name: Write real data, then back it up
+        run: |
+          bash .github/scripts/smoke.sh http://localhost:8080 http://localhost:3000
+          bash scripts/backup.sh ./backups skybook-dev-postgres-1 1
+      - name: Destroy the database
+        run: |
+          docker compose -p skybook-dev stop postgres
+          docker compose -p skybook-dev rm -f postgres
+          docker volume rm -f skybook-dev_postgres-data || true
+          docker compose --env-file .env --env-file deploy/environments/dev.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml up -d postgres
+          for i in $(seq 1 30); do
+            docker exec skybook-dev-postgres-1 pg_isready -U postgres && break; sleep 2
+          done
+      - name: Restore and verify against the manifest
+        run: bash scripts/restore.sh ./backups/skybook-*.tar.gz skybook-dev-postgres-1
+      - name: Prove the platform reads the restored data
+        run: |
+          docker compose --env-file .env --env-file deploy/environments/dev.env \
+            -f docker-compose.yml -f docker-compose.ladder.yml restart \
+            auth-service flight-service booking-service inventory-service \
+            payment-service checkin-service notification-service
+          bash .github/scripts/wait-healthy.sh skybook-dev
+          bash .github/scripts/smoke.sh http://localhost:8080 http://localhost:3000

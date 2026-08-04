@@ -11,7 +11,10 @@
 # On Windows Git Bash, MSYS_NO_PATHCONV=1 stops path mangling in docker exec.
 set -euo pipefail
 
-C=skybook-postgres-1
+# The container is a parameter because the environment ladder runs one
+# Postgres per compose project (skybook-dev-postgres-1, skybook-qa-postgres-1,
+# ...); the default keeps the local developer invocation unchanged.
+C="${1:-skybook-postgres-1}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 export MSYS_NO_PATHCONV=1
 
@@ -41,4 +44,14 @@ docker exec -i "$C" psql -U postgres -d skybook_flight -v ON_ERROR_STOP=1 < "$DI
 
 echo "modern fleet + re-fleet (10_modern_fleet.sql, refleet.sh)"
 docker exec -i "$C" psql -U postgres -d skybook_inventory -v ON_ERROR_STOP=1 < "$DIR/10_modern_fleet.sql"
-bash "$DIR/refleet.sh"
+bash "$DIR/refleet.sh" "$C"
+
+# Seeded schedules author arrivals on the origin's clock; the platform stores
+# them destination-local (scripts/fix-arrival-times-to-destination-local.sql).
+# Chained here so EVERY freshly seeded environment - local re-seed or ladder
+# rung - comes up with correct arrival boards, not just the ones someone
+# remembered to fix. The script records itself, so this is a no-op on a
+# database it already corrected.
+echo "arrival times: re-expressing cross-timezone arrivals on the destination clock"
+docker exec -i "$C" psql -U postgres -d skybook_flight -v ON_ERROR_STOP=1 \
+  < "$DIR/../fix-arrival-times-to-destination-local.sql"

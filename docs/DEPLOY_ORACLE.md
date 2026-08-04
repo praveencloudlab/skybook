@@ -137,8 +137,14 @@ Seed the flight schedule once the services are healthy:
 
 ## 7. Operating it
 
+> Since the environment ladder landed (ENVIRONMENTS.md), the preferred way to
+> update this VM is the *Promote* pipeline, which pulls the certified images
+> rather than rebuilding from source here — §6 of that document lists the
+> one-time SSH setup. The commands below remain the manual fallback and the
+> bootstrap path.
+
 ```bash
-# update to latest main
+# update to latest main (manual fallback - the pipeline normally does this)
 git pull && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 # logs / status

@@ -5,7 +5,7 @@
 # calls for. Safe to re-run any time; flights with sold seats keep their metal.
 set -euo pipefail
 
-C=skybook-postgres-1
+C="${1:-skybook-postgres-1}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 export MSYS_NO_PATHCONV=1
 

@@ -1,0 +1,15 @@
+# PERF overlay - one override, stated honestly.
+#
+# The gateway allows 100 requests a minute PER SOURCE because a single source
+# sending more is exactly what it exists to stop. A load generator is one
+# source pretending to be hundreds of users, so against the default limit k6
+# measures the limiter (first observed: 91.5% of requests 429'd with the
+# platform idle underneath). Raising the cap for the load source is how load
+# tests are run everywhere real users arrive from many addresses - and the
+# consequence is stated as the e2e overlay states its own: PERF does not
+# certify the limiter. The limiter's own behaviour is asserted functionally
+# by the gateway's tests.
+services:
+  api-gateway:
+    environment:
+      GATEWAY_RATE_LIMIT_REQUESTS_PER_MINUTE: "10000"

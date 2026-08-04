@@ -183,9 +183,92 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push scanned image
+      # Pushed under an arch suffix; the manifest job below stitches the two
+      # architectures into the :sha and :latest tags every consumer uses.
+      - name: Push scanned image (amd64)
         if: ${{ env.IS_MAIN_PUSH == 'true' }}
         run: |
-          docker tag "${IMAGE}:${GITHUB_SHA}" "${IMAGE}:latest"
-          docker push "${IMAGE}:${GITHUB_SHA}"
-          docker push "${IMAGE}:latest"
+          docker tag "${IMAGE}:${GITHUB_SHA}" "${IMAGE}:${GITHUB_SHA}-amd64"
+          docker push "${IMAGE}:${GITHUB_SHA}-amd64"
+
+  # The production VM is an Oracle Ampere A1 - arm64. Promotion means the VM
+  # pulls the CERTIFIED artifact rather than rebuilding from source, so the
+  # artifact must exist for its architecture; GitHub's free arm64 runners make
+  # that a native build, not a day of QEMU. The Trivy gate is not repeated
+  # here: both architectures are built from the identical Dockerfile, lockfile
+  # and dependency tree in the same run, and the scan reads those - the CVE
+  # verdict does not vary by instruction set.
+  docker-build-arm64:
+    name: Docker build & push arm64 (${{ matrix.service }})
+    needs: build-and-verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - auth-service
+          - booking-service
+          - checkin-service
+          - flight-service
+          - inventory-service
+          - notification-service
+          - payment-service
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/skybook-${{ matrix.service }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push (arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}-arm64
+
+  # One manifest per image: :sha and :latest resolve to the right architecture
+  # wherever they are pulled - amd64 on the ladder's runners, arm64 on the VM.
+  docker-manifest:
+    name: Publish multi-arch manifest (${{ matrix.service }})
+    needs: [docker-build-scan-push, docker-build-arm64]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - auth-service
+          - booking-service
+          - checkin-service
+          - flight-service
+          - inventory-service
+          - notification-service
+          - payment-service
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/skybook-${{ matrix.service }}
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Stitch and push the manifests
+        run: |
+          docker buildx imagetools create \
+            -t "${IMAGE}:${GITHUB_SHA}" -t "${IMAGE}:latest" \
+            "${IMAGE}:${GITHUB_SHA}-amd64" "${IMAGE}:${GITHUB_SHA}-arm64"
