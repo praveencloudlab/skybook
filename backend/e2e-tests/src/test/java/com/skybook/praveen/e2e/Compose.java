@@ -53,6 +53,20 @@ public final class Compose {
 
     private static String run(String... composeArgs) {
         List<String> command = new ArrayList<>(List.of("docker", "compose"));
+        // The suite has always inferred the compose project from the repo root
+        // directory, which holds for the nightly (default project "skybook")
+        // and for a developer machine - and for nobody else. The QA rung runs
+        // the same fleet as project "skybook-qa", where the inferred name
+        // targets nothing: the stop silently missed, the 502 never happened,
+        // and recovery waited two minutes on a container that was never
+        // stopped. Third instance of the same defect class in one day (after
+        // seed.sh and seed_mesh.sh), so the rule gets stated once more:
+        // anything that names a compose project must take it as a parameter.
+        String project = System.getenv("E2E_COMPOSE_PROJECT");
+        if (project != null && !project.isBlank()) {
+            command.add("-p");
+            command.add(project);
+        }
         command.addAll(List.of(composeArgs));
 
         try {

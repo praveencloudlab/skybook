@@ -141,6 +141,10 @@ jobs:
     env:
       E2E_ADMIN_EMAIL: ci-admin@skybook.com
       E2E_ADMIN_PASSWORD: CiAdminPassw0rd!
+      # The certification suite manipulates containers (the service-down case);
+      # it must be told which compose project the rung runs, or it infers the
+      # developer default and stops nothing.
+      E2E_COMPOSE_PROJECT: skybook-qa
     steps:
       - uses: actions/checkout@v4
         with: { ref: '${{ env.IMAGE_TAG }}' }
