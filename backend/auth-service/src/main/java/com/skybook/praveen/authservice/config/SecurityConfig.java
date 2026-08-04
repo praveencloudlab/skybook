@@ -54,6 +54,11 @@ public class SecurityConfig {
 
     @Bean
     @Order(1)
+    // Sonar S4502 - CSRF disabled, reviewed and accepted. This chain is the
+    // machine-to-machine token endpoint: HTTP Basic, stateless, no cookie and
+    // no session. A browser never holds credentials for it, so there is no
+    // ambient authority for a cross-site request to ride on.
+    @SuppressWarnings("java:S4502")
     public SecurityFilterChain serviceTokenFilterChain(HttpSecurity http,
                                                        ServiceClientDetailsService clientDetailsService,
                                                        PasswordEncoder passwordEncoder) throws Exception {
@@ -83,6 +88,21 @@ public class SecurityConfig {
 
     @Bean
     @Order(2)
+    // Sonar S4502 - CSRF disabled, reviewed and accepted.
+    //
+    // This chain authenticates from the Authorization: Bearer header only - it
+    // ISSUES the skybook_session cookie but never consumes one. The cookie is
+    // consumed one hop up at the API gateway, which validates it and injects
+    // the Bearer header, so the CSRF boundary is the gateway. The control is
+    // SameSite=Lax on a same-origin SPA (see SessionCookie): withheld from
+    // cross-site POST/PUT/PATCH/DELETE and from cross-site fetch/XHR. Lax does
+    // travel on top-level cross-site GET, so the residual risk is a
+    // state-changing GET - all 48 GET endpoints were audited and none mutates.
+    //
+    // Known and accepted: login CSRF (forcing a victim into an attacker session)
+    // is not covered by SameSite, since it needs no pre-existing cookie. It is
+    // tolerated here because nothing of the victim is exposed by it.
+    @SuppressWarnings("java:S4502")
     public SecurityFilterChain applicationFilterChain(HttpSecurity http,
                                                       JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
 

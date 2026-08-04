@@ -235,6 +235,14 @@ public class CheckInServiceImpl implements CheckInService {
 
     @Override
     @Transactional
+    // Sonar S8700 flags the Duration.between over LocalDateTime below. It is a
+    // false positive, and the code is in fact the zone-CORRECT implementation:
+    // both operands come from the same server clock, so their difference is a
+    // relative offset (the gate-close window), never a wall-clock instant. That
+    // offset is then applied to each row via AirportTimeZones.nowAt(origin), so
+    // every check-in is judged on its own airport clock. Collapsing this to a
+    // naive comparison is the bug the code exists to avoid.
+    @SuppressWarnings("java:S8700")
     public List<CheckInResponse> sweepNoShows(LocalDateTime departureCutoff) {
 
         // The cutoff arrives as server-now + gate-close offset. Departures are
