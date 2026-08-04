@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.List;
 
 import org.springframework.data.annotation.CreatedBy;
 import org.springframework.data.annotation.CreatedDate;
@@ -93,10 +95,14 @@ class AuditableTest {
 
             // Identity semantics: two rows carrying identical audit values are
             // still distinct objects, because Auditable deliberately does not
-            // override equals. isSameAs rather than isEqualTo(entity), which
-            // asserts nothing - a value compared against itself always passes.
+            // override equals.
             assertThat(entity).isNotEqualTo(other);
-            assertThat(entity).isSameAs(entity);
+
+            // The consequence that actually matters: sibling entities holding
+            // equal audit state must both survive in a Set, which is how JPA
+            // collections hold them. Comparing an instance against itself would
+            // state nothing - it passes for every object ever written.
+            assertThat(new HashSet<>(List.of(entity, other))).hasSize(2);
         }
     }
 

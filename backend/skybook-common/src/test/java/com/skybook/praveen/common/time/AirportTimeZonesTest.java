@@ -249,15 +249,14 @@ class AirportTimeZonesTest {
         @DisplayName("nowAt for an unknown airport is the server's UTC clock")
         void nowAtUnknownAirportIsUtc() {
             LocalDateTime unknown = AirportTimeZones.nowAt("ZZZ");
-            assertThat(Duration.between(unknown, LocalDateTime.now(ZoneOffset.UTC)).abs())
-                    .isLessThan(Duration.ofSeconds(30));
+            assertThat(unknown).isCloseTo(LocalDateTime.now(ZoneOffset.UTC), within(30, ChronoUnit.SECONDS));
         }
 
         @Test
         @DisplayName("nowAt(null) does not throw - it degrades to the UTC clock")
         void nowAtNullIsUtc() {
-            assertThat(Duration.between(AirportTimeZones.nowAt(null), LocalDateTime.now(ZoneOffset.UTC)).abs())
-                    .isLessThan(Duration.ofSeconds(30));
+            assertThat(AirportTimeZones.nowAt(null))
+                    .isCloseTo(LocalDateTime.now(ZoneOffset.UTC), within(30, ChronoUnit.SECONDS));
         }
 
         @Test
@@ -266,11 +265,18 @@ class AirportTimeZonesTest {
             LocalDateTime delhi = AirportTimeZones.nowAt("DEL");
             LocalDateTime singapore = AirportTimeZones.nowAt("SIN");
             // SIN is UTC+8, DEL is UTC+5:30 -> Singapore's wall clock reads 2h30m later.
-            assertThat(ChronoUnit.MINUTES.between(delhi, singapore)).isBetween(149L, 151L);
+            //
+            // Stated as "one clock, shifted, matches the other" rather than as a
+            // duration between them: these are two DIFFERENT zones' wall clocks,
+            // and the elapsed time between them is not a meaningful quantity -
+            // only their offset is. That distinction is the whole subject here.
+            assertThat(singapore).isCloseTo(delhi.plusMinutes(150), within(1, ChronoUnit.MINUTES));
 
             LocalDateTime newYork = AirportTimeZones.nowAt("JFK");
-            // JFK trails Delhi by 9h30m (winter) or 10h30m (summer) - never zero.
-            assertThat(ChronoUnit.MINUTES.between(newYork, delhi)).isBetween(569L, 631L);
+            // JFK trails Delhi by 9h30m (winter) or 10h30m (summer) - never zero,
+            // so the expected gap is the midpoint and the tolerance spans the
+            // daylight-saving swing either side of it.
+            assertThat(delhi).isCloseTo(newYork.plusMinutes(600), within(31, ChronoUnit.MINUTES));
         }
     }
 
