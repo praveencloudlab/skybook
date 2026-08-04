@@ -24,6 +24,16 @@
 x-ladder-env: &ladder-env
   SPRING_PROFILES_ACTIVE: ${SKYBOOK_ENV:?set SKYBOOK_ENV in the env file}
   LOGGING_LEVEL_ROOT: ${LOG_LEVEL:-INFO}
+  # Without a cgroup limit each JVM sizes itself against the HOST - eight
+  # services on a 16 GB runner each planned a 4 GB heap, measured 5.6 GB
+  # resident while idle, and when the seed's full-mesh insert made postgres
+  # the fastest-growing process on a saturated box, the OOM killer took
+  # postgres mid-INSERT and DEV died at "container is not running". A rung
+  # exists to answer its one question, not to let idle heaps evict the
+  # database. The default fits the 16 GB runners; prod.env raises it for
+  # the 24 GB VM rather than escaping it - a fleet that has already shown
+  # it will eat unbounded headroom does not get unbounded headroom back.
+  JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xmx640m -XX:MaxMetaspaceSize=256m}
 
 services:
 

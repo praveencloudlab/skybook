@@ -39,6 +39,12 @@ variables, one file per rung under `deploy/environments/`, layered with
 | **PROD** | the Oracle VM behind Caddy | after STAGING | — | health through the TLS front door, then a post-deploy backup |
 | **DR** | weekly drill, CI runner | Monday 04:00 UTC + on demand | do the backups actually restore? | row-count verification against the backup manifest + a live smoke on the restored data |
 
+Every rung that runs the ladder overlay also runs with a JVM ceiling
+(`JAVA_TOOL_OPTIONS`, per env-file): without a cgroup limit each service
+sizes its heap against the whole host, and eight of those on one 16 GB
+runner starved the database out from under the very first DEV deploy. The
+first thing the ladder ever caught was itself.
+
 Ephemeral rungs generate throwaway secrets per run (`ephemeral-env.sh`) — the
 pattern the nightly certification established. Each rung seeds its own data
 (`scripts/seed/seed.sh <container>`), so environments share nothing, not even

@@ -10,7 +10,7 @@
 #   bash scripts/seed/seed_mesh.sh
 set -euo pipefail
 
-C=skybook-postgres-1
+C="${1:-skybook-postgres-1}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 export MSYS_NO_PATHCONV=1
 
@@ -34,4 +34,4 @@ docker exec -i "$C" psql -U postgres -d skybook_flight -v ON_ERROR_STOP=1 < "$DI
 
 echo "modern fleet + re-fleet (10_modern_fleet.sql, refleet.sh)"
 docker exec -i "$C" psql -U postgres -d skybook_inventory -v ON_ERROR_STOP=1 < "$DIR/10_modern_fleet.sql"
-bash "$DIR/refleet.sh"
+bash "$DIR/refleet.sh" "$C"

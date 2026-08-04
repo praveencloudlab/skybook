@@ -6,7 +6,7 @@
 #   bash scripts/seed/seed_connections.sh
 set -euo pipefail
 
-C=skybook-postgres-1
+C="${1:-skybook-postgres-1}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
 export MSYS_NO_PATHCONV=1
 
