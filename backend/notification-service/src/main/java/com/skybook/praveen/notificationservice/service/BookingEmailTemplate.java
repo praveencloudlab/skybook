@@ -206,13 +206,19 @@ public class BookingEmailTemplate {
         }
         // Real terminals ride the event since the terminals feature; older
         // events have none and simply show the city alone.
-        String originCity = AirportCityLookup.cityFor(origin);
-        String destinationCity = AirportCityLookup.cityFor(destination);
+        //
+        // Escaped here, as the parts go together, rather than at the format
+        // call: the separator is a &middot; entity, so escaping the finished
+        // string rewrites its ampersand and the traveller reads a literal
+        // "London &middot; Terminal 5". City and terminal are still escaped
+        // individually - both arrive from the event, neither is ours to trust.
+        String originCity = escape(nvl(AirportCityLookup.cityFor(origin), ""));
+        String destinationCity = escape(nvl(AirportCityLookup.cityFor(destination), ""));
         if (departureTerminal != null && !departureTerminal.isBlank()) {
-            originCity = nvl(originCity, "") + " &middot; Terminal " + departureTerminal;
+            originCity = originCity + " &middot; Terminal " + escape(departureTerminal);
         }
         if (arrivalTerminal != null && !arrivalTerminal.isBlank()) {
-            destinationCity = nvl(destinationCity, "") + " &middot; Terminal " + arrivalTerminal;
+            destinationCity = destinationCity + " &middot; Terminal " + escape(arrivalTerminal);
         }
         String duration = flightDuration(departureTime, arrivalTime);
         String durationLabel = duration.isEmpty() ? escape(nvl(flightNumber, "")) : duration;
@@ -265,12 +271,12 @@ public class BookingEmailTemplate {
                 """.formatted(
                 labelRow,
                 escape(origin),
-                escape(nvl(originCity, "")),
+                originCity,
                 escape(nvl(departureTime, "—")),
                 durationLabel,
                 escape(nvl(flightNumber, "")),
                 escape(destination),
-                escape(nvl(destinationCity, "")),
+                destinationCity,
                 escape(nvl(arrivalTime, "—")),
                 checkInRow);
     }

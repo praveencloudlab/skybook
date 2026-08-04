@@ -343,6 +343,11 @@ class BookingEmailTemplateTest {
             assertThat(html).contains("London");
             assertThat(html).contains("Terminal 5");
             assertThat(html).contains("Terminal 1");
+
+            // The separator must reach the reader as a rendered dot. Escaping
+            // the assembled string instead of its parts turns &middot; into
+            // &amp;middot;, and the traveller sees the markup spelled out.
+            assertThat(html).doesNotContain("&amp;middot;");
         }
 
         @Test
