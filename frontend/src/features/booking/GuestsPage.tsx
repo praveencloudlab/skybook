@@ -106,9 +106,19 @@ export function GuestsPage({
     const perPax = guests.map((g, i) => validatePassenger(g, paxTypes[i]));
     const email = contactEmail.trim() || subject || '';
     const emailError = email ? undefined : 'A contact email is required';
+    // Required the way airlines require it: disruption messaging - delays,
+    // gate changes, cancellations - reaches the passenger by phone. Loose
+    // international shape here; the server enforces its own on the DTO.
+    const phone = contactPhone.trim();
+    const phoneErr = !phone
+      ? 'A contact phone is required'
+      : /^\+?[0-9][0-9 ()-]{5,18}[0-9]$/.test(phone)
+        ? undefined
+        : 'Enter a valid phone number';
     setErrors(perPax);
     setContactError(emailError);
-    if (perPax.some((e) => Object.keys(e).length > 0) || emailError) {
+    setPhoneError(phoneErr);
+    if (perPax.some((e) => Object.keys(e).length > 0) || emailError || phoneErr) {
       return;
     }
     if (!contactEmail.trim() && subject) {
