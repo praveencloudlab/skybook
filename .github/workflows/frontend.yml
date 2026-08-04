@@ -140,7 +140,7 @@ jobs:
   # the free arm64 runners.
   docker-arm64-and-manifest:
     name: arm64 build & multi-arch manifest
-    needs: docker-build-scan-push
+    needs: image
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04-arm
     permissions:
