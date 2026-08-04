@@ -60,7 +60,7 @@ export function AuthLayout({
 
         <div className="relative flex h-full flex-col justify-end p-12 text-white">
           <p className="display text-4xl leading-tight">
-            Thirty routes.
+            Three continents.
             <br />
             <span className="gradient-text">A year of departures.</span>
           </p>

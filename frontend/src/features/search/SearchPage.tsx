@@ -253,7 +253,7 @@ export function SearchPage({
             Search flights
           </h1>
           <p className="mt-3 max-w-md text-sm text-white/70">
-            A year of real schedules across 30 routes. Compare fares, pick your seat from the actual
+            A year of real schedules across 29 airports. Compare fares, pick your seat from the actual
             cabin — no account needed to look.
           </p>
 

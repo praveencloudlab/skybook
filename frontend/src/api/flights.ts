@@ -107,7 +107,7 @@ export const flightsApi = {
 /**
  * Routes offered up front (§10.4).
  *
- * The seed holds ~11,000 flights across 30 routes. A first-time visitor who does
+ * The seed serves 29 airports - every pair, three times daily, plus curated flagship routes. A first-time visitor who does
  * not know which of them exist would either face an empty result (and reasonably
  * conclude the thing is broken) or an undifferentiated wall of departures.
  * Offering a handful of recognisable routes means the app demonstrates itself;

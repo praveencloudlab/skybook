@@ -111,7 +111,7 @@ export function SiteFooter() {
       <div className="border-t border-slate-100">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-6 py-5 text-xs text-slate-400 sm:flex-row">
           <p>© {new Date().getFullYear()} SkyBook. A portfolio project — not a real airline.</p>
-          <p className="tabular">30 routes · 16 airports · a year of departures</p>
+          <p className="tabular">29 airports · every pair served daily · a year of departures</p>
         </div>
       </div>
     </footer>

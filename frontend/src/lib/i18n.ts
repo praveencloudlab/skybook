@@ -39,7 +39,7 @@ const en: Dict = {
   'hero.titleLead': 'Where would you like to',
   'hero.titleAccent': 'fly?',
   'hero.sub':
-    'Search a year of departures across 30 routes, pick your seat from the actual cabin, and carry a boarding pass you can scan. No account needed to look.',
+    'Search a year of departures across 29 airports on three continents, pick your seat from the actual cabin, and carry a boarding pass you can scan. No account needed to look.',
   'widget.roundtrip': 'Round trip',
   'widget.oneway': 'One way',
   'widget.multicity': 'Multi-city',
@@ -71,7 +71,7 @@ const es: Dict = {
   'hero.titleLead': '¿A dónde te gustaría',
   'hero.titleAccent': 'volar?',
   'hero.sub':
-    'Busca un año de salidas en 30 rutas, elige tu asiento en la cabina real y lleva una tarjeta de embarque escaneable. No necesitas cuenta para mirar.',
+    'Busca un año de salidas entre 29 aeropuertos, elige tu asiento en la cabina real y lleva una tarjeta de embarque escaneable. No necesitas cuenta para mirar.',
   'widget.roundtrip': 'Ida y vuelta',
   'widget.oneway': 'Solo ida',
   'widget.multicity': 'Multidestino',
@@ -103,7 +103,7 @@ const fr: Dict = {
   'hero.titleLead': 'Où aimeriez-vous',
   'hero.titleAccent': 'voler ?',
   'hero.sub':
-    'Explorez un an de départs sur 30 lignes, choisissez votre siège dans la vraie cabine et emportez une carte d’embarquement scannable. Aucun compte requis pour regarder.',
+    'Explorez un an de départs entre 29 aéroports, choisissez votre siège dans la vraie cabine et emportez une carte d’embarquement scannable. Aucun compte requis pour regarder.',
   'widget.roundtrip': 'Aller-retour',
   'widget.oneway': 'Aller simple',
   'widget.multicity': 'Multi-destinations',
@@ -135,7 +135,7 @@ const de: Dict = {
   'hero.titleLead': 'Wohin möchten Sie',
   'hero.titleAccent': 'fliegen?',
   'hero.sub':
-    'Durchsuchen Sie ein Jahr an Abflügen auf 30 Strecken, wählen Sie Ihren Sitz in der echten Kabine und erhalten Sie eine scannbare Bordkarte. Zum Stöbern ist kein Konto nötig.',
+    'Durchsuchen Sie ein Jahr an Abflügen zwischen 29 Flughäfen, wählen Sie Ihren Sitz in der echten Kabine und erhalten Sie eine scannbare Bordkarte. Zum Stöbern ist kein Konto nötig.',
   'widget.roundtrip': 'Hin- und Rückflug',
   'widget.oneway': 'Nur Hinflug',
   'widget.multicity': 'Gabelflug',
@@ -166,7 +166,7 @@ const zh: Dict = {
   'nav.signout': '退出登录',
   'hero.titleLead': '您想飞往',
   'hero.titleAccent': '哪里？',
-  'hero.sub': '搜索 30 条航线全年的航班，在真实客舱中挑选座位，并获得可扫描的登机牌。浏览无需注册账户。',
+  'hero.sub': '搜索 29 个机场之间全年的航班，在真实客舱中挑选座位，并获得可扫描的登机牌。浏览无需注册账户。',
   'widget.roundtrip': '往返',
   'widget.oneway': '单程',
   'widget.multicity': '多城市',
@@ -229,7 +229,7 @@ const ar: Dict = {
   'hero.titleLead': 'إلى أين تودّ',
   'hero.titleAccent': 'أن تسافر؟',
   'hero.sub':
-    'ابحث في رحلات عام كامل عبر 30 وجهة، واختر مقعدك من المقصورة الحقيقية، واحصل على بطاقة صعود قابلة للمسح. لا حاجة لحساب للتصفح.',
+    'ابحث في رحلات عام كامل بين 29 مطارًا، واختر مقعدك من المقصورة الحقيقية، واحصل على بطاقة صعود قابلة للمسح. لا حاجة لحساب للتصفح.',
   'widget.roundtrip': 'ذهاب وعودة',
   'widget.oneway': 'ذهاب فقط',
   'widget.multicity': 'وجهات متعددة',
@@ -261,7 +261,7 @@ const ru: Dict = {
   'hero.titleLead': 'Куда бы вы хотели',
   'hero.titleAccent': 'полететь?',
   'hero.sub':
-    'Ищите рейсы на год вперёд по 30 маршрутам, выбирайте место в реальном салоне и получайте посадочный талон со сканируемым кодом. Для просмотра аккаунт не нужен.',
+    'Ищите рейсы на год вперёд между 29 аэропортами, выбирайте место в реальном салоне и получайте посадочный талон со сканируемым кодом. Для просмотра аккаунт не нужен.',
   'widget.roundtrip': 'Туда и обратно',
   'widget.oneway': 'В одну сторону',
   'widget.multicity': 'Сложный маршрут',
@@ -293,7 +293,7 @@ const hi: Dict = {
   'hero.titleLead': 'आप कहाँ',
   'hero.titleAccent': 'उड़ना चाहेंगे?',
   'hero.sub':
-    '30 मार्गों पर साल भर की उड़ानें खोजें, असली केबिन से अपनी सीट चुनें, और स्कैन होने वाला बोर्डिंग पास पाएँ। देखने के लिए खाते की ज़रूरत नहीं।',
+    '29 हवाई अड्डों के बीच साल भर की उड़ानें खोजें, असली केबिन से अपनी सीट चुनें, और स्कैन होने वाला बोर्डिंग पास पाएँ। देखने के लिए खाते की ज़रूरत नहीं।',
   'widget.roundtrip': 'राउंड ट्रिप',
   'widget.oneway': 'एक तरफ़ा',
   'widget.multicity': 'मल्टी-सिटी',
@@ -325,7 +325,7 @@ const te: Dict = {
   'hero.titleLead': 'మీరు ఎక్కడికి',
   'hero.titleAccent': 'ఎగరాలనుకుంటున్నారు?',
   'hero.sub':
-    '30 మార్గాల్లో ఏడాది పొడవునా విమానాలను వెతకండి, నిజమైన క్యాబిన్ నుంచి మీ సీటు ఎంచుకోండి, స్కాన్ చేయగల బోర్డింగ్ పాస్ పొందండి. చూడటానికి ఖాతా అవసరం లేదు.',
+    '29 విమానాశ్రయాల మధ్య ఏడాది పొడవునా విమానాలను వెతకండి, నిజమైన క్యాబిన్ నుంచి మీ సీటు ఎంచుకోండి, స్కాన్ చేయగల బోర్డింగ్ పాస్ పొందండి. చూడటానికి ఖాతా అవసరం లేదు.',
   'widget.roundtrip': 'రౌండ్ ట్రిప్',
   'widget.oneway': 'ఒకవైపు',
   'widget.multicity': 'మల్టీ-సిటీ',
