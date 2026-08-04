@@ -170,8 +170,14 @@ jobs:
             -H 'Content-Type: application/json' \
             -d "{\"fullName\":\"CI Admin\",\"email\":\"${E2E_ADMIN_EMAIL}\",\"password\":\"${E2E_ADMIN_PASSWORD}\"}"
           echo "SKYBOOK_BOOTSTRAP_ADMIN_EMAIL=${E2E_ADMIN_EMAIL}" >> .env
+          # --force-recreate, because compose only recreates on a CONFIG CHANGE
+          # and promotion happens exactly once, at startup. When this variable
+          # reached the first boot by any other route, a plain up sees nothing
+          # new, skips the restart, and the "admin" stays a passenger - which is
+          # precisely how the first QA run failed. Forcing the recreate makes
+          # the promotion independent of who set the variable when.
           docker compose --env-file .env --env-file deploy/environments/qa.env \
-            -f docker-compose.yml -f docker-compose.ladder.yml -f docker-compose.e2e.yml up -d auth-service
+            -f docker-compose.yml -f docker-compose.ladder.yml -f docker-compose.e2e.yml up -d --force-recreate auth-service
           for i in $(seq 1 30); do
             docker compose -p skybook-qa ps auth-service --format '{{.Status}}' | grep -q healthy && break
             sleep 5
@@ -179,6 +185,16 @@ jobs:
       - name: Run the certification suite
         working-directory: backend
         run: mvn -B -pl e2e-tests -Pe2e verify
+      # A failing rung must NAME its failing tests in something durable - the
+      # first QA failure of this ladder was diagnosed blind because the only
+      # evidence lived in a log nobody could read anonymously.
+      - name: Upload certification reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-certification-reports-${{ env.IMAGE_TAG }}
+          path: backend/e2e-tests/target/failsafe-reports/
+          retention-days: 30
       - name: QA logs on failure
         if: failure()
         run: docker compose -p skybook-qa logs --tail 100
