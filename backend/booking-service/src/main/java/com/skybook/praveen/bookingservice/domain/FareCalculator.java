@@ -11,6 +11,8 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.EnumSet;
+import java.util.Set;
 import java.util.Map;
 
 /**
@@ -97,9 +99,12 @@ public class FareCalculator {
         return new BigDecimal("0.85");
     }
 
+    /** The days that carry the weekend uplift - Friday out, Sunday back. */
+    private static final Set<DayOfWeek> PEAK_DAYS =
+            EnumSet.of(DayOfWeek.FRIDAY, DayOfWeek.SUNDAY);
+
     private BigDecimal weekendMultiplier(LocalDate departureDate) {
-        DayOfWeek day = departureDate.getDayOfWeek();
-        return day == DayOfWeek.FRIDAY || day == DayOfWeek.SUNDAY
+        return PEAK_DAYS.contains(departureDate.getDayOfWeek())
                 ? WEEKEND_MULTIPLIER
                 : BigDecimal.ONE;
     }

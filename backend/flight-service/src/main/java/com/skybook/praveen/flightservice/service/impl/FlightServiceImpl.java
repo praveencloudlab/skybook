@@ -203,7 +203,7 @@ public class FlightServiceImpl implements FlightService {
         long minLayoverSameCarrier = 45;
         long minLayoverSelfTransfer = 60;
         long maxLayover = 420;  // 7h - beyond this nobody calls it a connection
-        long maxTotal = 40 * 60;
+        long maxTotal = 40L * 60;
 
         List<com.skybook.praveen.flightservice.dto.response.ItineraryResponse> results = new java.util.ArrayList<>();
 

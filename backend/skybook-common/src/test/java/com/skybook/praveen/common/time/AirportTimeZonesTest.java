@@ -13,9 +13,11 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.time.ZonedDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 /**
  * The lookup that every "how long until departure" rule on the platform leans
@@ -240,7 +242,7 @@ class AirportTimeZonesTest {
         void nowAtMatchesTheAirportsOwnClock() {
             LocalDateTime delhi = AirportTimeZones.nowAt("DEL");
             LocalDateTime reference = LocalDateTime.now(ZoneId.of("Asia/Kolkata"));
-            assertThat(Duration.between(delhi, reference).abs()).isLessThan(Duration.ofSeconds(30));
+            assertThat(delhi).isCloseTo(reference, within(30, ChronoUnit.SECONDS));
         }
 
         @Test
@@ -264,11 +266,11 @@ class AirportTimeZonesTest {
             LocalDateTime delhi = AirportTimeZones.nowAt("DEL");
             LocalDateTime singapore = AirportTimeZones.nowAt("SIN");
             // SIN is UTC+8, DEL is UTC+5:30 -> Singapore's wall clock reads 2h30m later.
-            assertThat(Duration.between(delhi, singapore).toMinutes()).isBetween(149L, 151L);
+            assertThat(ChronoUnit.MINUTES.between(delhi, singapore)).isBetween(149L, 151L);
 
             LocalDateTime newYork = AirportTimeZones.nowAt("JFK");
             // JFK trails Delhi by 9h30m (winter) or 10h30m (summer) - never zero.
-            assertThat(Duration.between(newYork, delhi).toMinutes()).isBetween(569L, 631L);
+            assertThat(ChronoUnit.MINUTES.between(newYork, delhi)).isBetween(569L, 631L);
         }
     }
 
