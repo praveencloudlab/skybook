@@ -15,11 +15,15 @@ import com.skybook.praveen.bookingservice.entity.BookingContact;
 import com.skybook.praveen.bookingservice.entity.BookingPassenger;
 import com.skybook.praveen.bookingservice.entity.BookingPayment;
 import com.skybook.praveen.bookingservice.entity.Passenger;
+import com.skybook.praveen.bookingservice.entity.Ticket;
+import com.skybook.praveen.bookingservice.entity.TicketCoupon;
 import com.skybook.praveen.bookingservice.enums.BookingStatus;
 import com.skybook.praveen.bookingservice.enums.CheckInStatus;
+import com.skybook.praveen.bookingservice.enums.CouponStatus;
 import com.skybook.praveen.bookingservice.enums.FareType;
 import com.skybook.praveen.bookingservice.enums.PaymentStatus;
 import com.skybook.praveen.bookingservice.enums.SeatAssignmentMode;
+import com.skybook.praveen.bookingservice.enums.TicketStatus;
 import com.skybook.praveen.bookingservice.enums.TravelClass;
 import com.skybook.praveen.bookingservice.exception.BookingNotFoundException;
 import com.skybook.praveen.bookingservice.exception.BookingPassengerNotFoundException;
@@ -264,6 +268,57 @@ class BookingServiceImplTest {
         }
 
         @Test
+        void eachDirectionBuysItsOwnBags() {
+            when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
+            stubSaveReturnsArgument();
+
+            // One bag out, two back - each direction's first leg carries its
+            // own count and its own fee.
+            PassengerBookingDetail perDirectionBags = new PassengerBookingDetail(
+                    "Mr", "Jane", null, "Doe",
+                    LocalDate.of(1990, 1, 1), "FEMALE", "GBR",
+                    "P1234567", LocalDate.of(2032, 1, 1),
+                    "jane@example.com", "+441234567890",
+                    TravelClass.ECONOMY, FareType.FLEXI, null, null, null, 1, 2);
+            CreateBookingRequest request = new CreateBookingRequest(
+                    100L, 1L, 2L, null, List.of(perDirectionBags),
+                    new BookingContactRequest("John Doe", "john@example.com", "+441234567891"), null);
+
+            BookingResponse response = bookingService.createDraftBooking(
+                    request, roundTripLegs(NEUTRAL_DEPARTURE, NEUTRAL_DEPARTURE.plusDays(7)), "owner@test.com");
+
+            assertThat(response.passengers().get(0).extraBags()).isEqualTo(1);
+            assertThat(response.passengers().get(0).baggageFee()).isEqualByComparingTo("40.00");
+            assertThat(response.passengers().get(1).extraBags()).isEqualTo(2);
+            assertThat(response.passengers().get(1).baggageFee()).isEqualByComparingTo("80.00");
+            assertThat(response.totalFare()).isEqualByComparingTo("320.00");
+        }
+
+        @Test
+        void aReturnBagCountThatIsAbsentFallsBackToTheOutboundOne() {
+            when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
+            stubSaveReturnsArgument();
+
+            // Old clients send one count for the whole trip - it must still
+            // mean the same bags both ways, not none on the way home.
+            PassengerBookingDetail oneCount = new PassengerBookingDetail(
+                    "Mr", "Jane", null, "Doe",
+                    LocalDate.of(1990, 1, 1), "FEMALE", "GBR",
+                    "P1234567", LocalDate.of(2032, 1, 1),
+                    "jane@example.com", "+441234567890",
+                    TravelClass.ECONOMY, FareType.FLEXI, null, null, null, 1, null);
+            CreateBookingRequest request = new CreateBookingRequest(
+                    100L, 1L, 2L, null, List.of(oneCount),
+                    new BookingContactRequest("John Doe", "john@example.com", "+441234567891"), null);
+
+            BookingResponse response = bookingService.createDraftBooking(
+                    request, roundTripLegs(NEUTRAL_DEPARTURE, NEUTRAL_DEPARTURE.plusDays(7)), "owner@test.com");
+
+            assertThat(response.passengers().get(1).extraBags()).isEqualTo(1);
+            assertThat(response.passengers().get(1).baggageFee()).isEqualByComparingTo("40.00");
+        }
+
+        @Test
         void sumsUpBaseFaresAcrossMultiplePassengers() {
             when(bookingRepository.existsByBookingReference(anyString())).thenReturn(false);
             stubSaveReturnsArgument();
@@ -418,6 +473,27 @@ class BookingServiceImplTest {
             assertThat(response.passengers().get(0).chargedSeatAssignmentMode()).isEqualTo(SeatAssignmentMode.AUTO);
             assertThat(response.totalFare()).isEqualByComparingTo("100.00");
             assertThat(response.payment().amount()).isEqualByComparingTo("100.00");
+        }
+
+        @Test
+        void finalizeKeepsTheBagsBoughtAtDraftInsideTheAllInFare() {
+            Booking draft = draftWithOnePassenger();
+            draft.getPassengers().getFirst().setBaggageFee(new BigDecimal("40.00"));
+            draft.getPassengers().getFirst().setExtraBags(1);
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(draft));
+            when(bookingPassengerRepository.findByIdAndBooking_Id(10L, 1L))
+                    .thenReturn(Optional.of(draft.getPassengers().getFirst()));
+            stubSaveReturnsArgument();
+
+            BookingResponse response = bookingService.finalizeSeatAssignments(1L, List.of(
+                    new SeatAssignmentResult(10L, "12A",
+                            new BigDecimal("12.00"), new BigDecimal("12.00"), SeatAssignmentMode.MANUAL)));
+
+            // base 100 + seat 12 + bag 40 - the ancillary priced at draft is
+            // never dropped or re-derived when the seats land.
+            assertThat(response.passengers().get(0).fare()).isEqualByComparingTo("152.00");
+            assertThat(response.totalFare()).isEqualByComparingTo("152.00");
+            assertThat(response.payment().amount()).isEqualByComparingTo("152.00");
         }
 
         @Test
@@ -578,6 +654,28 @@ class BookingServiceImplTest {
             assertThat(bookingService.getAllBookings()).hasSize(2)
                     .extracting(BookingResponse::id).containsExactlyInAnyOrder(1L, 2L);
         }
+
+        @Test
+        void getBookingsForOwnerAsksTheDatabaseForThatSubjectOnly() {
+            Booking owned = Booking.builder().id(1L).bookingReference("SB1111")
+                    .bookingStatus(BookingStatus.CREATED).ownerSubject("pax@example.com")
+                    .passengers(new ArrayList<>()).history(new ArrayList<>()).build();
+            when(bookingRepository.findByOwnerSubjectOrderByBookingDateDesc("pax@example.com"))
+                    .thenReturn(List.of(owned));
+
+            assertThat(bookingService.getBookingsForOwner("pax@example.com"))
+                    .extracting(BookingResponse::ownerSubject).containsExactly("pax@example.com");
+        }
+
+        @Test
+        void getBookingsForOwnerNeverQueriesForACallerWithoutASubject() {
+            // Ownership IS the query here, so a missing subject can only ever
+            // mean "no bookings" - never "every booking".
+            assertThat(bookingService.getBookingsForOwner(null)).isEmpty();
+            assertThat(bookingService.getBookingsForOwner("   ")).isEmpty();
+
+            verify(bookingRepository, never()).findByOwnerSubjectOrderByBookingDateDesc(anyString());
+        }
     }
 
     // ---------------------------------------------------------------
@@ -656,6 +754,48 @@ class BookingServiceImplTest {
         }
 
         @Test
+        void filtersByFlightId() {
+            List<BookingResponse> results = bookingService.searchBookings(
+                    new BookingSearchRequest(null, 2L, null, null, null, null, null, null, null, null));
+
+            assertThat(results).extracting(BookingResponse::id).containsExactly(2L);
+        }
+
+        @Test
+        void filtersByPaymentStatus() {
+            List<BookingResponse> results = bookingService.searchBookings(
+                    new BookingSearchRequest(null, null, null, null, null, PaymentStatus.PAID, null, null, null, null));
+
+            assertThat(results).extracting(BookingResponse::id).containsExactly(2L);
+        }
+
+        @Test
+        void filtersByBookingDateIgnoringTheTimeOfDay() {
+            List<BookingResponse> results = bookingService.searchBookings(
+                    new BookingSearchRequest(null, null, null, null, null, null, null,
+                            booking1.getBookingDate().toLocalDate(), null, null));
+
+            assertThat(results).extracting(BookingResponse::id).containsExactly(1L);
+        }
+
+        @Test
+        void filtersByContactPhone() {
+            List<BookingResponse> results = bookingService.searchBookings(
+                    new BookingSearchRequest(null, null, null, null, null, null, null, null, null, "222"));
+
+            assertThat(results).extracting(BookingResponse::id).containsExactly(2L);
+        }
+
+        @Test
+        void filtersCombineSoAContradictoryPairMatchesNothing() {
+            List<BookingResponse> results = bookingService.searchBookings(
+                    new BookingSearchRequest("SB1111", null, null, null, BookingStatus.CONFIRMED,
+                            null, null, null, null, null));
+
+            assertThat(results).isEmpty();
+        }
+
+        @Test
         void returnsEverythingWhenNoFiltersGiven() {
             List<BookingResponse> results = bookingService.searchBookings(
                     new BookingSearchRequest(null, null, null, null, null, null, null, null, null, null));
@@ -724,6 +864,58 @@ class BookingServiceImplTest {
 
             assertThat(response.bookingStatus()).isEqualTo(BookingStatus.CANCELLED);
             assertThat(response.payment().paymentStatus()).isEqualTo(PaymentStatus.PENDING);
+        }
+
+        @Test
+        void cancellingInsideTheZeroRefundWindowKeepsTheMoneyAndClosesCouponsAsCancelled() {
+            Passenger traveller = Passenger.builder().id(5L).firstName("Jane").lastName("Doe").build();
+            BookingPassenger passenger = BookingPassenger.builder().id(10L).passenger(traveller)
+                    .fare(new BigDecimal("100.00")).checkInStatus(CheckInStatus.NOT_OPEN).build();
+            Booking booking = Booking.builder().id(1L).bookingStatus(BookingStatus.CONFIRMED)
+                    .passengers(new ArrayList<>(List.of(passenger))).history(new ArrayList<>())
+                    .payment(BookingPayment.builder().paymentStatus(PaymentStatus.PAID).build())
+                    .build();
+            passenger.setBooking(booking);
+            booking.getPayment().setBooking(booking);
+            Ticket ticket = Ticket.builder().id(1L).booking(booking).passenger(traveller)
+                    .ticketNumber("1250000000101").status(TicketStatus.ISSUED)
+                    .issuedAt(LocalDateTime.now()).build();
+            ticket.getCoupons().add(TicketCoupon.builder().ticket(ticket).bookingPassenger(passenger)
+                    .couponNumber(1).status(CouponStatus.OPEN).build());
+            booking.getTickets().add(ticket);
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(booking));
+            stubSaveReturnsArgument();
+
+            BookingResponse response = bookingService.cancelBooking(1L, "same-day change", 0);
+
+            // Same-day tier: the fare is forfeited, so saying REFUNDED with
+            // nothing returned would be a lie - the payment stays PAID.
+            assertThat(response.bookingStatus()).isEqualTo(BookingStatus.CANCELLED);
+            assertThat(response.payment().paymentStatus()).isEqualTo(PaymentStatus.PAID);
+            assertThat(ticket.getCoupons().get(0).getStatus()).isEqualTo(CouponStatus.CANCELLED);
+        }
+
+        @Test
+        void confirmingABookingThatIsAlreadyTicketedIssuesNoSecondTicket() {
+            Passenger traveller = Passenger.builder().id(5L).firstName("Jane").lastName("Doe").build();
+            BookingPassenger passenger = BookingPassenger.builder().id(10L).passenger(traveller)
+                    .fare(new BigDecimal("100.00")).checkInStatus(CheckInStatus.NOT_OPEN).build();
+            Booking booking = Booking.builder().id(1L).bookingStatus(BookingStatus.CREATED)
+                    .passengers(new ArrayList<>(List.of(passenger))).history(new ArrayList<>())
+                    .payment(BookingPayment.builder().paymentStatus(PaymentStatus.PENDING).build())
+                    .build();
+            passenger.setBooking(booking);
+            booking.getPayment().setBooking(booking);
+            booking.getTickets().add(Ticket.builder().id(1L).booking(booking).passenger(traveller)
+                    .ticketNumber("1250000000101").status(TicketStatus.ISSUED)
+                    .issuedAt(LocalDateTime.now()).build());
+            when(bookingRepository.findById(1L)).thenReturn(Optional.of(booking));
+            stubSaveReturnsArgument();
+
+            bookingService.confirmBooking(1L);
+
+            assertThat(booking.getTickets()).hasSize(1);
+            assertThat(booking.getTickets().get(0).getTicketNumber()).isEqualTo("1250000000101");
         }
 
         @Test
