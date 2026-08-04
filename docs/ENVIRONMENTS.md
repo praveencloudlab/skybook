@@ -112,17 +112,117 @@ Two mechanisms, by failure mode:
 - **Bad data** — `docs/DR_RUNBOOK.md`. Every prod deploy ends with a backup,
   so the restore point immediately before any release exists by construction.
 
-## 6. One-time setup (the two things only a human can click)
+## 6. One-time setup — the exact steps
 
-1. **The UAT gate** — GitHub → Settings → Environments → `uat` → *Required
-   reviewers* → add yourself. From then on every promotion pauses at UAT until
-   the evidence is reviewed and approved. (The `staging` and `production`
-   environments accept the same treatment if you want a second explicit gate.)
-2. **VM deploys** — add repository secrets `VM_SSH_HOST`, `VM_SSH_USER`,
-   `VM_SSH_KEY` (a dedicated deploy key for the VM), then set repository
-   variable `DEPLOY_SSH_READY=true`. Until then the ladder runs and gates
-   everything up to UAT, and the VM keeps its manual deploy path.
-3. **(Once)** make the GHCR packages public — or leave them private; the
-   pipeline authenticates with its own token either way, and the VM's docker
-   can `docker login ghcr.io` with a read-only PAT if the packages stay
-   private.
+Performed once, on 5 August 2026, in about ten minutes. Recorded here in
+full because "add the secrets" is the kind of instruction that assumes the
+reader already knows everything the instruction exists to teach.
+
+### 6.1 The UAT approval gate (browser only, ~2 minutes)
+
+Makes every promotion pause after PERF and wait for a human.
+
+1. Open `https://github.com/<owner>/skybook/settings/environments`
+   (repo → **Settings** → **Environments** in the left sidebar).
+2. The environments already exist — the ladder created them on its first
+   run: `dev`, `sit`, `qa`, `perf`, `uat`, `staging`, `production`, `dr`.
+   Click **`uat`**.
+3. Under **Deployment protection rules**, tick **Required reviewers**.
+4. Search for and add the approving account (up to six can be listed).
+5. **Save protection rules.**
+
+From the next run onward the ladder stops at UAT showing *"Waiting for
+review"*; the reviewer opens the run, reads the acceptance evidence
+artifact, and clicks **Review deployments → approve**. The same treatment
+on `production` adds a second explicit yes before the VM deploy, if wanted.
+
+### 6.2 The pipeline's SSH access to the VM (~8 minutes)
+
+The pipeline gets a **dedicated deploy key** — never a personal one — so it
+can be revoked on its own by deleting one line on the VM.
+
+On the workstation (Git Bash):
+
+```bash
+# 1. generate the keypair; no passphrase, CI cannot type one
+ssh-keygen -t ed25519 -f ~/.ssh/skybook-deploy -N "" -C "skybook-pipeline"
+
+# 2. authorize the public half on the VM (uses your existing access once)
+ssh ubuntu@<vm-address> "echo $(cat ~/.ssh/skybook-deploy.pub) >> ~/.ssh/authorized_keys"
+
+# 3. prove the new key works before telling GitHub about it
+ssh -i ~/.ssh/skybook-deploy ubuntu@<vm-address> "echo pipeline key OK"
+
+# 4. print the private key for the secret paste (include BEGIN/END lines)
+cat ~/.ssh/skybook-deploy
+```
+
+In the browser, `Settings → Secrets and variables → Actions`:
+
+| Kind | Name | Value |
+|---|---|---|
+| Secret | `VM_SSH_HOST` | the VM's public address |
+| Secret | `VM_SSH_USER` | `ubuntu` |
+| Secret | `VM_SSH_KEY` | the full private key from step 4 |
+| **Variable** (Variables tab) | `DEPLOY_SSH_READY` | `true` |
+
+The variable is the switch: the STAGING and PROD jobs check it and stay
+skipped until it reads `true`, which is why adding the secrets alone
+changes nothing until the deliberate flip.
+
+To revoke the pipeline's access later: delete the `skybook-pipeline` line
+from `~/.ssh/authorized_keys` on the VM and set `DEPLOY_SSH_READY` to
+anything else.
+
+### 6.3 First full walk — what to expect
+
+Trigger: **Actions → Promote → Run workflow** (leave `image_tag` empty to
+promote the branch head), or just push to `main`.
+
+- **~25 minutes**: DEV → SIT → QA → PERF, as on every run.
+- **The pause**: *"Waiting for review"* at UAT. Approve when satisfied —
+  it waits indefinitely and expires the run after 30 days.
+- **STAGING, first time only**: the VM pulls the promoted arm64 images
+  (~2 GB cold, cached afterwards) — allow extra minutes. The rehearsal
+  stack stands beside live prod on shifted loopback ports, gets seeded and
+  smoked, and is torn down win or lose.
+- **PROD**: pulls the same digests into the live project, rolls the stack,
+  verifies through the TLS front door, and ends with an automatic backup.
+
+Sizing caveat, stated because it bit the design once already: the
+transient-staging pattern was sized for a 24 GB host. On a 16 GB host two
+full stacks fit only because of the per-environment JVM ceilings, and
+tightly — if the rehearsal ever OOMs there, the accepted trim is starting
+the staging project without its observability containers.
+
+### 6.4 Registry visibility
+
+GHCR packages under this repository are public, so neither the runners nor
+the VM need registry credentials to pull. If they are ever made private:
+the pipeline side keeps working (it logs in with its own job token), and
+the VM needs a one-time `docker login ghcr.io` with a read-only PAT.
+
+## 7. Operating the ladder day to day
+
+The entire release process after setup:
+
+1. **Push to `main`.** CI builds, scans and publishes the images; the
+   ladder walks DEV → SIT → QA → PERF unattended.
+2. **Approve at UAT** when the evidence artifact satisfies you.
+3. There is no step three — STAGING rehearses, PROD deploys, the backup
+   lands, and the run goes green.
+
+Useful handles:
+
+- **Promote a specific commit** (including going *backwards* for a
+  rollback): Actions → Promote → Run workflow → set `image_tag` to the
+  full SHA. Same gates, chosen artifact.
+- **Every rung leaves evidence**: the UAT acceptance transcript and the k6
+  summary are uploaded as artifacts on the run; QA uploads its failsafe
+  reports — a failing rung names its failing tests without anyone
+  spelunking logs.
+- **The weekly DR drill** runs Monday 04:00 UTC on its own; a failed drill
+  fails the workflow loudly. It can be run on demand from the same
+  workflow dispatch.
+- **The nightly certification** continues independently of the ladder, on
+  the default compose project, as it always has.
