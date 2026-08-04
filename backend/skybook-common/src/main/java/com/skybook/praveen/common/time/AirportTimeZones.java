@@ -1,5 +1,6 @@
 package com.skybook.praveen.common.time;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
@@ -51,5 +52,32 @@ public final class AirportTimeZones {
     /** The wall clock at that airport right now - the ONLY correct "now" to compare its departures against. */
     public static LocalDateTime nowAt(String airportCode) {
         return LocalDateTime.now(zoneOf(airportCode));
+    }
+
+    /**
+     * Time actually spent travelling between two airports.
+     *
+     * <p>Departure and arrival are wall clocks at their OWN airports, so
+     * subtracting one from the other measures nothing real - it mixes the
+     * flight with the offset between the two zones. London 21:25 to Singapore
+     * 17:30 next day subtracts to 20h 05m; the aircraft is in the air for
+     * 13h 05m. Eastbound the error inflates, westbound it can go negative and
+     * make an eight-hour flight look like it lands before it left.
+     *
+     * <p>Each end is resolved to a real instant on its own zone, which also
+     * means a flight crossing a daylight-saving change is measured correctly:
+     * the clocks move, the elapsed time does not.
+     *
+     * <p>Lives here, next to the zone table, because three services were each
+     * about to compute it their own way.
+     */
+    public static Duration elapsedBetween(String originAirportCode, LocalDateTime departureLocal,
+                                          String destinationAirportCode, LocalDateTime arrivalLocal) {
+        if (departureLocal == null || arrivalLocal == null) {
+            return Duration.ZERO;
+        }
+        return Duration.between(
+                departureLocal.atZone(zoneOf(originAirportCode)),
+                arrivalLocal.atZone(zoneOf(destinationAirportCode)));
     }
 }

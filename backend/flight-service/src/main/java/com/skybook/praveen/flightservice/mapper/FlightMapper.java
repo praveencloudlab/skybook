@@ -40,6 +40,9 @@ public final class FlightMapper {
                 flight.getDestinationAirportCode(),
                 flight.getDepartureTime(),
                 flight.getArrivalTime(),
+                com.skybook.praveen.common.time.AirportTimeZones.elapsedBetween(
+                        flight.getOriginAirportCode(), flight.getDepartureTime(),
+                        flight.getDestinationAirportCode(), flight.getArrivalTime()).toMinutes(),
                 flight.getDepartureTerminal(),
                 flight.getArrivalTerminal(),
                 flight.getStatus(),

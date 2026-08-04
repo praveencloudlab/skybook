@@ -257,9 +257,15 @@ public class FlightServiceImpl implements FlightService {
 
     private com.skybook.praveen.flightservice.dto.response.ItineraryResponse itinerary(
             List<Flight> legs, List<Long> layovers) {
-        long total = java.time.Duration.between(
-                legs.get(0).getDepartureTime(),
-                legs.get(legs.size() - 1).getArrivalTime()).toMinutes();
+        Flight first = legs.get(0);
+        Flight last = legs.get(legs.size() - 1);
+        // Origin and final destination are usually different zones, so the
+        // journey length has to be measured across them, not by subtracting
+        // two wall clocks. Layovers are exempt: both sides of a connection are
+        // the same airport, so those subtract correctly as they stand.
+        long total = com.skybook.praveen.common.time.AirportTimeZones.elapsedBetween(
+                first.getOriginAirportCode(), first.getDepartureTime(),
+                last.getDestinationAirportCode(), last.getArrivalTime()).toMinutes();
         return new com.skybook.praveen.flightservice.dto.response.ItineraryResponse(
                 legs.stream().map(FlightMapper::toResponse).toList(),
                 legs.size() - 1,

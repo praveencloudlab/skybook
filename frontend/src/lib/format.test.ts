@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDaysIso, dayOffset, duration, money, time } from './format';
+import { addDaysIso, dayOffset, durationFromMinutes, sameClockDuration, money, time } from './format';
 
 describe('format', () => {
   it('shows the airport-local time, never the viewer’s local time', () => {
@@ -11,15 +11,26 @@ describe('format', () => {
     expect(time('2026-08-01T23:05:00')).toBe('23:05');
   });
 
-  it('computes duration between two local timestamps', () => {
-    expect(duration('2026-08-01T07:30:00', '2026-08-01T08:50:00')).toBe('1h 20m');
-    expect(duration('2026-08-01T09:00:00', '2026-08-01T11:00:00')).toBe('2h');
+  it('formats the minutes the server measured', () => {
+    // The server sends minutes rather than the client subtracting two
+    // timestamps, because those are clocks at different airports: LHR 21:25 to
+    // SIN 17:30 subtracts to 20h 05m and is 13h 05m in the air.
+    expect(durationFromMinutes(80)).toBe('1h 20m');
+    expect(durationFromMinutes(120)).toBe('2h');
+    expect(durationFromMinutes(785)).toBe('13h 5m');
   });
 
-  it('handles an overnight flight without going negative', () => {
-    // Long-haul routinely lands the next day; a naive same-day subtraction
-    // yields a negative duration and renders as nonsense.
-    expect(duration('2026-08-01T21:00:00', '2026-08-02T06:30:00')).toBe('9h 30m');
+  it('renders nothing rather than a negative or absent duration', () => {
+    expect(durationFromMinutes(0)).toBe('');
+    expect(durationFromMinutes(-30)).toBe('');
+    expect(durationFromMinutes(null)).toBe('');
+    expect(durationFromMinutes(undefined)).toBe('');
+  });
+
+  it('measures a layover on the one clock that governs both ends of it', () => {
+    // A passenger waiting between connections sits in a single airport, so
+    // this subtraction is the one that stays valid.
+    expect(sameClockDuration('2026-08-01T21:00:00', '2026-08-02T06:30:00')).toBe('9h 30m');
   });
 
   it('reports the arrival day offset', () => {

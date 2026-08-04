@@ -13,7 +13,7 @@ import { seatsApi, type FlightSeatMap } from '../../api/seats';
 import { Alert, ErrorAlert } from '../../components/Alert';
 import { Button } from '../../components/Button';
 import { ApiError } from '../../lib/errors';
-import { dayAndMonth, duration, money, time } from '../../lib/format';
+import { dayAndMonth, durationFromMinutes, money, time } from '../../lib/format';
 import { BoardingPassCard } from './BoardingPassCard';
 import { StatusBadge } from './StatusBadge';
 import { printETicket } from './printable';
@@ -461,7 +461,7 @@ export function BookingDetailPage({
               </div>
               <div className="flex flex-1 flex-col items-center gap-1">
                 <span className="tabular text-[11px] font-medium text-slate-500">
-                  {duration(segFlight.departureTime, segFlight.arrivalTime)}
+                  {durationFromMinutes(segFlight.durationMinutes)}
                 </span>
                 <div className="flex w-full items-center gap-1">
                   <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />

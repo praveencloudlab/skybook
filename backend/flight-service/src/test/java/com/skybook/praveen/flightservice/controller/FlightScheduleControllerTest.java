@@ -1,5 +1,6 @@
 package com.skybook.praveen.flightservice.controller;
 
+import com.skybook.praveen.common.time.AirportTimeZones;
 import com.skybook.praveen.flightservice.config.WebSliceSecurityConfig;
 import com.skybook.praveen.flightservice.dto.request.CreateFlightScheduleRequest;
 import com.skybook.praveen.flightservice.dto.response.FlightResponse;
@@ -329,7 +330,9 @@ class FlightScheduleControllerTest {
     private FlightResponse flight() {
         LocalDateTime departure = VALID_FROM.atTime(10, 15);
         return new FlightResponse(1L, "BA178", "BA", "LHR", "JFK",
-                departure, departure.plusHours(3), "5", "8",
+                departure, departure.plusHours(3),
+                AirportTimeZones.elapsedBetween("LHR", departure, "JFK", departure.plusHours(3)).toMinutes(),
+                "5", "8",
                 FlightStatus.SCHEDULED, 7L, "system", "system", 0L,
                 LocalDateTime.now(), LocalDateTime.now());
     }

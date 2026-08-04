@@ -75,20 +75,37 @@ export function dayOffset(fromIso: string, toIso: string): number {
 }
 
 /**
- * Elapsed time between two local timestamps.
+ * A count of minutes as "13h 5m".
  *
- * <p>Both are parsed as UTC (the trailing Z) purely so the subtraction is not
- * shifted by the viewer's own offset - we want the difference between the two
- * clock readings, which is the flight's duration, not a conversion of either.
+ * <p>Minutes, not two timestamps, because a flight's two timestamps are wall
+ * clocks at DIFFERENT airports and subtracting them measures the flight plus
+ * the offset between the zones. London 21:25 to Singapore 17:30 subtracts to
+ * 20h 05m and is 13h 05m in the air. Only the server knows which zone each
+ * airport is in, so the server sends the answer and this only formats it.
  */
-export function duration(fromIso: string, toIso: string): string {
-  const minutes = Math.round((Date.parse(`${toIso}Z`) - Date.parse(`${fromIso}Z`)) / 60_000);
-  if (!Number.isFinite(minutes) || minutes <= 0) {
+export function durationFromMinutes(minutes: number | null | undefined): string {
+  if (minutes == null || !Number.isFinite(minutes) || minutes <= 0) {
     return '';
   }
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
+  const whole = Math.round(minutes);
+  const hours = Math.floor(whole / 60);
+  const mins = whole % 60;
   return mins === 0 ? `${hours}h` : `${hours}h ${mins}m`;
+}
+
+/**
+ * Elapsed time between two timestamps that are on the SAME clock.
+ *
+ * <p>Both are parsed as UTC (the trailing Z) purely so the subtraction is not
+ * shifted by the viewer's own offset.
+ *
+ * <p>Only valid where one clock governs both readings - a layover, where the
+ * passenger sits in one airport. For a flight use {@link durationFromMinutes}
+ * with the server's figure.
+ */
+export function sameClockDuration(fromIso: string, toIso: string): string {
+  const minutes = Math.round((Date.parse(`${toIso}Z`) - Date.parse(`${fromIso}Z`)) / 60_000);
+  return durationFromMinutes(minutes);
 }
 
 /**

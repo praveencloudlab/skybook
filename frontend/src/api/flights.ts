@@ -24,6 +24,12 @@ export interface Flight {
   destinationAirportCode: string;
   departureTime: string;
   arrivalTime: string;
+  /**
+   * Minutes in the air, computed server-side. The two times above are wall
+   * clocks at DIFFERENT airports, so subtracting them here would measure the
+   * flight plus the offset between the zones; only the server knows the zones.
+   */
+  durationMinutes: number;
   /** The carrier's real terminal at each end (server TerminalPolicy); absent on old rows. */
   departureTerminal?: string | null;
   arrivalTerminal?: string | null;

@@ -2,7 +2,7 @@ import type { Flight } from '../api/flights';
 import { AIRPORTS } from '../api/flights';
 import { FARE_TYPE_LABELS, TRAVEL_CLASS_LABELS, type FareType, type TravelClass } from '../api/quotes';
 import type { Travellers } from './TravellersPicker';
-import { dayOffset, duration, price, time } from '../lib/format';
+import { dayOffset, durationFromMinutes, price, time } from '../lib/format';
 
 /**
  * The right-hand Summary rail every booking step shares (carrier pattern):
@@ -76,7 +76,7 @@ export function SummaryRail({
               <span className="h-1 w-1 rounded-full bg-slate-300" />
             </div>
             <span className="tabular mt-1 text-[10px] text-slate-400">
-              {duration(flight.departureTime, flight.arrivalTime)} · Direct
+              {durationFromMinutes(flight.durationMinutes)} · Direct
             </span>
           </div>
           <div className="text-right">

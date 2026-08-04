@@ -262,6 +262,24 @@ class BookingEmailTemplateTest {
         }
 
         @Test
+        @DisplayName("a flight across timezones reports time in the air, not the difference of two clocks")
+        void crossesTimezonesWithoutCountingTheOffsetAsFlyingTime() {
+            // SQ322 leaves London 21:25 and lands Singapore 17:30 the next day.
+            // Both are wall clocks at their own airport, seven hours apart, so
+            // subtracting them directly gives 20h 05m - the flight plus the
+            // offset. It is thirteen hours in the air.
+            String html = template.render(shortHaul()
+                    .segments(List.of(segment(0, "SQ322", "LHR", "SIN")
+                            .departureTime("2026-08-10 21:25")
+                            .arrivalTime("2026-08-11 17:30")
+                            .build()))
+                    .build());
+
+            assertThat(html).contains(">13h 5m</div>");
+            assertThat(html).doesNotContain("20h 5m");
+        }
+
+        @Test
         void aWholeNumberOfHoursDropsTheMinutes() {
             String html = template.render(shortHaul()
                     .arrivalTime(EVENT_TIME.format(DEPARTURE.plusHours(2)))

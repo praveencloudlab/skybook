@@ -13,12 +13,14 @@ import com.skybook.praveen.flightservice.mapper.FlightScheduleMapper;
 import com.skybook.praveen.flightservice.repository.FlightRepository;
 import com.skybook.praveen.flightservice.repository.FlightScheduleRepository;
 import com.skybook.praveen.flightservice.service.FlightScheduleService;
+import com.skybook.praveen.common.time.AirportTimeZones;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -210,9 +212,8 @@ public class FlightScheduleServiceImpl implements FlightScheduleService {
 
                 LocalDateTime departureDateTime = cursor.atTime(schedule.getDepartureTime());
 
-                LocalDateTime arrivalDateTime = schedule.getArrivalTime().isBefore(schedule.getDepartureTime())
-                        ? cursor.plusDays(1).atTime(schedule.getArrivalTime())
-                        : cursor.atTime(schedule.getArrivalTime());
+                LocalDateTime arrivalDateTime =
+                        arrivalInDestinationLocalTime(schedule, cursor, departureDateTime);
 
                 boolean alreadyExists = flightRepository.existsByFlightNumberAndDepartureTime(
                         schedule.getFlightNumber(), departureDateTime);
@@ -252,6 +253,45 @@ public class FlightScheduleServiceImpl implements FlightScheduleService {
         log.info("Generated {} flight instance(s) for schedule {}", generated.size(), scheduleId);
 
         return generated.stream().map(FlightMapper::toResponse).toList();
+    }
+
+    /**
+     * The arrival wall clock AT THE DESTINATION, which is the only reading a
+     * traveller can act on - it is the time on the airport clock when they get
+     * off the aircraft, and the time printed on the ticket.
+     *
+     * <p>A schedule stores its arrival as a plain LocalTime alongside its
+     * departure, and the two are authored on the SAME clock: SQ322 leaves
+     * London 21:25 and lands "10:30 next day" meaning 10:30 London time, not
+     * 10:30 Singapore time. Combining them naively therefore yields the genuine
+     * elapsed flight time - but publishing that as the arrival time told a
+     * passenger flying to Singapore they would land at 10:30 when the airport
+     * clock would read 17:30. Seven hours wrong, on the e-ticket.
+     *
+     * <p>So the elapsed time is taken on the origin's clock, where it is
+     * meaningful, and then re-expressed on the destination's - which also
+     * handles the two ends being on different sides of a DST boundary, since
+     * the conversion goes through a real instant.
+     */
+    private static LocalDateTime arrivalInDestinationLocalTime(
+            FlightSchedule schedule, LocalDate cursor, LocalDateTime departureDateTime) {
+
+        LocalDateTime arrivalOnOriginClock = schedule.getArrivalTime().isBefore(schedule.getDepartureTime())
+                ? cursor.plusDays(1).atTime(schedule.getArrivalTime())
+                : cursor.atTime(schedule.getArrivalTime());
+
+        // Both readings are the ORIGIN's clock here, which is what makes this
+        // subtraction the genuine flying time rather than a mix of flight and
+        // offset - hence the same airport code on both sides.
+        Duration elapsed = AirportTimeZones.elapsedBetween(
+                schedule.getOriginAirportCode(), departureDateTime,
+                schedule.getOriginAirportCode(), arrivalOnOriginClock);
+
+        return departureDateTime
+                .atZone(AirportTimeZones.zoneOf(schedule.getOriginAirportCode()))
+                .plus(elapsed)
+                .withZoneSameInstant(AirportTimeZones.zoneOf(schedule.getDestinationAirportCode()))
+                .toLocalDateTime();
     }
 
     @Override

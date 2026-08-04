@@ -21,7 +21,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
@@ -61,6 +63,20 @@ class FlightScheduleServiceImplTest {
     private static final LocalTime DEPARTS = LocalTime.of(10, 15);
     private static final LocalTime ARRIVES = LocalTime.of(13, 40);
     private static final LocalDate TODAY = LocalDate.now();
+
+    /**
+     * A schedule authors both its times on the ORIGIN's clock, but a generated
+     * flight carries the arrival a JFK arrivals board would show. Derived
+     * through the two named zones rather than by subtracting a fixed five
+     * hours, because London and New York change over on different dates - for
+     * a fortnight each spring and autumn the gap is four hours, and a hardcoded
+     * offset would turn this suite red on those days alone.
+     */
+    private static LocalDateTime onTheJfkClock(LocalDateTime londonWallClock) {
+        return londonWallClock.atZone(ZoneId.of("Europe/London"))
+                .withZoneSameInstant(ZoneId.of("America/New_York"))
+                .toLocalDateTime();
+    }
 
     @BeforeEach
     void setUp() {
@@ -444,7 +460,7 @@ class FlightScheduleServiceImplTest {
             assertThat(generated).hasSize(7);
             assertThat(capturedGeneratedFlights()).hasSize(7);
             assertThat(generated.get(0).departureTime()).isEqualTo(TODAY.atTime(DEPARTS));
-            assertThat(generated.get(0).arrivalTime()).isEqualTo(TODAY.atTime(ARRIVES));
+            assertThat(generated.get(0).arrivalTime()).isEqualTo(onTheJfkClock(TODAY.atTime(ARRIVES)));
             assertThat(generated.get(0).flightNumber()).isEqualTo("BA178");
             assertThat(generated.get(0).status()).isEqualTo(FlightStatus.SCHEDULED);
             assertThat(generated.get(6).departureTime()).isEqualTo(TODAY.plusDays(6).atTime(DEPARTS));
@@ -493,7 +509,10 @@ class FlightScheduleServiceImplTest {
             List<FlightResponse> generated = scheduleService.generateFlights(7L, null);
 
             assertThat(generated.get(0).departureTime()).isEqualTo(TODAY.atTime(22, 30));
-            assertThat(generated.get(0).arrivalTime()).isEqualTo(TODAY.plusDays(1).atTime(6, 15));
+            // An overnight: 22:30 out of London, 7h45m in the air, which the
+            // arrivals board at JFK shows as the small hours of the next day.
+            assertThat(generated.get(0).arrivalTime())
+                    .isEqualTo(onTheJfkClock(TODAY.plusDays(1).atTime(6, 15)));
         }
 
         @Test

@@ -2,6 +2,7 @@ package com.skybook.praveen.notificationservice.service;
 
 import com.skybook.praveen.common.event.BookingEvent;
 import com.skybook.praveen.common.event.BookingEventPassenger;
+import com.skybook.praveen.common.time.AirportTimeZones;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -220,7 +221,7 @@ public class BookingEmailTemplate {
         if (arrivalTerminal != null && !arrivalTerminal.isBlank()) {
             destinationCity = destinationCity + " &middot; Terminal " + escape(arrivalTerminal);
         }
-        String duration = flightDuration(departureTime, arrivalTime);
+        String duration = flightDuration(departureTime, arrivalTime, origin, destination);
         String durationLabel = duration.isEmpty() ? escape(nvl(flightNumber, "")) : duration;
         String labelRow = label == null || label.isEmpty() ? "" : """
                   <tr>
@@ -297,14 +298,23 @@ public class BookingEmailTemplate {
         }
     }
 
-    /** "8h 10m" between departure and arrival, or "" if the times can't be read. */
-    private static String flightDuration(String departureTime, String arrivalTime) {
+    /**
+     * "8h 10m" in the air, or "" if either time cannot be read.
+     *
+     * <p>Both times are wall clocks at their OWN airport, so subtracting them
+     * directly measures nothing: LHR 21:25 to SIN 10:30 is thirteen hours of
+     * flying and reads as thirteen hours only by the accident of the two zones
+     * cancelling out. Each end is therefore resolved to a real instant on its
+     * own zone first, and the elapsed time taken between those.
+     */
+    private static String flightDuration(String departureTime, String arrivalTime,
+                                         String origin, String destination) {
         java.time.LocalDateTime dep = parseTime(departureTime);
         java.time.LocalDateTime arr = parseTime(arrivalTime);
-        if (dep == null || arr == null) {
+        if (dep == null || arr == null || origin == null || destination == null) {
             return "";
         }
-        long minutes = java.time.Duration.between(dep, arr).toMinutes();
+        long minutes = AirportTimeZones.elapsedBetween(origin, dep, destination, arr).toMinutes();
         if (minutes <= 0) {
             return "";
         }

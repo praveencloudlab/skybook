@@ -19,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -532,6 +533,31 @@ class FlightServiceImplTest {
             return date.plusDays(dayOffset).atTime(hour, minute);
         }
 
+        private static final java.util.Map<String, ZoneId> ZONES = java.util.Map.of(
+                "LHR", ZoneId.of("Europe/London"),
+                "JFK", ZoneId.of("America/New_York"),
+                "DXB", ZoneId.of("Asia/Dubai"),
+                "SIN", ZoneId.of("Asia/Singapore"));
+
+        /**
+         * How long the journey takes, given that every time in these fixtures is
+         * a wall clock at its own airport.
+         *
+         * <p>Spelled out through named zones instead of a literal number of
+         * minutes for two reasons. The offsets shift - London and New York do
+         * not change over on the same dates, so any literal is wrong for a
+         * fortnight each spring and autumn. And the naive answer is available
+         * for comparison: a direct LHR-JFK here subtracts to 8h and actually
+         * takes 13h, so a test written against the literal would go green again
+         * the moment the zone handling was removed.
+         */
+        private static long journeyMinutes(String origin, LocalDateTime departure,
+                                           String destination, LocalDateTime arrival) {
+            return java.time.Duration.between(
+                    departure.atZone(ZONES.get(origin)),
+                    arrival.atZone(ZONES.get(destination))).toMinutes();
+        }
+
         private void windowContains(List<Flight> flights) {
             when(flightRepository.findByDepartureTimeBetween(any(), any())).thenReturn(flights);
         }
@@ -547,7 +573,11 @@ class FlightServiceImplTest {
             assertThat(direct.stops()).isZero();
             assertThat(direct.legs()).hasSize(1);
             assertThat(direct.layoverMinutes()).isEmpty();
-            assertThat(direct.totalDurationMinutes()).isEqualTo(480);
+            assertThat(direct.totalDurationMinutes())
+                    .isEqualTo(journeyMinutes("LHR", at(0, 9, 0), "JFK", at(0, 17, 0)));
+            // 09:00 in London to 17:00 in New York subtracts to eight hours and
+            // is thirteen. Stated explicitly so the naive answer cannot pass.
+            assertThat(direct.totalDurationMinutes()).isNotEqualTo(480);
             assertThat(direct.sameCarrier()).isTrue();
         }
 
@@ -571,8 +601,11 @@ class FlightServiceImplTest {
             assertThat(oneStop.stops()).isEqualTo(1);
             assertThat(oneStop.legs()).extracting(FlightResponse::flightNumber)
                     .containsExactly("EK1", "EK2");
+            // The layover is the one span that DOES subtract directly: both
+            // sides of a connection are the same airport, so one clock.
             assertThat(oneStop.layoverMinutes()).containsExactly(60L);
-            assertThat(oneStop.totalDurationMinutes()).isEqualTo(19 * 60L);
+            assertThat(oneStop.totalDurationMinutes())
+                    .isEqualTo(journeyMinutes("LHR", at(0, 8, 0), "JFK", at(1, 3, 0)));
             assertThat(oneStop.sameCarrier()).isTrue();
         }
 
@@ -647,7 +680,8 @@ class FlightServiceImplTest {
             assertThat(twoStop.legs()).extracting(FlightResponse::flightNumber)
                     .containsExactly("EK1", "EK2", "SQ3");
             assertThat(twoStop.sameCarrier()).isFalse();
-            assertThat(twoStop.totalDurationMinutes()).isEqualTo(30 * 60L);
+            assertThat(twoStop.totalDurationMinutes())
+                    .isEqualTo(journeyMinutes("LHR", at(0, 6, 0), "JFK", at(1, 12, 0)));
         }
 
         @Test
@@ -747,7 +781,8 @@ class FlightServiceImplTest {
             assertThat(itineraries).hasSize(20);
             assertThat(itineraries).extracting(ItineraryResponse::totalDurationMinutes)
                     .isSorted();
-            assertThat(itineraries.get(0).totalDurationMinutes()).isEqualTo(480);
+            assertThat(itineraries.get(0).totalDurationMinutes())
+                    .isEqualTo(journeyMinutes("LHR", at(0, 6, 0), "JFK", at(0, 14, 0)));
         }
 
         @Test

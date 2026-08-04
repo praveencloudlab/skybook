@@ -1,5 +1,5 @@
 import type { Flight } from '../api/flights';
-import { dayOffset, duration, time } from '../lib/format';
+import { dayOffset, durationFromMinutes, time } from '../lib/format';
 
 /**
  * One flight in a results list, laid out the way the premium carriers lay out
@@ -47,7 +47,7 @@ export function FlightCard({ flight, onSelect }: { flight: Flight; onSelect?: ()
                 <span className="h-1.5 w-1.5 rounded-full border border-slate-400 bg-white" />
               </div>
               <div className="tabular mt-1 text-center text-xs font-medium text-slate-500">
-                Direct · {duration(flight.departureTime, flight.arrivalTime)}
+                Direct · {durationFromMinutes(flight.durationMinutes)}
               </div>
             </div>
 

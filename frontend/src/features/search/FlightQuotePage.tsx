@@ -15,7 +15,7 @@ import { BookingStepper } from '../../components/BookingStepper';
 import { Button } from '../../components/Button';
 import { ApiError } from '../../lib/errors';
 import { seatsApi, type FlightSeatMap } from '../../api/seats';
-import { dayAndMonth, duration, price, time } from '../../lib/format';
+import { dayAndMonth, durationFromMinutes, price, time } from '../../lib/format';
 import { useSession } from '../auth/useSession';
 
 /**
@@ -322,7 +322,7 @@ export function FlightQuotePage({
                 <div className="text-xs font-semibold text-slate-500">{flight.originAirportCode}</div>
               </div>
               <div className="flex flex-1 flex-col items-center">
-                <span className="tabular text-[10px] text-slate-400">{duration(flight.departureTime, flight.arrivalTime)}</span>
+                <span className="tabular text-[10px] text-slate-400">{durationFromMinutes(flight.durationMinutes)}</span>
                 <span className="w-full border-t-2 border-dotted border-slate-300" />
                 <span className="text-[10px] text-slate-400">Direct</span>
               </div>

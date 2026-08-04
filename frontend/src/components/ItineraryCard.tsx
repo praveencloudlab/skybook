@@ -1,6 +1,6 @@
 import type { Flight, Itinerary } from '../api/flights';
 import { AIRPORTS } from '../api/flights';
-import { dayOffset, duration, price, time } from '../lib/format';
+import { dayOffset, durationFromMinutes, price, time } from '../lib/format';
 import { AirlineLogo } from './AirlineLogo';
 
 /**
@@ -10,7 +10,7 @@ import { AirlineLogo } from './AirlineLogo';
  * connection is never mistaken for a through-ticket.
  *
  * Layout: legs on the left; a ticket-style right rail carries the total
- * duration, the "from" price and ONE gold CTA - except a mixed-carrier
+ * durationFromMinutes, the "from" price and ONE gold CTA - except a mixed-carrier
  * self-transfer, whose per-leg Book buttons stay on the rows because each
  * leg genuinely is its own ticket.
  */
@@ -98,7 +98,7 @@ export function ItineraryCard({
                 </div>
                 <div className="flex min-w-[5rem] flex-1 flex-col items-center">
                   <span className="tabular text-[10px] font-semibold text-slate-500">
-                    {duration(leg.departureTime, leg.arrivalTime)}
+                    {durationFromMinutes(leg.durationMinutes)}
                   </span>
                   <div className="mt-1 flex w-full items-center gap-1">
                     <span className="h-1 w-1 rounded-full bg-slate-300" />
@@ -169,7 +169,7 @@ export function ItineraryCard({
         </div>
       </div>
 
-      {/* Ticket rail: duration, price, ONE clear action. Perforated edge on
+      {/* Ticket rail: durationFromMinutes, price, ONE clear action. Perforated edge on
           desktop, a bottom bar on mobile. */}
       <div className="flex items-center justify-between gap-3 border-t border-dashed border-slate-200 bg-slate-50/60 px-5 py-3 sm:w-44 sm:flex-col sm:items-stretch sm:justify-center sm:border-t-0 sm:border-l sm:px-4 sm:py-4 sm:text-center">
         <div>
