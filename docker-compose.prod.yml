@@ -42,6 +42,17 @@ services:
     ports: !override
       - "127.0.0.1:8080:8080"
 
+  auth-service:
+    restart: unless-stopped
+    environment:
+      # The password-reset email embeds this as the link the recipient clicks.
+      # The base compose file defaults it to http://localhost:3000, which is
+      # correct on a laptop and useless in an email: a real recipient opening
+      # it lands on their OWN machine, so the reset can never be completed.
+      # Behind Caddy the public origin is the TLS domain, so it is derived from
+      # the same variable rather than repeated as a second thing to keep in step.
+      APP_PUBLIC_BASE_URL: https://${SKYBOOK_DOMAIN:?set SKYBOOK_DOMAIN in .env}
+
   mailpit:
     ports: !override
       - "127.0.0.1:8025:8025"

@@ -93,6 +93,13 @@ echo 'SKYBOOK_DOMAIN=skybook-praveen.duckdns.org' >> .env
 # internal - view them via the SSH tunnel below.
 ```
 
+`SKYBOOK_DOMAIN` does double duty: Caddy requests the TLS certificate for it,
+and the production overlay derives `APP_PUBLIC_BASE_URL` from it so the
+password-reset email links to the deployed site. Before that was wired up the
+link fell back to the local-development default and reset emails went out
+pointing at `http://localhost:3000` - which resolves, on the recipient's own
+machine, to nothing, so the reset could never be completed.
+
 Then:
 
 ```bash
