@@ -2,6 +2,7 @@ package com.skybook.praveen.authservice.controller;
 
 import com.skybook.praveen.authservice.exception.EmailAlreadyRegisteredException;
 import com.skybook.praveen.authservice.exception.InvalidCredentialsException;
+import com.skybook.praveen.authservice.exception.InvalidResetTokenException;
 import com.skybook.praveen.authservice.security.JwtAuthenticationFilter;
 import com.skybook.praveen.authservice.security.SessionCookie;
 import com.skybook.praveen.authservice.service.AuthService;
@@ -18,6 +19,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -150,5 +155,124 @@ class AuthControllerTest {
                         .content("{\"email\":\"a@b.com\",\"password\":\"whatever\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401));
+    }
+
+    // ---- keep-me-signed-in flag reaches the cookie ---------------------------
+
+    @Test
+    void login_defaultsToANonPersistentSession() throws Exception {
+        when(authService.login(any())).thenReturn("a.jwt.token");
+        when(sessionCookie.issue(any(), anyBoolean())).thenReturn("skybook_session=a.jwt.token; Path=/; HttpOnly");
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\",\"password\":\"whatever\"}"))
+                .andExpect(status().isOk());
+
+        // Persistence is opt-in: the safer choice on a shared machine.
+        verify(sessionCookie).issue("a.jwt.token", false);
+    }
+
+    @Test
+    void login_passesTheRememberFlagThroughToTheCookie() throws Exception {
+        when(authService.login(any())).thenReturn("a.jwt.token");
+        when(sessionCookie.issue(any(), anyBoolean())).thenReturn("skybook_session=a.jwt.token; Max-Age=3600");
+
+        mockMvc.perform(post("/api/auth/login")
+                        .param("remember", "true")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\",\"password\":\"whatever\"}"))
+                .andExpect(status().isOk());
+
+        verify(sessionCookie).issue("a.jwt.token", true);
+    }
+
+    // ---- logout -------------------------------------------------------------
+
+    @Test
+    void logout_returnsTheExpiringCookieWithoutTouchingTheAccount() throws Exception {
+        when(sessionCookie.expire()).thenReturn("skybook_session=; Path=/; Max-Age=0; HttpOnly");
+
+        mockMvc.perform(post("/api/auth/logout"))
+                .andExpect(status().isNoContent())
+                .andExpect(header().exists(HttpHeaders.SET_COOKIE));
+
+        verifyNoInteractions(authService);
+    }
+
+    // ---- forgot password ----------------------------------------------------
+
+    @Test
+    void forgotPassword_alwaysAccepts() throws Exception {
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\"}"))
+                .andExpect(status().isAccepted())
+                .andExpect(content().string(""));
+
+        verify(authService).requestPasswordReset("a@b.com");
+    }
+
+    @Test
+    void forgotPassword_answersIdenticallyForAnAddressWithNoAccount() throws Exception {
+        // The service no-ops for an unknown address; the response must not differ
+        // in any way a caller could use to enumerate registered emails.
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"nobody@b.com\"}"))
+                .andExpect(status().isAccepted())
+                .andExpect(content().string(""));
+    }
+
+    @Test
+    void forgotPassword_rejectsAMalformedAddress() throws Exception {
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"not-an-email\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // ---- reset password -----------------------------------------------------
+
+    @Test
+    void resetPassword_redeemsTheTokenAndReturnsNoContent() throws Exception {
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"raw-token\",\"password\":\"" + VALID_PASSWORD + "\"}"))
+                .andExpect(status().isNoContent());
+
+        verify(authService).resetPassword("raw-token", VALID_PASSWORD);
+    }
+
+    @Test
+    void resetPassword_appliesTheRegistrationComplexityPolicyToTheNewPassword() throws Exception {
+        // A reset sets a brand-new password, so it must clear the same bar
+        // registration does - unlike login, which deliberately does not.
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"raw-token\",\"password\":\"weakpass\"}"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(authService);
+    }
+
+    @Test
+    void resetPassword_rejectsAMissingToken() throws Exception {
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"\",\"password\":\"" + VALID_PASSWORD + "\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void resetPassword_mapsAnUnknownOrExpiredTokenToAGeneric400() throws Exception {
+        doThrow(new InvalidResetTokenException())
+                .when(authService).resetPassword(anyString(), anyString());
+
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"token\":\"stale-token\",\"password\":\"" + VALID_PASSWORD + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
     }
 }
