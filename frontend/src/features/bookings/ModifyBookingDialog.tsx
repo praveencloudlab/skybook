@@ -67,13 +67,25 @@ export function ModifyBookingDialog({
   // quote decides the real refund (time tiers apply) and whether a change is
   // possible at all right now.
   const [cancelPreview, setCancelPreview] = useState<CancellationPreview | null>(null);
+  /** The refund quote could not be fetched - distinct from "not fetched yet". */
+  const [refundUnknown, setRefundUnknown] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
     bookingsApi
       .cancellationPreview(booking.id, controller.signal)
-      .then(setCancelPreview)
-      .catch(() => {});
+      .then((preview) => {
+        setCancelPreview(preview);
+        setRefundUnknown(false);
+      })
+      // Swallowing this used to leave the dialog quoting the booking's FACE
+      // VALUE as the refund - the most flattering number on the screen, and
+      // usually wrong (a 50%-window booking refunds half). Money screens do
+      // not get to guess: say the refund is unavailable and let the user
+      // decide whether to go on.
+      .catch(() => {
+        if (!controller.signal.aborted) setRefundUnknown(true);
+      });
     return () => controller.abort();
   }, [booking.id]);
 
@@ -133,9 +145,18 @@ export function ModifyBookingDialog({
 
   // What the old booking ACTUALLY refunds under the live cancellation quote
   // (time tiers + fare rules) - not its face value.
-  const oldRefund = cancelPreview && !cancelPreview.unpaid
-    ? Number(cancelPreview.refundAmount)
-    : Number(booking.totalFare);
+  //
+  // This number does NOT move when the traveller picks another date: it is
+  // computed from the ORIGINAL booking's fares and the time left before the
+  // ORIGINAL flight. Only the new booking's price moves. The two used to be
+  // welded into one sentence ("Net cost after your GBP 790 refund"), which
+  // read as though the refund itself were re-quoted per date - reported live.
+  // They are now separate rows, and the fixed one says so.
+  const oldRefund =
+    cancelPreview && !cancelPreview.unpaid ? Number(cancelPreview.refundAmount) : null;
+  const refundKnown = oldRefund !== null || (cancelPreview?.unpaid ?? false);
+  // An unpaid booking refunds nothing because nothing was taken.
+  const refundValue = oldRefund ?? 0;
   // The old booking can't be cancelled online right now (window closed /
   // checked in) - then a modify is impossible too, and we must say so
   // BEFORE taking money for a new booking.
@@ -426,21 +447,43 @@ export function ModifyBookingDialog({
                   <dt className="text-slate-900">New booking total (today's fares)</dt>
                   <dd className="tabular text-slate-900">{money(newTotal, CURRENCY)}</dd>
                 </div>
-                {/* The number that actually matters: what this change COSTS
-                    once the old booking's refund lands. The refund comes from
-                    the live cancellation quote - time tiers included. */}
-                <div className="flex justify-between border-t border-slate-200 bg-slate-50 px-4 py-2 font-bold">
-                  <dt className="text-slate-900">
-                    Net {newTotal >= oldRefund ? 'cost' : 'refund'} after your{' '}
-                    {money(oldRefund, CURRENCY)} refund
+                {/* The refund from the CURRENT booking - its own row, because
+                    it is the one number here that does not move with the date. */}
+                <div className="flex justify-between border-t border-slate-200 px-4 py-2">
+                  <dt className="text-slate-600">
+                    Refund from your current booking
                     {cancelPreview && !cancelPreview.unpaid && cancelPreview.refundPercent < 100
                       ? ` (${cancelPreview.refundPercent}% cancellation window)`
                       : ''}
+                    <span className="mt-0.5 block text-xs text-slate-500">
+                      {refundUnknown
+                        ? "We couldn't price your refund just now."
+                        : refundKnown
+                          ? 'Fixed — set by your original fare and how close its flight is, not by the date you pick here.'
+                          : 'Working it out…'}
+                    </span>
                   </dt>
-                  <dd className={'tabular ' + (newTotal >= oldRefund ? 'text-slate-900' : 'text-emerald-700')}>
-                    {money(Math.abs(newTotal - oldRefund), CURRENCY)}
+                  <dd className="tabular font-semibold text-slate-900">
+                    {refundUnknown ? '—' : refundKnown ? money(refundValue, CURRENCY) : '…'}
                   </dd>
                 </div>
+
+                {/* What the change actually COSTS. This is the number that
+                    moves with the date, because the new fare does. */}
+                {refundKnown ? (
+                  <div className="flex justify-between border-t border-slate-200 bg-slate-50 px-4 py-2 font-bold">
+                    <dt className="text-slate-900">
+                      Net {newTotal >= refundValue ? 'cost' : 'refund'} for this change
+                    </dt>
+                    <dd
+                      className={
+                        'tabular ' + (newTotal >= refundValue ? 'text-slate-900' : 'text-emerald-700')
+                      }
+                    >
+                      {money(Math.abs(newTotal - refundValue), CURRENCY)}
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
             ) : null}
 
@@ -459,12 +502,23 @@ export function ModifyBookingDialog({
               >
                 Keep current booking
               </button>
-              <Button onClick={confirmRebook} busy={busy} disabled={!chosen || !quote || nothingChanged || modifyBlocked}>
+              {/* Confirming while the refund is unknown would mean charging for
+                  a new booking without being able to say what the change
+                  actually costs - the one thing this dialog exists to tell. */}
+              <Button
+                onClick={confirmRebook}
+                busy={busy}
+                disabled={!chosen || !quote || nothingChanged || modifyBlocked || !refundKnown}
+              >
                 {modifyBlocked
                   ? 'Changes closed for this flight'
-                  : nothingChanged
-                    ? 'No changes yet'
-                    : `Confirm change · pay ${chosen && quote ? money(newTotal, CURRENCY) : ''}`}
+                  : refundUnknown
+                    ? 'Refund unavailable — try again'
+                    : !refundKnown
+                      ? 'Working out your refund…'
+                      : nothingChanged
+                        ? 'No changes yet'
+                        : `Confirm change · pay ${chosen && quote ? money(newTotal, CURRENCY) : ''}`}
               </Button>
             </div>
           </>
