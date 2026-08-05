@@ -50,10 +50,15 @@ public class SsoStateCrypto {
     private static final int GCM_IV_BYTES = 12;
     private static final int GCM_TAG_BITS = 128;
     private static final ObjectInputFilter DESERIALIZATION_ALLOWLIST = ObjectInputFilter.Config.createFilter(
-            "maxbytes=16384;maxdepth=20;"
+            // The payload is one small record of strings and a boolean - the
+            // allowlist matches exactly that and nothing more. (It used to
+            // admit org.springframework.security.oauth2.core.** for the
+            // serialized authorization request; the request object is no
+            // longer round-tripped - see SsoPendingAuth - so the surface
+            // shrinks with it.)
+            "maxbytes=4096;maxdepth=8;"
                     + "com.skybook.praveen.authservice.sso.*;"
-                    + "org.springframework.security.oauth2.core.**;"
-                    + "java.util.**;java.lang.*;!*");
+                    + "java.lang.*;!*");
 
     private final SecretKeySpec key;
     private final SecureRandom secureRandom = new SecureRandom();

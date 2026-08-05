@@ -143,8 +143,21 @@ the explicit-path doctrine stay uniform.
 
 ## 3.3 The pending-request cookie
 
-Custom `AuthorizationRequestRepository` storing the serialized authorization
-request **plus** SkyBook's two carried values (`remember`, `returnTo`):
+Custom `AuthorizationRequestRepository` storing **the per-flow secrets only**
+— state, nonce, PKCE verifier — plus SkyBook's two carried values
+(`remember`, `returnTo`). Configuration (client id, scopes, redirect URI,
+authorization URI) is **rebuilt from the registration at load time, never
+round-tripped through the browser**.
+
+That rule was learned live, and is recorded here at full volume: the first
+implementation sealed the whole Java-serialized `OAuth2AuthorizationRequest`
+and produced a **~4.5 KB cookie** — past nginx's default `proxy_buffer_size`
+(a 502 at the frontend's `/api` hop, the flow's very first production
+request) and past the **browser's 4096-byte per-cookie cap** (a silently
+dropped cookie, which would have made every callback fail even with nginx
+appeased). Both limits live outside the JVM, which is how a MockMvc flow
+test missed them; the repository test now pins the sealed size (< 1200
+bytes; actual ≈ 400) so the property cannot regress unnoticed.
 
 - httpOnly, `Secure`, `SameSite=Lax`, path `/api/auth/oauth2/`, max-age
   **5 minutes** — the consent screen's lifetime, not a session.
