@@ -5,6 +5,7 @@ import { Button } from '../../components/Button';
 import { ErrorAlert } from '../../components/Alert';
 import { Field } from '../../components/Field';
 import { AuthLayout } from './AuthLayout';
+import { GoogleSignInButton } from './GoogleSignInButton';
 import { ApiError, fieldErrors } from '../../lib/errors';
 
 /**
@@ -114,6 +115,12 @@ export function RegisterPage() {
         <Button type="submit" busy={busy} className="w-full">
           Create account
         </Button>
+
+        {/* Registering via Google IS signing in - the server provisions the
+            account on first sign-in (SSO_MODULE.md §4.2), so the same button
+            serves both pages. No remember checkbox exists here; the safer
+            session-scoped default applies. */}
+        <GoogleSignInButton />
       </form>
     </AuthLayout>
   );

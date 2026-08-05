@@ -65,4 +65,27 @@ class AuthFlywayMigrationIntegrationTest {
         assertThat(query("SELECT count(*) FROM pg_constraint WHERE conname = 'users_email_normalized_check'"))
                 .isEqualTo(1L);
     }
+
+    @Test
+    void v7BuiltFederatedIdentitiesWithBothUniquenessRules() throws Exception {
+        // SSO_MODULE.md §4.1: one account per external identity, one identity
+        // per provider per account - the linking decision tree leans on both
+        // constraints for its race handling, so their existence is contract.
+        assertThat(query("""
+                SELECT count(*) FROM information_schema.tables
+                WHERE table_name = 'federated_identities'""")).isEqualTo(1L);
+        assertThat(query("""
+                SELECT count(*) FROM pg_constraint
+                WHERE conname IN ('uq_provider_subject', 'uq_user_provider')""")).isEqualTo(2L);
+    }
+
+    @Test
+    void passwordStaysNullableBecauseGoogleOnlyAccountsAreNullRows() throws Exception {
+        // The V1 baseline left users.password nullable and SSO depends on it
+        // (SSO_MODULE.md §2.3); a future migration tightening it would break
+        // every federated-only account, so the property is pinned here.
+        assertThat(query("""
+                SELECT is_nullable FROM information_schema.columns
+                WHERE table_name = 'users' AND column_name = 'password'""")).isEqualTo("YES");
+    }
 }

@@ -63,6 +63,16 @@ class AuthSecurityChainTest {
     private ServiceClientDetailsService serviceClientDetailsService;
     @MockitoBean
     private PasswordEncoder passwordEncoder;
+    // SecurityConfig's SSO collaborators (SSO_MODULE.md §5). Mocked because
+    // this class tests the CHAIN's shape; with no ClientRegistrationRepository
+    // in the context, oauth2Login stays off - the disabled world, which is
+    // exactly the world whose authorization surface must match the enabled one.
+    @MockitoBean
+    private com.skybook.praveen.authservice.sso.SsoCookieAuthorizationRequestRepository ssoPendingRepository;
+    @MockitoBean
+    private com.skybook.praveen.authservice.sso.SsoSuccessHandler ssoSuccessHandler;
+    @MockitoBean
+    private com.skybook.praveen.authservice.sso.SsoFailureHandler ssoFailureHandler;
 
     /** Makes {@link #GOOD_TOKEN} authenticate as Alice, the way a real RS256 token would. */
     private void tokenResolvesToAlice(UserRole role) {
@@ -134,6 +144,20 @@ class AuthSecurityChainTest {
             // the request got past authorization rather than being refused.
             mockMvc.perform(get("/livez")).andExpect(status().isNotFound());
             mockMvc.perform(get("/readyz")).andExpect(status().isNotFound());
+        }
+
+        @Test
+        void ssoPathsAreOpenWhetherOrNotTheFeatureIs() throws Exception {
+            // SSO_MODULE.md §5: the gate list is static - the disabled world
+            // (this slice has no oauth2 beans) must present the same surface
+            // as the enabled one. Same 404-is-the-proof trick as the probes:
+            // past authorization, no handler here to answer.
+            mockMvc.perform(get("/api/auth/oauth2/authorization/google"))
+                    .andExpect(status().isNotFound());
+            mockMvc.perform(get("/api/auth/oauth2/callback/google"))
+                    .andExpect(status().isNotFound());
+            mockMvc.perform(get("/api/auth/sso/providers"))
+                    .andExpect(status().isNotFound());
         }
     }
 

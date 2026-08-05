@@ -4,6 +4,7 @@ import { authApi } from '../../api/auth';
 import { Button } from '../../components/Button';
 import { Alert, ErrorAlert } from '../../components/Alert';
 import { Field } from '../../components/Field';
+import { GoogleSignInButton } from './GoogleSignInButton';
 import { ApiError } from '../../lib/errors';
 
 /**
@@ -15,8 +16,14 @@ import { ApiError } from '../../lib/errors';
  * "forgot password" affordances, and the same identical-401 handling - the only
  * difference is what happens after success, which is the {@code onSignedIn}
  * callback's job.
+ *
+ * <p>{@code showSso} is the standalone page's flag (SSO_MODULE.md D3): the
+ * Google button is a full-page navigation, and the inline gate exists
+ * precisely where navigation would destroy the in-memory booking funnel - so
+ * the gate never passes it. Living inside the form lets the button share the
+ * form's own "keep me signed in" choice.
  */
-export function SignInForm({ onSignedIn }: { onSignedIn: () => void }) {
+export function SignInForm({ onSignedIn, showSso = false }: { onSignedIn: () => void; showSso?: boolean }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
@@ -90,6 +97,8 @@ export function SignInForm({ onSignedIn }: { onSignedIn: () => void }) {
       <Button type="submit" busy={busy} className="w-full">
         Log in
       </Button>
+
+      {showSso && <GoogleSignInButton remember={remember} />}
     </form>
   );
 }

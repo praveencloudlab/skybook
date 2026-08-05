@@ -112,7 +112,16 @@ public class AuthService {
 
         // Run BCrypt in both branches (real hash, or the dummy for a missing
         // user) so timing can't distinguish "no such user" from "wrong password".
-        String hashToCheck = (user != null) ? user.getPassword() : dummyPasswordHash;
+        //
+        // The null check on the stored hash is part of the same defence, not a
+        // formality (SSO_MODULE.md §2.4): a Google-only account has password =
+        // NULL, and BCryptPasswordEncoder short-circuits on a null/empty encoded
+        // password WITHOUT doing BCrypt work - a measurably faster 401 that
+        // would tell an attacker "this email exists, via Google". The dummy
+        // hash keeps every failure BCrypt-shaped.
+        String hashToCheck = (user != null && user.getPassword() != null)
+                ? user.getPassword()
+                : dummyPasswordHash;
         boolean passwordMatches = passwordEncoder.matches(request.password(), hashToCheck);
 
         if (user == null || !passwordMatches) {

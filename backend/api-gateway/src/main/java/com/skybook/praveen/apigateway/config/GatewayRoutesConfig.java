@@ -52,7 +52,14 @@ public class GatewayRoutesConfig {
                                 // explicitly like every other auth path - the
                                 // wildcard is deliberately never used, so
                                 // /api/auth/service-token stays off the edge.
-                                "/api/auth/forgot-password", "/api/auth/reset-password"),
+                                "/api/auth/forgot-password", "/api/auth/reset-password",
+                                // Sign in with Google (SSO_MODULE.md §5): the OAuth
+                                // start + callback legs and provider discovery.
+                                // Exact paths for the same reason as everything
+                                // above them.
+                                "/api/auth/oauth2/authorization/google",
+                                "/api/auth/oauth2/callback/google",
+                                "/api/auth/sso/providers"),
                         http(services.getAuthService().getBaseUrl()))
                 .filter(new DownstreamErrorHandlingFilter())
                 .build();

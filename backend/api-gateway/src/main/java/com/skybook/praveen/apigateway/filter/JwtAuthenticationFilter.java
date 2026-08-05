@@ -61,6 +61,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // no session precisely because they cannot sign in.
             new PathPatternParser().parse("/api/auth/forgot-password"),
             new PathPatternParser().parse("/api/auth/reset-password"),
+            // "Sign in with Google" (SSO_MODULE.md §5): the start and callback
+            // legs are pre-authentication by the same logic as password reset -
+            // the caller is here to GET a session. providers is public shopping
+            // data for the sign-in page. Exact paths, no wildcard, same doctrine
+            // as the route table.
+            new PathPatternParser().parse("/api/auth/oauth2/authorization/google"),
+            new PathPatternParser().parse("/api/auth/oauth2/callback/google"),
+            new PathPatternParser().parse("/api/auth/sso/providers"),
             // Flight schedules and fare quotes are public shopping data - a
             // visitor browses and prices trips before there is any account, the
             // way every travel site works. Only booking (seat hold onward) needs

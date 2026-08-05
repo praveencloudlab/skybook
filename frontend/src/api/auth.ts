@@ -130,4 +130,22 @@ export const authApi = {
       return null;
     }
   },
+
+  /**
+   * Which SSO providers this ENVIRONMENT offers (SSO_MODULE.md decision D4).
+   *
+   * Runtime data, deliberately: the frontend image is built once and promoted
+   * through every environment, so provider availability cannot be a build
+   * flag. An environment with no Google client returns [] and the button
+   * simply never exists there. A failed call means the same thing - a
+   * sign-in page must not break because an optional affordance couldn't be
+   * enumerated.
+   */
+  async ssoProviders(): Promise<string[]> {
+    try {
+      return await api.get<string[]>('/api/auth/sso/providers');
+    } catch {
+      return [];
+    }
+  },
 };

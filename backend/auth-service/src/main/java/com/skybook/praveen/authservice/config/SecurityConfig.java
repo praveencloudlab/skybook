@@ -2,10 +2,16 @@ package com.skybook.praveen.authservice.config;
 
 import com.skybook.praveen.authservice.security.JwtAuthenticationFilter;
 import com.skybook.praveen.authservice.security.ServiceClientDetailsService;
+import com.skybook.praveen.authservice.sso.SsoCookieAuthorizationRequestRepository;
+import com.skybook.praveen.authservice.sso.SsoFailureHandler;
+import com.skybook.praveen.authservice.sso.SsoSuccessHandler;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestResolver;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -101,13 +107,26 @@ public class SecurityConfig {
     //
     // Known and accepted: login CSRF (forcing a victim into an attacker session)
     // is not covered by SameSite, since it needs no pre-existing cookie. It is
-    // tolerated here because nothing of the victim is exposed by it.
+    // tolerated here because nothing of the victim is exposed by it. The OIDC
+    // callback (SSO_MODULE.md §7) inherits exactly this posture - it too only
+    // signs the caller IN - and its state parameter is bound to the encrypted
+    // pending-auth cookie besides.
     @SuppressWarnings("java:S4502")
     public SecurityFilterChain applicationFilterChain(HttpSecurity http,
-                                                      JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
+                                                      JwtAuthenticationFilter jwtAuthenticationFilter,
+                                                      ObjectProvider<ClientRegistrationRepository> clientRegistrations,
+                                                      ObjectProvider<OAuth2AuthorizationRequestResolver> authorizationRequestResolver,
+                                                      SsoCookieAuthorizationRequestRepository pendingAuthRepository,
+                                                      SsoSuccessHandler ssoSuccessHandler,
+                                                      SsoFailureHandler ssoFailureHandler) throws Exception {
 
         http
                 .csrf(AbstractHttpConfigurer::disable)
+                // Now stated, not just true by accident (SSO_MODULE.md §2.5):
+                // this service holds no HTTP session, and the OIDC flow keeps
+                // its in-flight state in an encrypted cookie precisely so that
+                // stays the case.
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // logout is public on purpose: it only expires a cookie, and
                         // a user whose token has already lapsed must still be able
@@ -123,10 +142,36 @@ public class SecurityConfig {
                         // exists; reset-password succeeds only against a valid token.
                         .requestMatchers("/api/auth/forgot-password", "/api/auth/reset-password")
                         .permitAll()
+                        // SSO surface (SSO_MODULE.md §5): permitted STATICALLY,
+                        // enabled or not, so both worlds present one security
+                        // surface. When enabled, oauth2Login owns start+callback;
+                        // when disabled, SsoDisabledController answers the same
+                        // paths with a human-readable redirect.
+                        .requestMatchers("/api/auth/oauth2/authorization/google",
+                                "/api/auth/oauth2/callback/google",
+                                "/api/auth/sso/providers")
+                        .permitAll()
                         .requestMatchers("/actuator/**", "/livez", "/readyz").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        // oauth2Login iff the Google registration exists (SsoGoogleConfig's
+        // condition) - feature-off must mean "these filters are not in the
+        // chain", not "these filters fail fast".
+        ClientRegistrationRepository registrations = clientRegistrations.getIfAvailable();
+        if (registrations != null) {
+            http.oauth2Login(oauth -> oauth
+                    .clientRegistrationRepository(registrations)
+                    .authorizationEndpoint(endpoint -> endpoint
+                            .baseUri("/api/auth/oauth2/authorization")
+                            .authorizationRequestResolver(authorizationRequestResolver.getObject())
+                            .authorizationRequestRepository(pendingAuthRepository))
+                    .redirectionEndpoint(endpoint -> endpoint
+                            .baseUri("/api/auth/oauth2/callback/*"))
+                    .successHandler(ssoSuccessHandler)
+                    .failureHandler(ssoFailureHandler));
+        }
 
         return http.build();
     }

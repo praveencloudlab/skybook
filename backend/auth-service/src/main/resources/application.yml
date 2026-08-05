@@ -37,6 +37,15 @@ jwt:
   service-expiration: 600000   # 10 min (ROLE_SERVICE token TTL, §5)
 
 skybook:
+  # "Sign in with Google" (SSO_MODULE.md §6.1). Empty client-id = feature OFF:
+  # the oauth2 beans are never created, the endpoints answer with a friendly
+  # redirect, /api/auth/sso/providers returns [], and the frontend hides the
+  # button. Deliberately an empty default, not a required secret - every CI
+  # rung and fresh clone must boot with no Google configuration at all.
+  sso:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
   # Promote this already-registered user to ADMIN once at startup (§4.3).
   bootstrap-admin-email: ${SKYBOOK_BOOTSTRAP_ADMIN_EMAIL:}
   # Service-client registry (§3.3/§4.5): provisioned at startup, secrets

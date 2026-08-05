@@ -45,6 +45,15 @@
 			<artifactId>spring-boot-starter-security</artifactId>
 		</dependency>
 
+		<!-- OIDC relying party for "Sign in with Google" (SSO_MODULE.md).
+		     Client only: this service RELIES on an external IdP for one flow;
+		     it remains the fleet's token AUTHORITY via its own RS256 JwtService,
+		     never a resource server of Google's. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-oauth2-client</artifactId>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-actuator</artifactId>
@@ -147,6 +156,15 @@
 		<dependency>
 			<groupId>org.springframework.security</groupId>
 			<artifactId>spring-security-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Stands in for Google's token + JWKS endpoints in the OIDC
+		     integration tests (SSO_MODULE.md §8) - the flow is proven against a
+		     local stub, so CI needs no external IdP. Version from Boot's BOM. -->
+		<dependency>
+			<groupId>com.squareup.okhttp3</groupId>
+			<artifactId>mockwebserver</artifactId>
 			<scope>test</scope>
 		</dependency>
 

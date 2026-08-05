@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Author** | Praveenreddy Somireddy |
-| **Status** | PROPOSED — awaiting review; implementation starts on freeze |
+| **Status** | FROZEN 2026-08-05 — D1–D4 accepted as recommended; build order in flight |
 | **Scope** | Passenger sign-in via Google (OpenID Connect, authorization code + PKCE) |
 | **Depends on** | SECURITY_HARDENING_MODULE.md (implemented: RS256, gateway translation point, ownership) |
 | **Explicitly out of scope** | Staff/admin SSO via a corporate IdP (deferred, §11) · account-settings link/unlink UI · refresh tokens · SSO inside the mid-booking inline gate (§2.8) · providers beyond Google |

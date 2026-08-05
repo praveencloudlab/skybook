@@ -278,6 +278,25 @@ class AuthServiceTest {
         }
 
         @Test
+        void runsThePasswordComparisonAgainstTheDummyForAGoogleOnlyAccount() {
+            // A federated-only account stores password = NULL (SSO_MODULE.md
+            // §2.4). BCryptPasswordEncoder short-circuits on a null encoded
+            // password without doing BCrypt work, so handing it the real (null)
+            // hash would make "Google-only account" measurably faster than
+            // "wrong password" - the same stopwatch channel as a missing user,
+            // reopened. The dummy hash keeps this failure BCrypt-shaped too.
+            User googleOnly = alice();
+            googleOnly.setPassword(null);
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(googleOnly));
+
+            assertThatThrownBy(() -> authService.login(new LoginRequest(ALICE, "any-password")))
+                    .isInstanceOf(InvalidCredentialsException.class)
+                    .hasMessage("Invalid email or password");
+
+            verify(passwordEncoder).matches("any-password", DUMMY_HASH);
+        }
+
+        @Test
         void failsTheSameGenericWayWhenNoPasswordIsSuppliedAtAll() {
             when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(alice()));
 

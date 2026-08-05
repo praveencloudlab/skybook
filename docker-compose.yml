@@ -79,6 +79,11 @@ services:
       # Where the SPA lives, so the password-reset email links back to it. The
       # container serves the front end on :3000; override for other origins.
       APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:3000}
+      # "Sign in with Google" (SSO_MODULE.md §6). Empty = feature off, which
+      # every environment without a Google client is supposed to be. The
+      # redirect URI is derived from APP_PUBLIC_BASE_URL above.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       # Service-client registry secrets (SECURITY_HARDENING_MODULE.md §3.3/§10):
       # auth hashes these into the client registry so booking/checkin/inventory
       # can obtain ROLE_SERVICE tokens. Required - no committed default. payment
