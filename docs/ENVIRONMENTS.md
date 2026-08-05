@@ -72,12 +72,19 @@ by accident.
   anonymously, register, book, watch the payment row arrive off the bus,
   capture, reach CONFIRMED, price a cancellation — uploaded as an artifact.
   The approval recorded by GitHub on the `uat` environment *is* the sign-off.
-- **STAGING** is transient by design: a 24 GB VM carrying seventeen containers
+- **STAGING** is transient by design: a VM carrying seventeen containers
   cannot host a standing twin. The rehearsal stands up beside prod on shifted
   loopback ports, proves the artifact on the real host and architecture with
-  the real secret set, and is torn down win or lose. It does not rehearse the
-  TLS door — there is one 443 and it belongs to prod; prod's own verification
-  covers it. Both limits are the honest cost of a one-VM estate.
+  the real secret set, and is torn down win or lose. Its state lives in
+  project-scoped named volumes (`docker-compose.staging.yml`) because the
+  base file's `./docker-data/*` bind mounts belong to live prod — two
+  postgreses must never meet in one data directory. For the same reason it
+  starts only the application chain: prod's prometheus holds the TSDB lock
+  on the shared host path, so the rehearsal runs without the observability
+  containers — which also suits a 16 GB host and an environment that lives
+  for minutes. It does not rehearse the TLS door either — there is one 443
+  and it belongs to prod; prod's own verification covers it. All three
+  limits are the honest cost of a one-VM estate.
 - **PROD** deploys by pulling digests, never by building, and ends by taking a
   backup — so the newest restore point always brackets the newest release.
 - **DR** is the rung most ladders only claim. Weekly, in public: seed a stack,
@@ -189,11 +196,17 @@ promote the branch head), or just push to `main`.
 - **PROD**: pulls the same digests into the live project, rolls the stack,
   verifies through the TLS front door, and ends with an automatic backup.
 
-Sizing caveat, stated because it bit the design once already: the
-transient-staging pattern was sized for a 24 GB host. On a 16 GB host two
-full stacks fit only because of the per-environment JVM ceilings, and
-tightly — if the rehearsal ever OOMs there, the accepted trim is starting
-the staging project without its observability containers.
+What the first walk actually caught, recorded because the failure is more
+instructive than the prediction: the expected risk was memory (two full
+stacks on a 16 GB host), but the real failure was *directory ownership* —
+the base compose binds stateful services to `./docker-data/*` on the host,
+and live prod owns those paths. Staging's prometheus died on prod's TSDB
+lock, and staging's postgres was one health-check away from opening prod's
+data directory. The fix is structural, not situational: the staging overlay
+keeps postgres/kafka state in project-scoped named volumes, and the deploy
+script starts only the application chain — the observability containers are
+prod's alone. The memory caveat still stands; the trim now serves both
+masters.
 
 ### 6.4 Registry visibility
 

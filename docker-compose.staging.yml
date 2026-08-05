@@ -8,7 +8,9 @@
 # that let a rehearsal coexist with the show:
 #
 #  * shifted host ports, so prod keeps 3000/8080 while staging answers on
-#    3100/8180 for the smoke test;
+#    3900/8180 for the smoke test - 3900 because the obvious 31xx/32xx range
+#    is taken: prod's loki sits on 3100 and its tempo on 3200, and the first
+#    rehearsal that got far enough found loki the hard way;
 #  * no Caddy. There is one public TLS door on this VM and it belongs to prod;
 #    80/443 cannot be held by two processes. The certificate path is exercised
 #    by prod's own health verification instead. Stated as the honest limit of
@@ -19,10 +21,28 @@
 
 services:
 
+  # The base file binds postgres and kafka state to ./docker-data/* on the
+  # HOST - one directory, shared by every compose project in this checkout.
+  # Live prod holds those directories: its postgres owns the postmaster lock,
+  # its prometheus owns the TSDB lock. The first full rehearsal proved it -
+  # staging's prometheus died on prod's lock and took the stack down through
+  # depends_on, and staging's postgres was one health-check away from
+  # opening PROD'S DATA DIRECTORY. The rehearsal therefore keeps its state
+  # in named volumes, which compose scopes to the project automatically, and
+  # the deploy script never starts the observability containers at all -
+  # their directories belong to the show, not the rehearsal.
+  postgres:
+    volumes:
+      - staging-pgdata:/var/lib/postgresql/data
+
+  kafka:
+    volumes:
+      - staging-kafkadata:/var/lib/kafka/data
+
   frontend:
     restart: unless-stopped
     ports: !override
-      - "127.0.0.1:${STAGING_FRONTEND_PORT:-3100}:3000"
+      - "127.0.0.1:${STAGING_FRONTEND_PORT:-3900}:3000"
 
   api-gateway:
     restart: unless-stopped
@@ -44,3 +64,7 @@ services:
 
   grafana:
     ports: !override []
+
+volumes:
+  staging-pgdata:
+  staging-kafkadata:

@@ -14,14 +14,16 @@ echo "1/3  onward legs (skybook_flight)"
 docker exec -i "$C" psql -U postgres -d skybook_flight -v ON_ERROR_STOP=1 < "$DIR/04_connection_legs.sql"
 
 echo "2/3  stage NEW flight ids across databases"
-docker exec -i "$C" psql -U postgres -d skybook_inventory -c \
+# No -i: unfed stdin would swallow the calling script under `ssh bash -s`
+# (see seed.sh for the full account).
+docker exec "$C" psql -U postgres -d skybook_inventory -c \
   "DROP TABLE IF EXISTS tmp_flights; CREATE TABLE tmp_flights(flight_id bigint, dest varchar(3));"
 docker exec "$C" psql -U postgres -d skybook_flight -c \
   "COPY (SELECT id, destination_airport_code FROM flights WHERE created_by = 'data-seed-connections') TO STDOUT" \
 | docker exec -i "$C" psql -U postgres -d skybook_inventory -c "COPY tmp_flights FROM STDIN"
 
 echo "3/3  inventory for the new legs only"
-docker exec -i "$C" psql -U postgres -d skybook_inventory -v ON_ERROR_STOP=1 -c "
+docker exec "$C" psql -U postgres -d skybook_inventory -v ON_ERROR_STOP=1 -c "
 INSERT INTO flight_inventory
   (created_at, updated_at, created_by, version, flight_id, aircraft_id, status,
    total_seats, available_seats, held_seats, reserved_seats, blocked_seats)

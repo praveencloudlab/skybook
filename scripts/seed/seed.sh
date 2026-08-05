@@ -25,7 +25,11 @@ echo "2/4  fleet + seat maps (skybook_inventory)"
 docker exec -i "$C" psql -U postgres -d skybook_inventory -v ON_ERROR_STOP=1 < "$DIR/02_aircraft_seats.sql"
 
 echo "3/4  stage flight ids across databases (same container, different DB)"
-docker exec -i "$C" psql -U postgres -d skybook_inventory -c \
+# No -i here (or on any exec that isn't fed by < or |): an attached stdin is
+# never "unused" - when this script streams over `ssh bash -s`, docker's stdin
+# pump eats the REST OF THE CALLING SCRIPT, which then "succeeds" at whatever
+# line it happened to have reached. Cost us a staging smoke that never ran.
+docker exec "$C" psql -U postgres -d skybook_inventory -c \
   "DROP TABLE IF EXISTS tmp_flights; CREATE TABLE tmp_flights(flight_id bigint, dest varchar(3));"
 docker exec "$C" psql -U postgres -d skybook_flight -c \
   "COPY (SELECT id, destination_airport_code FROM flights) TO STDOUT" \

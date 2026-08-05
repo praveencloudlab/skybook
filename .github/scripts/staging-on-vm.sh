@@ -27,14 +27,34 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# The rehearsal is the APPLICATION chain only. The observability containers
+# bind-mount ./docker-data/* on the host, and those directories belong to the
+# live prod project - the first full walk proved it when staging's prometheus
+# died on prod's TSDB lock and depends_on took the whole rehearsal with it.
+# Postgres and kafka state is isolated by the staging overlay (named volumes,
+# project-scoped); grafana/prometheus/loki/tempo/promtail are simply never
+# started - nobody dashboards an environment that lives for four minutes,
+# and on a 16 GB host the memory is better spent on the thing being tested.
+APP_SERVICES=(postgres kafka mailpit otel-agent
+  auth-service flight-service booking-service inventory-service
+  payment-service checkin-service notification-service
+  api-gateway frontend)
+
 export IMAGE_TAG="$TAG"
-"${COMPOSE[@]}" pull -q
-"${COMPOSE[@]}" up -d --no-build
+"${COMPOSE[@]}" pull -q "${APP_SERVICES[@]}"
+"${COMPOSE[@]}" up -d --no-build "${APP_SERVICES[@]}"
 
 # Health, then the same smoke DEV ran - but on this host, this architecture,
 # these secrets.
-bash .github/scripts/wait-healthy.sh skybook-staging 420
-bash scripts/seed/seed.sh skybook-staging-postgres-1
+#
+# The </dev/null matters: this script arrives over `ssh bash -s`, so ITS OWN
+# remaining lines are what's on stdin. Any child that drains stdin (one
+# docker exec -i was enough) truncates the run at wherever it had read to -
+# and bash then exits 0 at the phantom EOF, a green light with the smoke
+# test silently gone. The seed scripts no longer attach stdin anywhere, but
+# the rehearsal must not be one regression away from passing vacuously.
+bash .github/scripts/wait-healthy.sh skybook-staging 420 < /dev/null
+bash scripts/seed/seed.sh skybook-staging-postgres-1 < /dev/null
 bash .github/scripts/smoke.sh "http://127.0.0.1:${STAGING_GATEWAY_PORT:-8180}" \
-                              "http://127.0.0.1:${STAGING_FRONTEND_PORT:-3100}"
+                              "http://127.0.0.1:${STAGING_FRONTEND_PORT:-3900}"
 echo "staging: rehearsal PASSED on the production host"

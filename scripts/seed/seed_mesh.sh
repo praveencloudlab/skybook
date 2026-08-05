@@ -18,7 +18,9 @@ echo "1/3  SB full-mesh flights (skybook_flight): 380 pairs x 3 daily x 366 days
 docker exec -i "$C" psql -U postgres -d skybook_flight -v ON_ERROR_STOP=1 < "$DIR/06_full_mesh.sql"
 
 echo "2/3  stage flight ids + haul class across databases"
-docker exec -i "$C" psql -U postgres -d skybook_inventory -c \
+# No -i: unfed stdin would swallow the calling script under `ssh bash -s`
+# (see seed.sh for the full account).
+docker exec "$C" psql -U postgres -d skybook_inventory -c \
   "DROP TABLE IF EXISTS tmp_all_flights; CREATE TABLE tmp_all_flights(flight_id bigint, short_haul boolean);"
 docker exec "$C" psql -U postgres -d skybook_flight -c \
   "COPY (SELECT id, (arrival_time - departure_time) < INTERVAL '4 hours' FROM flights) TO STDOUT" \
