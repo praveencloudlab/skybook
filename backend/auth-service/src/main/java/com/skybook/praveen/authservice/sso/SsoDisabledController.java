@@ -1,6 +1,7 @@
 package com.skybook.praveen.authservice.sso;
 
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,8 +20,18 @@ import java.io.IOException;
 @ConditionalOnExpression("!T(org.springframework.util.StringUtils).hasText('${skybook.sso.google.client-id:}')")
 public class SsoDisabledController {
 
+    private final String publicBaseUrl;
+
+    public SsoDisabledController(
+            // Absolute from configuration, like every browser-facing redirect
+            // here - behind the proxy chain a relative Location absolutizes to
+            // the internal hostname (see SsoSuccessHandler).
+            @Value("${app.public-base-url:http://localhost:5173}") String publicBaseUrl) {
+        this.publicBaseUrl = publicBaseUrl;
+    }
+
     @GetMapping({"/api/auth/oauth2/authorization/google", "/api/auth/oauth2/callback/google"})
     public void unavailable(HttpServletResponse response) throws IOException {
-        response.sendRedirect("/login?error=sso_unavailable");
+        response.sendRedirect(publicBaseUrl + "/login?error=sso_unavailable");
     }
 }

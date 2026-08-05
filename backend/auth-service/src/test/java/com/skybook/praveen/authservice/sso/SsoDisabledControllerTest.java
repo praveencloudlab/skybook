@@ -13,11 +13,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SsoDisabledControllerTest {
 
     @Test
-    void answersWithTheHumanReadableRedirect() throws Exception {
+    void answersWithTheHumanReadableRedirectOnThePublicOrigin() throws Exception {
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        new SsoDisabledController().unavailable(response);
+        new SsoDisabledController("https://skybook.example").unavailable(response);
 
-        assertThat(response.getRedirectedUrl()).isEqualTo("/login?error=sso_unavailable");
+        // Absolute on purpose: a relative Location absolutizes against the
+        // request host, which behind the proxy chain is the internal name.
+        assertThat(response.getRedirectedUrl())
+                .isEqualTo("https://skybook.example/login?error=sso_unavailable");
     }
 }

@@ -81,6 +81,12 @@ class SsoOidcFlowTest {
     private static final MockWebServer GOOGLE = startStub();
     /** One string for registration issuerUri AND the id_token iss claim - they must match exactly. */
     private static final String ISSUER = GOOGLE.url("/").toString();
+    /**
+     * Where the handlers send the browser - ABSOLUTE, because behind the proxy
+     * chain a relative Location absolutizes against the internal hostname (the
+     * first live sign-in bounced a real browser to http://auth-service:8081/).
+     */
+    private static final String PUBLIC_BASE = "http://sky.test";
 
     /** The token endpoint's next response body, set per test; /certs is static. */
     private static volatile String tokenResponseJson = "{}";
@@ -110,6 +116,7 @@ class SsoOidcFlowTest {
         // Announced providers come from the property; the oauth2 machinery
         // itself comes from StubGoogle's beans.
         registry.add("skybook.sso.google.client-id", () -> "test-client");
+        registry.add("app.public-base-url", () -> PUBLIC_BASE);
     }
 
     @TestConfiguration
@@ -242,7 +249,7 @@ class SsoOidcFlowTest {
                         .param("code", "stub-code")
                         .param("state", leg.state())
                         .cookie(new Cookie(SsoCookieAuthorizationRequestRepository.COOKIE_NAME, leg.pendingCookie())))
-                .andExpect(redirectedUrl("/trips"))
+                .andExpect(redirectedUrl(PUBLIC_BASE + "/trips"))
                 .andReturn();
 
         // The exchange point held: the cookie carries OUR RS256 token, minted
@@ -270,7 +277,7 @@ class SsoOidcFlowTest {
                         .param("code", "stub-code")
                         .param("state", leg.state())
                         .cookie(new Cookie(SsoCookieAuthorizationRequestRepository.COOKIE_NAME, leg.pendingCookie())))
-                .andExpect(redirectedUrl("/"))
+                .andExpect(redirectedUrl(PUBLIC_BASE + "/"))
                 .andReturn();
 
         String sessionCookie = result.getResponse().getHeaders("Set-Cookie").stream()
@@ -292,7 +299,7 @@ class SsoOidcFlowTest {
                         .param("code", "stub-code")
                         .param("state", leg.state())
                         .cookie(new Cookie(SsoCookieAuthorizationRequestRepository.COOKIE_NAME, leg.pendingCookie())))
-                .andExpect(redirectedUrl("/login?error=sso_email_unverified"));
+                .andExpect(redirectedUrl(PUBLIC_BASE + "/login?error=sso_email_unverified"));
     }
 
     @Test
@@ -304,7 +311,7 @@ class SsoOidcFlowTest {
                         .param("error", "access_denied")
                         .param("state", leg.state())
                         .cookie(new Cookie(SsoCookieAuthorizationRequestRepository.COOKIE_NAME, leg.pendingCookie())))
-                .andExpect(redirectedUrl("/login?error=sso_cancelled"));
+                .andExpect(redirectedUrl(PUBLIC_BASE + "/login?error=sso_cancelled"));
     }
 
     @Test
@@ -317,7 +324,7 @@ class SsoOidcFlowTest {
                         .param("code", "stub-code")
                         .param("state", "forged-state")
                         .cookie(new Cookie(SsoCookieAuthorizationRequestRepository.COOKIE_NAME, leg.pendingCookie())))
-                .andExpect(redirectedUrl("/login?error=sso_failed"));
+                .andExpect(redirectedUrl(PUBLIC_BASE + "/login?error=sso_failed"));
     }
 
     @Test
@@ -326,7 +333,7 @@ class SsoOidcFlowTest {
         mockMvc.perform(get("/api/auth/oauth2/callback/google")
                         .param("code", "stub-code")
                         .param("state", "whatever"))
-                .andExpect(redirectedUrl("/login?error=sso_failed"));
+                .andExpect(redirectedUrl(PUBLIC_BASE + "/login?error=sso_failed"));
     }
 
     @Test

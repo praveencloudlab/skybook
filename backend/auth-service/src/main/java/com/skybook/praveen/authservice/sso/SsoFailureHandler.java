@@ -3,6 +3,7 @@ package com.skybook.praveen.authservice.sso;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
@@ -22,6 +23,16 @@ import java.io.IOException;
 @Component
 public class SsoFailureHandler implements AuthenticationFailureHandler {
 
+    private final String publicBaseUrl;
+
+    public SsoFailureHandler(
+            // Absolute from configuration, like every browser-facing redirect
+            // here - behind the proxy chain a relative Location absolutizes to
+            // the internal hostname (see SsoSuccessHandler).
+            @Value("${app.public-base-url:http://localhost:5173}") String publicBaseUrl) {
+        this.publicBaseUrl = publicBaseUrl;
+    }
+
     @Override
     public void onAuthenticationFailure(HttpServletRequest request,
                                         HttpServletResponse response,
@@ -36,6 +47,6 @@ public class SsoFailureHandler implements AuthenticationFailureHandler {
         }
 
         log.warn("Google sign-in failed ({}): {}", code, exception.getMessage());
-        response.sendRedirect("/login?error=" + code);
+        response.sendRedirect(publicBaseUrl + "/login?error=" + code);
     }
 }

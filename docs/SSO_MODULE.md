@@ -290,8 +290,14 @@ service credentials, because SSO is a feature, not an invariant.
 ## 6.2 Redirect URI
 
 `${app.public-base-url}/api/auth/oauth2/callback/google` — built from the
-property, never from `Host`/`X-Forwarded-*`. Registered in the Google console
-per environment:
+property, never from `Host`/`X-Forwarded-*`. The same rule turned out to
+govern **every browser-facing redirect the flow emits** (success, failure,
+disabled): a relative `sendRedirect` absolutizes against the request's host,
+and behind the proxy chain that host is the *internal* one — the first live
+sign-in provisioned its account perfectly and then bounced the browser to
+`http://auth-service:8081/`. All redirects are now `app.public-base-url` +
+path, and the flow tests assert the absolute forms. Registered in the Google
+console per environment:
 
 | Environment | Registered redirect URI |
 |---|---|
