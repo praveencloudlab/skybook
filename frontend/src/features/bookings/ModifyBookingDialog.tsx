@@ -447,19 +447,52 @@ export function ModifyBookingDialog({
                   <dt className="text-slate-900">New booking total (today's fares)</dt>
                   <dd className="tabular text-slate-900">{money(newTotal, CURRENCY)}</dd>
                 </div>
-                {/* The refund from the CURRENT booking - its own row, because
-                    it is the one number here that does not move with the date. */}
+                {/* The refund from the CURRENT booking, shown as its own
+                    arithmetic. Every deduction is named, and it starts from
+                    what was PAID FOR THIS BOOKING - so it is visible on the
+                    screen that the refund comes from the original booking and
+                    never from the flight being picked above. A bare total left
+                    a traveller reasonably concluding it was half of the NEW
+                    fare (reported live), because there was no way to tell. */}
+                {cancelPreview && !cancelPreview.unpaid ? (
+                  <>
+                    <div className="flex justify-between border-t border-slate-200 px-4 py-2">
+                      <dt className="text-slate-600">
+                        You paid for booking {booking.bookingReference}
+                      </dt>
+                      <dd className="tabular text-slate-700">
+                        {money(Number(cancelPreview.totalPaid), CURRENCY)}
+                      </dd>
+                    </div>
+                    {Number(cancelPreview.fareRuleFee) > 0 ? (
+                      <div className="flex justify-between px-4 py-2">
+                        <dt className="text-slate-600">Saver fare rule fee</dt>
+                        <dd className="tabular text-slate-700">
+                          −{money(Number(cancelPreview.fareRuleFee), CURRENCY)}
+                        </dd>
+                      </div>
+                    ) : null}
+                    {Number(cancelPreview.timePenalty) > 0 ? (
+                      <div className="flex justify-between px-4 py-2">
+                        <dt className="text-slate-600">
+                          Cancellation window — {cancelPreview.refundPercent}% refundable now
+                        </dt>
+                        <dd className="tabular text-slate-700">
+                          −{money(Number(cancelPreview.timePenalty), CURRENCY)}
+                        </dd>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+
                 <div className="flex justify-between border-t border-slate-200 px-4 py-2">
                   <dt className="text-slate-600">
                     Refund from your current booking
-                    {cancelPreview && !cancelPreview.unpaid && cancelPreview.refundPercent < 100
-                      ? ` (${cancelPreview.refundPercent}% cancellation window)`
-                      : ''}
                     <span className="mt-0.5 block text-xs text-slate-500">
                       {refundUnknown
                         ? "We couldn't price your refund just now."
                         : refundKnown
-                          ? 'Fixed — set by your original fare and how close its flight is, not by the date you pick here.'
+                          ? 'Fixed — set by what you paid and how close that flight is, not by the date you pick here.'
                           : 'Working it out…'}
                     </span>
                   </dt>
