@@ -5,11 +5,13 @@ import { paymentsApi, type Payment } from '../../api/payments';
 import { quotesApi, type Quote } from '../../api/quotes';
 import { Alert, ErrorAlert } from '../../components/Alert';
 import { Button } from '../../components/Button';
-import { ApiError } from '../../lib/errors';
+import { ApiError, violationMessages } from '../../lib/errors';
 import { addDaysIso, dayAndMonth, money, time, todayIso } from '../../lib/format';
 
 const EXTRA_BAG_FEE = 40;
 const CURRENCY = 'GBP';
+/** Mirrors booking-service's BookingContactRequest - the server re-validates. */
+const PHONE_PATTERN = /^\+?[0-9][0-9 ()-]{5,18}[0-9]$/;
 
 /**
  * Modify a booking: change flight/date and/or bags, as a guided REBOOK - the
@@ -49,6 +51,13 @@ export function ModifyBookingDialog({
   const [chosen, setChosen] = useState<Flight | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [bags, setBags] = useState<number[]>(() => activePassengers.map((p) => p.extraBags ?? 0));
+  // A rebook creates a REAL booking, so it must satisfy everything booking
+  // requires today - including the contact phone that became mandatory after
+  // this dialog was written. Carried over when the original has one; asked for
+  // when it does not (bookings taken before the rule have none, and there is
+  // no honest way to invent a phone number).
+  const [phone, setPhone] = useState(() => booking.contact?.contactPhone ?? '');
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [stage, setStage] = useState<
     'pick' | 'review' | 'booking' | 'paying' | 'cancellingOld' | 'oldCancelFailed'
@@ -136,6 +145,14 @@ export function ModifyBookingDialog({
     if (!chosen) {
       return;
     }
+    // Mirror of the server's rule (booking-service BookingContactRequest), so
+    // a bad number is caught next to the input instead of coming back as a
+    // violation this dialog has nowhere to show.
+    if (!PHONE_PATTERN.test(phone.trim())) {
+      setPhoneError('Enter a valid contact phone number');
+      return;
+    }
+    setPhoneError(null);
     setError(null);
     try {
       setStage('booking');
@@ -155,9 +172,13 @@ export function ModifyBookingDialog({
       const created = await bookingsApi.create({
         flightId: chosen.id,
         passengers,
-        contact: booking.contact
-          ? { contactName: booking.contact.contactName, contactEmail: booking.contact.contactEmail }
-          : { contactName: `${activePassengers[0].firstName} ${activePassengers[0].lastName}`, contactEmail: '' },
+        contact: {
+          contactName:
+            booking.contact?.contactName ??
+            `${activePassengers[0].firstName} ${activePassengers[0].lastName}`,
+          contactEmail: booking.contact?.contactEmail ?? '',
+          contactPhone: phone.trim(),
+        },
       });
       setNewBooking(created);
 
@@ -206,7 +227,16 @@ export function ModifyBookingDialog({
         </div>
 
         <div className="mt-4">
-          <ErrorAlert error={error} />
+          {/* A validation failure here must SAY what is wrong. The generic copy
+              ("check the highlighted fields") assumes the form renders the
+              offending field - true for the booking funnel, false for a dialog
+              rebuilding a payload from an existing booking, where it left a
+              user hunting for highlights that could not exist. */}
+          {error?.kind === 'validation' && violationMessages(error).length > 0 ? (
+            <Alert>{violationMessages(error).join('. ')}.</Alert>
+          ) : (
+            <ErrorAlert error={error} />
+          )}
         </div>
 
         {/* How a change actually works - shown up front, not in small print. */}
@@ -337,6 +367,44 @@ export function ModifyBookingDialog({
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Contact phone: mandatory on any booking, and a rebook IS a new
+                booking. Pre-filled from the original when it has one; empty
+                (and required) for bookings taken before the rule existed. */}
+            <div className="mt-4">
+              <label className="block text-sm">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Contact phone
+                </span>
+                <input
+                  type="tel"
+                  value={phone}
+                  disabled={busy}
+                  onChange={(e) => {
+                    setPhone(e.target.value);
+                    if (phoneError) setPhoneError(null);
+                  }}
+                  aria-invalid={phoneError ? true : undefined}
+                  aria-describedby={phoneError ? 'modify-phone-error' : undefined}
+                  placeholder="+44 7700 900123"
+                  className={
+                    'w-full rounded-xl border bg-white px-3.5 py-2.5 text-sm outline-none transition focus:ring-4 ' +
+                    (phoneError
+                      ? 'border-red-400 focus:border-red-500 focus:ring-red-500/15'
+                      : 'border-slate-300 focus:border-brand-500 focus:ring-brand-500/15')
+                  }
+                />
+              </label>
+              {phoneError ? (
+                <p id="modify-phone-error" className="mt-1 text-xs font-medium text-red-600">
+                  {phoneError}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-slate-500">
+                  Where the airline reaches you about this trip.
+                </p>
+              )}
             </div>
 
             {/* Repriced total. */}

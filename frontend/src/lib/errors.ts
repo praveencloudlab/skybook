@@ -141,12 +141,21 @@ export function userMessage(error: ApiError): string {
  * ({@code contact.contactEmail} and {@code contactEmail}), because a form's
  * field is usually named after the leaf rather than the server's object graph.
  */
-export function fieldErrors(error: ApiError): Record<string, string> {
+/**
+ * The violations as the server sent them - one entry per actual problem.
+ *
+ * <p>Separate from {@link fieldErrors} because that map deliberately holds each
+ * nested violation TWICE (full path plus a short alias, so a form can look up
+ * either), which makes its size a count of lookup keys rather than of problems.
+ * Counting those keys told a user "please check the 2 highlighted fields" when
+ * exactly one field was wrong - found live on the modify-booking dialog.
+ */
+function violations(error: ApiError): Array<{ field: string; message: string }> {
   if (error.kind !== 'validation' || !error.body?.message) {
-    return {};
+    return [];
   }
 
-  const result: Record<string, string> = {};
+  const parsed: Array<{ field: string; message: string }> = [];
   // Split only where a new "field:" actually begins, so a message containing a
   // comma is not torn in half.
   for (const part of error.body.message.split(/,\s*(?=[A-Za-z_][\w.[\]]*\s*:)/)) {
@@ -156,11 +165,21 @@ export function fieldErrors(error: ApiError): Record<string, string> {
     }
     const field = part.slice(0, separator).trim();
     const message = part.slice(separator + 1).trim();
-    if (!field || !message) {
-      continue;
+    if (field && message) {
+      parsed.push({ field, message });
     }
+  }
+  return parsed;
+}
+
+export function fieldErrors(error: ApiError): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const { field, message } of violations(error)) {
     result[field] = message;
 
+    // The alias exists so a form keyed on "contactPhone" finds a violation the
+    // server reported as "contact.contactPhone". It is a second way to reach
+    // the SAME problem - never a second problem (see violations()).
     const leaf = field.split('.').pop();
     if (leaf && !(leaf in result)) {
       result[leaf] = message;
@@ -175,5 +194,18 @@ export function fieldErrors(error: ApiError): Record<string, string> {
  * <p>Used to decide between naming the problem and pointing at the form.
  */
 export function fieldErrorCount(error: ApiError): number {
-  return Object.keys(fieldErrors(error)).length;
+  return violations(error).length;
+}
+
+/**
+ * The server's own words for every violation, joined for display.
+ *
+ * <p>For a form that renders its fields, "check the highlighted field" is the
+ * right copy - the message is already sitting next to the input. A dialog that
+ * does NOT render the offending field has to say what is wrong, or it shows a
+ * user an instruction they cannot follow (live finding: "check the 2
+ * highlighted fields" on a dialog with no fields to highlight).
+ */
+export function violationMessages(error: ApiError): string[] {
+  return violations(error).map((violation) => violation.message);
 }
