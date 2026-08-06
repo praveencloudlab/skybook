@@ -36,6 +36,8 @@ class BoardingPassControllerTest {
 
     @MockitoBean
     private BoardingPassService boardingPassService;
+    @MockitoBean
+    private com.skybook.praveen.checkinservice.service.BoardingPassEmailService boardingPassEmailService;
 
     private BoardingPassResponse response() {
         LocalDateTime now = LocalDateTime.now();

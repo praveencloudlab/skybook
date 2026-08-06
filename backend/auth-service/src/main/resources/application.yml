@@ -62,6 +62,9 @@ skybook:
       - client-id: booking-service
         secret: ${BOOKING_SERVICE_CLIENT_SECRET}
         allowed-audiences: flight-service,inventory-service
+        # The one guest-session minter (GUEST_CHECKIN_MODULE.md §3.1): only
+        # booking-service can verify a reference + surname before asking.
+        may-issue-guest-tokens: true
       - client-id: checkin-service
         secret: ${CHECKIN_SERVICE_CLIENT_SECRET}
         allowed-audiences: flight-service,inventory-service

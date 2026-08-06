@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Author** | Praveenreddy Somireddy |
-| **Status** | PROPOSED v2 — revised after review round 1 (30 findings, §13); awaiting freeze |
+| **Status** | FROZEN 2026-08-06 — v2 dispositions accepted after review round 1 (§13); build order in flight |
 | **Scenario** | A travel agency books on its own SkyBook account and sends the passenger the e-ticket. The passenger has no SkyBook login — and must still be able to retrieve the booking, check in online, get the boarding pass, and have it emailed to an address they choose. |
 | **Depends on** | SECURITY_HARDENING_MODULE.md (RS256, gateway translation point, SecurityAccess ownership) · the check-in platform (CHECKIN_SERVICE_MODULE.md) |
 | **Explicitly out of scope** | Cancelling, modifying, paid seats/ancillary purchases, invoices, payment data — money actions stay with the owning account · an "agent" role or agency portal · SMS delivery · exit-row / accessibility seat eligibility rules (no such model exists platform-wide; guests inherit exactly the owner's seat semantics, §4) |

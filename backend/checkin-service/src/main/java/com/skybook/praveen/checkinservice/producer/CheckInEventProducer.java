@@ -52,6 +52,32 @@ public class CheckInEventProducer {
                 .build());
     }
 
+    /**
+     * A boarding-pass email RE-SEND to a caller-chosen address
+     * (GUEST_CHECKIN_MODULE.md §5): the same BOARDING_PASS_GENERATED shape the
+     * notification pipeline already renders - QR, HTML, PDF - with the
+     * contact overridden and the delivery made attributable (resendId +
+     * requestedBy). Same event type on purpose: one consumer, one template
+     * path, zero duplicated rendering.
+     */
+    public void publishBoardingPassEmailRequested(CheckInResponse checkIn, BoardingPassResponse pass,
+                                                  String emailOverride, String resendId, String requestedBy) {
+        publish(base(CheckInEventType.BOARDING_PASS_GENERATED, checkIn)
+                .contactEmail(emailOverride)
+                .resendId(resendId)
+                .requestedBy(requestedBy)
+                .boardingPassNumber(pass.boardingPassNumber())
+                .token(pass.token())
+                .boardingTime(pass.boardingTime())
+                .boardingGroup(pass.boardingGroup())
+                .seatNumber(pass.seatNumber() != null ? pass.seatNumber() : checkIn.seatNumber())
+                .departureTerminal(pass.departureTerminal())
+                .arrivalTerminal(pass.arrivalTerminal())
+                .gate(pass.gate() != null ? pass.gate() : checkIn.gate())
+                .issuedAt(pass.issuedAt())
+                .build());
+    }
+
     public void publishPassengerBoarded(CheckInResponse checkIn) {
         publish(base(CheckInEventType.PASSENGER_BOARDED, checkIn).build());
     }

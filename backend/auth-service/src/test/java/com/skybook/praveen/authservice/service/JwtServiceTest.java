@@ -37,6 +37,7 @@ class JwtServiceTest {
         props.setAudience("skybook-api-test");
         props.setExpiration(3600000L);
         props.setServiceExpiration(600000L);
+        props.setGuestExpiration(1800000L);
 
         jwtService = new JwtService(props);
         jwtService.loadKeys();
@@ -99,5 +100,24 @@ class JwtServiceTest {
         // 10-min service TTL, well under the 60-min user TTL.
         long lifetimeMs = claims.getExpiration().getTime() - claims.getIssuedAt().getTime();
         assertEquals(600000L, lifetimeMs);
+    }
+
+    @Test
+    void generatesAGuestTokenScopedToItsBookingWithoutLeakingTheReference() {
+        // GUEST_CHECKIN_MODULE.md §3.1: the subject is the NUMERIC id - the
+        // booking reference is half the guest credential and subjects flow
+        // into X-Auth-User and access logs, so it must never appear here.
+        String token = jwtService.generateGuestToken(41L);
+
+        Claims claims = Jwts.parser().verifyWith(publicKey).build().parseSignedClaims(token).getPayload();
+        assertEquals("guest:41", claims.getSubject());
+        assertEquals("guest", claims.get("token_type", String.class));
+        assertEquals(List.of("ROLE_GUEST"), claims.get("roles", List.class));
+        assertEquals(41L, claims.get("booking_id", Long.class));
+        // Guests ride the user audience through the normal public edge.
+        assertTrue(claims.getAudience().contains("skybook-api-test"));
+        // 30-min TTL: a check-in errand, not a session (§8.1).
+        long lifetimeMs = claims.getExpiration().getTime() - claims.getIssuedAt().getTime();
+        assertEquals(1800000L, lifetimeMs);
     }
 }

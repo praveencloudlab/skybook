@@ -171,4 +171,89 @@ class SecurityAccessTest {
                     .isInstanceOf(AccessDeniedException.class);
         }
     }
+
+    /** Authenticates as a booking-scoped guest session (GUEST_CHECKIN_MODULE.md §3.3). */
+    private static void signedInAsGuestOf(long bookingId) {
+        AuthenticatedPrincipal principal = new AuthenticatedPrincipal(
+                "guest:" + bookingId, TokenType.GUEST, List.of("ROLE_GUEST"), "skybook-api", bookingId);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null,
+                        List.of(new SimpleGrantedAuthority("ROLE_GUEST"))));
+    }
+
+    @Nested
+    @DisplayName("the booking-aware check (guest sessions)")
+    class BookingAccess {
+
+        private static final long BOOKING = 41L;
+        private static final long OTHER_BOOKING = 77L;
+
+        @Test
+        void allowsTheOwnerExactlyAsBefore() {
+            signedInAsUser(ALICE);
+            assertThatCode(() -> SecurityAccess.requireBookingAccess(ALICE, BOOKING))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        void refusesAForeignUserWithAPlainForbidden() {
+            // Account holders keep 403: ids are opaque to them, and downgrading
+            // to 404 would hide real authorization bugs during development.
+            signedInAsUser(BOB);
+            assertThatThrownBy(() -> SecurityAccess.requireBookingAccess(ALICE, BOOKING))
+                    .isInstanceOf(AccessDeniedException.class);
+        }
+
+        @Test
+        void allowsAdminAndServiceEverywhere() {
+            signedInAs("root@skybook.com", TokenType.USER, "ROLE_ADMIN");
+            assertThatCode(() -> SecurityAccess.requireBookingAccess(ALICE, BOOKING))
+                    .doesNotThrowAnyException();
+
+            signedInAs("booking-service", TokenType.SERVICE, "ROLE_SERVICE");
+            assertThatCode(() -> SecurityAccess.requireBookingAccess(ALICE, BOOKING))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        void admitsAGuestToExactlyItsOwnBooking() {
+            signedInAsGuestOf(BOOKING);
+            assertThatCode(() -> SecurityAccess.requireBookingAccess(ALICE, BOOKING))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        void concealsEveryOtherBookingFromAGuest() {
+            // Decision D8: outside its one booking, nothing exists. 404, not
+            // 403 - a guest must not be able to probe which references are real.
+            signedInAsGuestOf(BOOKING);
+            assertThatThrownBy(() -> SecurityAccess.requireBookingAccess(ALICE, OTHER_BOOKING))
+                    .isInstanceOf(ResourceConcealedException.class);
+        }
+
+        @Test
+        void aGuestWithoutScopeMatchesNothing() {
+            // The validator refuses scopeless guest tokens at the door; this
+            // pins the second wall for anything that bypasses it in tests.
+            AuthenticatedPrincipal principal = new AuthenticatedPrincipal(
+                    "guest:broken", TokenType.GUEST, List.of("ROLE_GUEST"), "skybook-api", null);
+            SecurityContextHolder.getContext().setAuthentication(
+                    new UsernamePasswordAuthenticationToken(principal, null,
+                            List.of(new SimpleGrantedAuthority("ROLE_GUEST"))));
+
+            assertThatThrownBy(() -> SecurityAccess.requireBookingAccess(ALICE, BOOKING))
+                    .isInstanceOf(ResourceConcealedException.class);
+        }
+
+        @Test
+        void aGuestsLegitimacyIsTheBookingMatchNotTheOwnerColumn() {
+            // A legacy row with a null owner still opens to the guest whose
+            // token is scoped to it: the guest proved reference + surname for
+            // THIS booking, which is a stronger claim on it than the missing
+            // owner attribution.
+            signedInAsGuestOf(BOOKING);
+            assertThatCode(() -> SecurityAccess.requireBookingAccess(null, BOOKING))
+                    .doesNotThrowAnyException();
+        }
+    }
 }

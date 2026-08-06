@@ -24,12 +24,15 @@ public class BookingAccessGuard {
     public void requireOwnerOfBooking(Long bookingId) {
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new BookingNotFoundException(bookingId));
-        SecurityAccess.requireOwnerOrAdmin(booking.getOwnerSubject());
+        // Booking-aware since GUEST_CHECKIN_MODULE.md §3.3: a guest session
+        // passes exactly when the resource is the one booking its token is
+        // scoped to, and is answered 404 - not 403 - everywhere else.
+        SecurityAccess.requireBookingAccess(booking.getOwnerSubject(), booking.getId());
     }
 
     public void requireOwnerOfBookingByReference(String pnr) {
         Booking booking = bookingRepository.findByBookingReference(pnr)
                 .orElseThrow(() -> new BookingNotFoundException(pnr));
-        SecurityAccess.requireOwnerOrAdmin(booking.getOwnerSubject());
+        SecurityAccess.requireBookingAccess(booking.getOwnerSubject(), booking.getId());
     }
 }

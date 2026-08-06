@@ -38,6 +38,15 @@ public class ServiceClient {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    /**
+     * Whether this client may mint browser-facing GUEST sessions
+     * (GUEST_CHECKIN_MODULE.md §3.1). A separate, default-false grant - a
+     * bigger privilege than requesting machine tokens for oneself, held only
+     * by the service that can verify reference + surname against the data.
+     */
+    @Column(name = "may_issue_guest_tokens", nullable = false)
+    private boolean mayIssueGuestTokens = false;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 

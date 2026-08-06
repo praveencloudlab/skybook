@@ -57,6 +57,14 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(com.skybook.praveen.security.ResourceConcealedException.class)
+    public ResponseEntity<ErrorResponse> handleResourceConcealed(
+            com.skybook.praveen.security.ResourceConcealedException exception, HttpServletRequest request) {
+        // GUEST_CHECKIN_MODULE.md D8: outside a guest's one booking, nothing
+        // exists - 404, with the same generic body a truly absent id gets.
+        return build(HttpStatus.NOT_FOUND, "Check-in not found", request);
+    }
+
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<ErrorResponse> handleIllegalState(
             IllegalStateException exception, HttpServletRequest request) {

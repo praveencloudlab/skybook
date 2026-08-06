@@ -1,15 +1,23 @@
 package com.skybook.praveen.security;
 
 /**
- * The {@code token_type} claim (SECURITY_HARDENING_MODULE.md §5). A token is
- * either a human user token or a machine service token; the two carry
- * different audiences and disjoint role sets, and the validator enforces
- * strict type&harr;role coherence.
+ * The {@code token_type} claim (SECURITY_HARDENING_MODULE.md §5,
+ * GUEST_CHECKIN_MODULE.md §3.1). A token is a human user token, a machine
+ * service token, or a booking-scoped guest token; the three carry different
+ * audiences and disjoint role sets, and the validator enforces strict
+ * type&harr;role coherence.
  */
 public enum TokenType {
 
     USER("user"),
-    SERVICE("service");
+    SERVICE("service"),
+    /**
+     * A no-account check-in session (GUEST_CHECKIN_MODULE.md): minted from a
+     * booking reference + passenger surname, scoped to exactly one booking via
+     * the {@code booking_id} claim, and accepted only by services that opted
+     * in ({@code accept-guest-tokens}, default false).
+     */
+    GUEST("guest");
 
     private final String claim;
 

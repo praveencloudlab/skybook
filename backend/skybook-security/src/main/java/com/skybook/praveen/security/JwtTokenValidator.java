@@ -36,6 +36,7 @@ public class JwtTokenValidator {
     private static final String ROLE_USER = "ROLE_USER";
     private static final String ROLE_ADMIN = "ROLE_ADMIN";
     private static final String ROLE_SERVICE = "ROLE_SERVICE";
+    private static final String ROLE_GUEST = "ROLE_GUEST";
 
     private final RSAPublicKey publicKey;
     private final JwtSecurityProperties properties;
@@ -89,12 +90,31 @@ public class JwtTokenValidator {
         if (tokenType == TokenType.SERVICE && !properties.isAcceptServiceTokens()) {
             throw new InvalidTokenException("service tokens are not accepted here");
         }
+        // Default-deny for guests (GUEST_CHECKIN_MODULE.md §3.4): a service
+        // that has not deliberately opted in rejects the token here, before
+        // any endpoint logic runs - guest reach is configuration, not an
+        // accident of audience overlap.
+        if (tokenType == TokenType.GUEST && !properties.isAcceptGuestTokens()) {
+            throw new InvalidTokenException("guest tokens are not accepted here");
+        }
 
         List<String> roles = readRoles(claims);
         requireCoherentRoles(tokenType, roles);
         requireAudience(tokenType, claims.getAudience());
 
-        return new AuthenticatedPrincipal(subject, tokenType, roles, requiredAudienceFor(tokenType));
+        Long bookingId = null;
+        if (tokenType == TokenType.GUEST) {
+            // The scope claim IS the guest's identity boundary; a guest token
+            // without one could match nothing and would only produce confusing
+            // 404s three layers down. Fail closed here, with a reason.
+            Object rawBookingId = claims.get("booking_id");
+            if (!(rawBookingId instanceof Number number)) {
+                throw new InvalidTokenException("guest token has no booking_id scope");
+            }
+            bookingId = number.longValue();
+        }
+
+        return new AuthenticatedPrincipal(subject, tokenType, roles, requiredAudienceFor(tokenType), bookingId);
     }
 
     @SuppressWarnings("unchecked")
@@ -116,6 +136,7 @@ public class JwtTokenValidator {
         boolean ok = switch (tokenType) {
             case USER -> set.equals(Set.of(ROLE_USER)) || set.equals(Set.of(ROLE_ADMIN));
             case SERVICE -> set.equals(Set.of(ROLE_SERVICE));
+            case GUEST -> set.equals(Set.of(ROLE_GUEST));
         };
         if (!ok) {
             throw new InvalidTokenException(
@@ -135,7 +156,10 @@ public class JwtTokenValidator {
 
     private String requiredAudienceFor(TokenType tokenType) {
         return switch (tokenType) {
-            case USER -> properties.getUserAudience();
+            // Guests share the user audience: they enter through the same
+            // public edge and are constrained by role + booking_id, not by a
+            // separate audience (GUEST_CHECKIN_MODULE.md §3.1).
+            case USER, GUEST -> properties.getUserAudience();
             case SERVICE -> properties.getServiceAudience();
         };
     }

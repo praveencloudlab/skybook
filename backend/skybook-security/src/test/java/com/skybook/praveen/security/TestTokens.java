@@ -79,6 +79,7 @@ final class TestTokens {
         private String audience = USER_AUDIENCE;
         private String tokenType = "user";
         private List<String> roles = List.of("ROLE_USER");
+        private Long bookingId;
         private Instant issuedAt = Instant.now();
         private Instant expiry = Instant.now().plus(60, ChronoUnit.MINUTES);
         private boolean omitIssuedAt = false;
@@ -93,9 +94,18 @@ final class TestTokens {
         Builder audience(String s) { this.audience = s; return this; }
         Builder tokenType(String s) { this.tokenType = s; return this; }
         Builder roles(String... r) { this.roles = List.of(r); return this; }
+        Builder bookingId(Long id) { this.bookingId = id; return this; }
         Builder expiry(Instant i) { this.expiry = i; return this; }
         Builder noIssuedAt() { this.omitIssuedAt = true; return this; }
         Builder noExpiry() { this.omitExpiry = true; return this; }
+
+        /** The well-formed guest shape (GUEST_CHECKIN_MODULE.md §3.1) in one call. */
+        Builder guestFor(long bookingId) {
+            return subject("guest:" + bookingId)
+                    .tokenType("guest")
+                    .roles("ROLE_GUEST")
+                    .bookingId(bookingId);
+        }
 
         String sign() {
             var b = Jwts.builder()
@@ -120,16 +130,17 @@ final class TestTokens {
         }
 
         private Map<String, Object> claims() {
-            if (tokenType == null && roles == null) {
-                return Map.of();
+            Map<String, Object> claims = new java.util.HashMap<>();
+            if (tokenType != null) {
+                claims.put("token_type", tokenType);
             }
-            if (tokenType == null) {
-                return Map.of("roles", roles);
+            if (roles != null) {
+                claims.put("roles", roles);
             }
-            if (roles == null) {
-                return Map.of("token_type", tokenType);
+            if (bookingId != null) {
+                claims.put("booking_id", bookingId);
             }
-            return Map.of("token_type", tokenType, "roles", roles);
+            return claims;
         }
     }
 }

@@ -81,7 +81,11 @@ public class SecurityConfig {
         AuthenticationEntryPoint entryPoint = new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED);
 
         http
-                .securityMatcher("/api/auth/service-token")
+                // guest-token joins the same internal-only chain
+                // (GUEST_CHECKIN_MODULE.md §3.1): both endpoints authenticate a
+                // machine client by HTTP Basic, and neither is routed from the
+                // public edge.
+                .securityMatcher("/api/auth/service-token", "/api/auth/guest-token")
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())

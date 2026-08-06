@@ -148,6 +148,10 @@ skybook:
     issuer: ${JWT_ISSUER:skybook-auth}
     user-audience: ${JWT_AUDIENCE:skybook-api}
     service-audience: booking-service
+    # Guest check-in opt-in (GUEST_CHECKIN_MODULE.md §3.4): this service and
+    # checkin-service are the guest surface; everywhere else the default
+    # (false) rejects guest tokens at the validator.
+    accept-guest-tokens: true
     # Client credential for obtaining ROLE_SERVICE tokens for inventory writes (§3.3).
     service-client:
       auth-base-url: ${AUTH_SERVICE_BASE_URL:http://localhost:8081}

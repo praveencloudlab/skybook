@@ -33,4 +33,11 @@ public class JwtProperties {
 
     /** ROLE_SERVICE token lifetime in ms. Machine tokens = 10 min, auto-refreshed (§5). */
     private long serviceExpiration = 600000;
+
+    /**
+     * GUEST token lifetime in ms (GUEST_CHECKIN_MODULE.md §3.1). 30 minutes -
+     * a check-in errand, not a session; the token is not revocable before
+     * expiry (§8.1), so the window is deliberately short.
+     */
+    private long guestExpiration = 1800000;
 }

@@ -28,6 +28,9 @@ skybook:
     issuer: ${JWT_ISSUER:skybook-auth}
     user-audience: ${JWT_AUDIENCE:skybook-api}
     accept-service-tokens: false
+    # The front door passes guest sessions through (GUEST_CHECKIN_MODULE.md
+    # §3.4); which SERVICES accept them is each service's own opt-in.
+    accept-guest-tokens: true
 
 gateway:
   cors:

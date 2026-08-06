@@ -73,14 +73,31 @@ public class SecurityConfig {
                         // date-by-date - it reads nothing owned.
                         .requestMatchers(HttpMethod.GET, "/api/bookings/fare-calendar").permitAll()
 
+                        // Guest-session issuance/end (GUEST_CHECKIN_MODULE.md §3):
+                        // pre-authentication by definition - the caller is here to
+                        // GET a session; ending one must work even when the token
+                        // inside the cookie has already lapsed.
+                        .requestMatchers(HttpMethod.POST, "/api/bookings/guest-session").permitAll()
+                        .requestMatchers(HttpMethod.DELETE, "/api/bookings/guest-session").permitAll()
+
                         // Back-office - ADMIN. list-all + search + confirm + complete.
                         .requestMatchers(HttpMethod.GET, "/api/bookings").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/bookings/search").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/bookings/*/confirm", "/api/bookings/*/complete")
                         .hasRole("ADMIN")
 
-                        // Everything else (create, quote, own get/reference/cancel,
-                        // passenger check-in/board) - a USER or ADMIN token; OWNER
+                        // The guest-readable surface (GUEST_CHECKIN_MODULE.md §4):
+                        // exactly the two read shapes the check-in journey needs,
+                        // by precise pattern - the numeric-id view and the
+                        // reference view. Scope (WHICH booking) is enforced by
+                        // requireBookingAccess in the guard; everything else in
+                        // this service stays USER/ADMIN below, which is the cage
+                        // that answers 403 to a guest on every money endpoint.
+                        .requestMatchers(HttpMethod.GET, "/api/bookings/{id:\\d+}", "/api/bookings/reference/*")
+                        .hasAnyRole("USER", "ADMIN", "GUEST")
+
+                        // Everything else (create, quote, own get/cancel, passenger
+                        // check-in/board, modify) - a USER or ADMIN token; OWNER
                         // enforced in the controller via BookingAccessGuard. Booking
                         // has NO inbound service-to-service API, so a ROLE_SERVICE
                         // token is rejected here rather than being treated as

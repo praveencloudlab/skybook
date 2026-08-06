@@ -39,6 +39,16 @@ public class JwtSecurityProperties {
     private boolean acceptServiceTokens = true;
 
     /**
+     * Whether this validator accepts {@code token_type=guest} tokens
+     * (GUEST_CHECKIN_MODULE.md §3.4). <b>Default false - the opposite default
+     * to service tokens, on purpose:</b> guest reach is a per-service decision
+     * made in configuration, not an accident of audience overlap. Only the
+     * gateway, booking-service and checkin-service opt in; everywhere else a
+     * guest token dies at the validator before any endpoint logic runs.
+     */
+    private boolean acceptGuestTokens = false;
+
+    /**
      * Rollout flag (§3.2). When false, the filter still validates a PRESENT
      * token and populates the SecurityContext, but an ABSENT token is allowed
      * through (authorization rules, layered on top, are what actually enforce).
@@ -85,6 +95,14 @@ public class JwtSecurityProperties {
 
     public void setAcceptServiceTokens(boolean acceptServiceTokens) {
         this.acceptServiceTokens = acceptServiceTokens;
+    }
+
+    public boolean isAcceptGuestTokens() {
+        return acceptGuestTokens;
+    }
+
+    public void setAcceptGuestTokens(boolean acceptGuestTokens) {
+        this.acceptGuestTokens = acceptGuestTokens;
     }
 
     public boolean isEnforcementEnabled() {

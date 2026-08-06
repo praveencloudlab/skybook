@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
+import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -132,5 +133,91 @@ class JwtAuthenticationFilterTest {
         assertThat(chainInvoked).isTrue();
         assertThat(((HttpServletRequest) forwardedRequest).getHeader(JwtAuthenticationFilter.AUTH_USER_HEADER))
                 .isEqualTo("traveler@skybook.com");
+    }
+
+    // -------------------------------------------------- guest sessions
+    // GUEST_CHECKIN_MODULE.md §3.2: two ambient credentials can coexist, and
+    // precedence is path-decided by the explicit guest-capable list.
+
+    private static AuthenticatedPrincipal guestPrincipal(long bookingId) {
+        return new AuthenticatedPrincipal("guest:" + bookingId, TokenType.GUEST,
+                List.of("ROLE_GUEST"), "skybook-api", bookingId);
+    }
+
+    private void bothCookies() {
+        request.setCookies(
+                new jakarta.servlet.http.Cookie(JwtAuthenticationFilter.SESSION_COOKIE, "session-token"),
+                new jakarta.servlet.http.Cookie(JwtAuthenticationFilter.GUEST_COOKIE, "guest-token"));
+    }
+
+    @Test
+    void theGuestCookieWinsInsideTheGuestCapableSurface() throws Exception {
+        request.setMethod("GET");
+        request.setRequestURI("/api/checkins/booking/41");
+        bothCookies();
+        when(jwtValidator.validate("guest-token")).thenReturn(guestPrincipal(41L));
+
+        filter.doFilter(request, response, chain());
+
+        assertThat(chainInvoked).isTrue();
+        assertThat(((HttpServletRequest) forwardedRequest).getHeader("Authorization"))
+                .isEqualTo("Bearer guest-token");
+    }
+
+    @Test
+    void theAccountSessionWinsEverywhereElse() throws Exception {
+        // A signed-in user who also looked up a booking as a guest must NOT
+        // be silently downgraded on their own trips page.
+        request.setMethod("GET");
+        request.setRequestURI("/api/bookings/mine");
+        bothCookies();
+        when(jwtValidator.validate("session-token")).thenReturn(userPrincipal("traveler@skybook.com"));
+
+        filter.doFilter(request, response, chain());
+
+        assertThat(chainInvoked).isTrue();
+        assertThat(((HttpServletRequest) forwardedRequest).getHeader("Authorization"))
+                .isEqualTo("Bearer session-token");
+    }
+
+    @Test
+    void aGuestCookieAloneCarriesTheGuestSurface() throws Exception {
+        request.setMethod("PATCH");
+        request.setRequestURI("/api/checkins/7/checkin");
+        request.setCookies(new jakarta.servlet.http.Cookie(JwtAuthenticationFilter.GUEST_COOKIE, "guest-token"));
+        when(jwtValidator.validate("guest-token")).thenReturn(guestPrincipal(41L));
+
+        filter.doFilter(request, response, chain());
+
+        assertThat(chainInvoked).isTrue();
+    }
+
+    @Test
+    void theGuestSessionEndpointIsPublic() throws Exception {
+        request.setMethod("POST");
+        request.setRequestURI("/api/bookings/guest-session");
+
+        filter.doFilter(request, response, chain());
+
+        assertThat(chainInvoked).isTrue();
+        verifyNoInteractions(jwtValidator);
+    }
+
+    @Test
+    void inboundIdentityHeadersAreStrippedOnPublicPaths() throws Exception {
+        // The gateway is X-Auth-User's only legitimate author
+        // (GUEST_CHECKIN_MODULE.md §2.9): a spoofed inbound copy must not
+        // reach downstream logs even where no validation runs.
+        request.setMethod("GET");
+        request.setRequestURI("/api/flights/123");
+        request.addHeader(JwtAuthenticationFilter.AUTH_USER_HEADER, "spoofed@evil.com");
+
+        filter.doFilter(request, response, chain());
+
+        assertThat(chainInvoked).isTrue();
+        HttpServletRequest forwarded = (HttpServletRequest) forwardedRequest;
+        assertThat(forwarded.getHeader(JwtAuthenticationFilter.AUTH_USER_HEADER)).isNull();
+        assertThat(Collections.list(forwarded.getHeaderNames()))
+                .noneMatch(JwtAuthenticationFilter.AUTH_USER_HEADER::equalsIgnoreCase);
     }
 }

@@ -86,4 +86,16 @@ public class CheckInEvent {
     private LocalDateTime issuedAt;
 
     private LocalDateTime occurredAt;
+
+    /**
+     * Set on boarding-pass email RE-SENDS (GUEST_CHECKIN_MODULE.md §5): a
+     * per-request UUID that makes every delivery attributable in logs and
+     * gives the consumer an idempotency key to dedupe on when the
+     * transactional-outbox increment lands. Null on the original
+     * check-in-time emission.
+     */
+    private String resendId;
+
+    /** The subject that requested the re-send (owner, admin, or guest:<id>). */
+    private String requestedBy;
 }

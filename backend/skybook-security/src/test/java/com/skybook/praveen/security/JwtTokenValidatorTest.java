@@ -177,4 +177,71 @@ class JwtTokenValidatorTest {
         assertThatThrownBy(() -> validator.validate(hs256))
                 .isInstanceOf(InvalidTokenException.class);
     }
+
+    // ------------------------------------------------------------------ guests
+    // GUEST_CHECKIN_MODULE.md §3.1/§3.4. The class-level `validator` uses the
+    // DEFAULT properties, which is exactly the point of the first test: a
+    // service that never opted in rejects guests without any configuration.
+
+    private JwtTokenValidator guestAcceptingValidator() {
+        JwtSecurityProperties props = tokens.properties();
+        props.setAcceptGuestTokens(true);
+        return new JwtTokenValidator(tokens.publicKey(), props);
+    }
+
+    @Test
+    void rejectsAGuestTokenByDefault() {
+        // Default deny (§3.4): guest reach is a per-service decision made in
+        // configuration - the absence of a decision means no.
+        assertThatThrownBy(() -> validator.validate(tokens.token().guestFor(41L).sign()))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("guest tokens are not accepted");
+    }
+
+    @Test
+    void acceptsAWellFormedGuestTokenWhereOptedIn() {
+        AuthenticatedPrincipal principal = guestAcceptingValidator()
+                .validate(tokens.token().guestFor(41L).sign());
+
+        assertThat(principal.tokenType()).isEqualTo(TokenType.GUEST);
+        assertThat(principal.subject()).isEqualTo("guest:41");
+        assertThat(principal.roles()).containsExactly("ROLE_GUEST");
+        assertThat(principal.bookingId()).isEqualTo(41L);
+        // Guests ride the user audience - they enter through the same public
+        // edge and are constrained by role + booking_id, not audience.
+        assertThat(principal.audience()).isEqualTo(TestTokens.USER_AUDIENCE);
+    }
+
+    @Test
+    void rejectsAGuestTokenWithoutItsBookingScope() {
+        // The scope claim IS the guest's boundary; without it the token could
+        // match nothing and would only fail confusingly three layers down.
+        assertThatThrownBy(() -> guestAcceptingValidator().validate(tokens.token()
+                .subject("guest:41").tokenType("guest").roles("ROLE_GUEST").sign()))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("booking_id");
+    }
+
+    @Test
+    void rejectsAGuestTokenCarryingUserRoles() {
+        assertThatThrownBy(() -> guestAcceptingValidator().validate(tokens.token()
+                .tokenType("guest").roles("ROLE_USER").bookingId(41L).sign()))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("incoherent");
+    }
+
+    @Test
+    void rejectsAUserTokenCarryingRoleGuest() {
+        // Coherence cuts both ways: a user token cannot borrow the guest role
+        // to slip through guest-only allowances.
+        assertThatThrownBy(() -> validator.validate(tokens.token()
+                .roles("ROLE_GUEST").sign()))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("incoherent");
+    }
+
+    @Test
+    void userAndServicePrincipalsCarryNoBookingScope() {
+        assertThat(validator.validate(tokens.token().sign()).bookingId()).isNull();
+    }
 }

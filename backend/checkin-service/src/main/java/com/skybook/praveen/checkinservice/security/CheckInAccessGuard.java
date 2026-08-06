@@ -23,22 +23,37 @@ public class CheckInAccessGuard {
 
     private final CheckInRepository checkInRepository;
 
-    /** Owner-or-admin of a single check-in. 404 if it doesn't exist. */
+    /**
+     * Owner, admin, or guest-of-this-booking for a single check-in
+     * (GUEST_CHECKIN_MODULE.md §3.3). 404 if it doesn't exist - and 404, not
+     * 403, when a guest reaches outside its one booking (decision D8).
+     */
     public void requireOwnerOfCheckIn(Long checkInId) {
         CheckIn checkIn = checkInRepository.findById(checkInId)
                 .orElseThrow(() -> CheckInNotFoundException.byId(checkInId));
-        SecurityAccess.requireOwnerOrAdmin(checkIn.getOwnerSubject());
+        SecurityAccess.requireBookingAccess(checkIn.getOwnerSubject(), checkIn.getBookingId());
     }
 
     /**
-     * Owner-or-admin of a booking's check-ins. Every check-in on a booking
-     * shares the booking's owner, so the first row decides. An empty result is
-     * allowed through (the controller returns an empty list - nothing to leak).
+     * Booking-level access to a booking's check-ins. Every check-in on a
+     * booking shares the booking's owner, so the first row decides.
+     *
+     * <p>The empty case no longer skips the check wholesale (the §2.8 review
+     * finding): a GUEST is judged against its token's booking scope even when
+     * no rows exist yet - outside that scope, an empty answer would still be
+     * an answer. For USER/ADMIN an empty result stays allowed through, as
+     * before: the controller returns an empty list and there is nothing to
+     * leak, while refusing would break owners viewing a booking whose
+     * check-ins haven't been created yet.
      */
     public void requireOwnerOfBooking(Long bookingId) {
         List<CheckIn> checkIns = checkInRepository.findByBookingId(bookingId);
         if (!checkIns.isEmpty()) {
-            SecurityAccess.requireOwnerOrAdmin(checkIns.get(0).getOwnerSubject());
+            SecurityAccess.requireBookingAccess(checkIns.get(0).getOwnerSubject(), bookingId);
+            return;
+        }
+        if (SecurityAccess.isGuest()) {
+            SecurityAccess.requireBookingAccess(null, bookingId);
         }
     }
 }

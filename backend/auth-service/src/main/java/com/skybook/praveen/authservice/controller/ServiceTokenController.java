@@ -1,5 +1,6 @@
 package com.skybook.praveen.authservice.controller;
 
+import com.skybook.praveen.authservice.dto.GuestTokenRequest;
 import com.skybook.praveen.authservice.dto.ServiceTokenRequest;
 import com.skybook.praveen.authservice.repository.ServiceClientRepository;
 import com.skybook.praveen.authservice.service.JwtService;
@@ -46,5 +47,31 @@ public class ServiceTokenController {
         }
 
         return ResponseEntity.ok(jwtService.generateServiceToken(clientId, request.audience()));
+    }
+
+    /**
+     * Issues a booking-scoped GUEST session token (GUEST_CHECKIN_MODULE.md
+     * §3.1) - same internal-only chain, same authenticated-client model, one
+     * extra gate: minting a browser-facing session is a bigger privilege than
+     * minting a machine token for yourself, so it needs the explicit
+     * {@code may_issue_guest_tokens} grant. The caller has already verified
+     * reference + surname against its own data; auth-service checks the grant
+     * and mints, nothing more.
+     */
+    @PostMapping("/guest-token")
+    public ResponseEntity<String> issueGuestToken(Authentication authentication,
+                                                  @Valid @RequestBody GuestTokenRequest request) {
+
+        String clientId = authentication.getName();
+
+        var client = serviceClientRepository.findById(clientId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+
+        if (!client.isMayIssueGuestTokens()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "client " + clientId + " may not issue guest tokens");
+        }
+
+        return ResponseEntity.ok(jwtService.generateGuestToken(request.bookingId()));
     }
 }

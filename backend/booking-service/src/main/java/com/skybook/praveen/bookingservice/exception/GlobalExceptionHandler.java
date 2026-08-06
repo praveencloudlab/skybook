@@ -21,6 +21,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, exception.getMessage(), request);
     }
 
+    @ExceptionHandler(com.skybook.praveen.security.ResourceConcealedException.class)
+    public ResponseEntity<ErrorResponse> handleResourceConcealed(
+            com.skybook.praveen.security.ResourceConcealedException exception, HttpServletRequest request) {
+        // GUEST_CHECKIN_MODULE.md D8: outside a guest's one booking, nothing
+        // exists - 404, with the same generic body a truly absent id gets.
+        return build(HttpStatus.NOT_FOUND, "Booking not found", request);
+    }
+
     @ExceptionHandler(BookingPassengerNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleBookingPassengerNotFoundException(
             BookingPassengerNotFoundException exception, HttpServletRequest request) {

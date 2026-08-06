@@ -80,6 +80,17 @@ class AuthFlywayMigrationIntegrationTest {
     }
 
     @Test
+    void v8AddedTheGuestTokenGrantAsDefaultFalse() throws Exception {
+        // GUEST_CHECKIN_MODULE.md §3.1: minting browser-facing guest sessions
+        // is an explicit grant, and the DEFAULT matters - a client row that
+        // predates the column must land on 'may not', never 'may'.
+        assertThat(query("""
+                SELECT column_default FROM information_schema.columns
+                WHERE table_name = 'service_clients' AND column_name = 'may_issue_guest_tokens'"""))
+                .isEqualTo("false");
+    }
+
+    @Test
     void passwordStaysNullableBecauseGoogleOnlyAccountsAreNullRows() throws Exception {
         // The V1 baseline left users.password nullable and SSO depends on it
         // (SSO_MODULE.md §2.3); a future migration tightening it would break

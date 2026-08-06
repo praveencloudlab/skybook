@@ -41,17 +41,21 @@ public class ServiceClientBootstrap {
             }
             configuredIds.add(def.getClientId());
             repository.findById(def.getClientId()).ifPresentOrElse(existing -> {
-                if (!existing.getAllowedAudiences().equals(def.getAllowedAudiences())) {
+                boolean audiencesChanged = !existing.getAllowedAudiences().equals(def.getAllowedAudiences());
+                boolean guestGrantChanged = existing.isMayIssueGuestTokens() != def.isMayIssueGuestTokens();
+                if (audiencesChanged || guestGrantChanged) {
                     existing.setAllowedAudiences(def.getAllowedAudiences());
+                    existing.setMayIssueGuestTokens(def.isMayIssueGuestTokens());
                     existing.setUpdatedAt(LocalDateTime.now());
                     repository.save(existing);
-                    log.info("Service client {} audiences updated", def.getClientId());
+                    log.info("Service client {} grants updated", def.getClientId());
                 }
             }, () -> {
                 ServiceClient client = new ServiceClient();
                 client.setClientId(def.getClientId());
                 client.setSecretHash(passwordEncoder.encode(def.getSecret()));
                 client.setAllowedAudiences(def.getAllowedAudiences());
+                client.setMayIssueGuestTokens(def.isMayIssueGuestTokens());
                 client.setEnabled(true);
                 repository.save(client);
                 log.info("Registered service client {} (audiences: {})",

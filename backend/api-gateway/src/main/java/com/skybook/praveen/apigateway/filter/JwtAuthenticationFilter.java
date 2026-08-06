@@ -50,6 +50,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     /** Must match auth-service's SessionCookie.NAME. */
     public static final String SESSION_COOKIE = "skybook_session";
 
+    /** Must match booking-service's GuestSessionController.COOKIE_NAME. */
+    public static final String GUEST_COOKIE = "__Host-skybook_guest";
+
+    /**
+     * The guest-capable surface (GUEST_CHECKIN_MODULE.md §3.2): ON these
+     * paths, and only these, the guest cookie is preferred over the account
+     * session cookie when both are present. Everywhere else the guest cookie
+     * is ignored entirely - a signed-in user who also looked up a booking as
+     * a guest keeps their account everywhere except inside the guest
+     * check-in surface itself. Explicit list, house doctrine.
+     */
+    private static final List<PathPattern> GUEST_CAPABLE_PATHS = List.of(
+            new PathPatternParser().parse("/api/bookings/{id:\\d+}"),
+            new PathPatternParser().parse("/api/bookings/reference/*"),
+            new PathPatternParser().parse("/api/checkins/{id:\\d+}"),
+            new PathPatternParser().parse("/api/checkins/booking/*"),
+            new PathPatternParser().parse("/api/checkins/*/checkin"),
+            new PathPatternParser().parse("/api/checkins/*/seat"),
+            new PathPatternParser().parse("/api/boarding-passes/checkin/*"),
+            new PathPatternParser().parse("/api/boarding-passes/checkin/*/email"),
+            new PathPatternParser().parse("/api/baggage"),
+            new PathPatternParser().parse("/api/baggage/checkin/*")
+    );
+
     private static final List<PathPattern> PUBLIC_PATHS = List.of(
             new PathPatternParser().parse("/api/auth/register"),
             new PathPatternParser().parse("/api/auth/login"),
@@ -61,6 +85,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // no session precisely because they cannot sign in.
             new PathPatternParser().parse("/api/auth/forgot-password"),
             new PathPatternParser().parse("/api/auth/reset-password"),
+            // Guest-session issuance/end (GUEST_CHECKIN_MODULE.md §3): the
+            // caller is here to GET a session, and ending one must work even
+            // with the token inside the cookie already lapsed.
+            new PathPatternParser().parse("/api/bookings/guest-session"),
             // "Sign in with Google" (SSO_MODULE.md §5): the start and callback
             // legs are pre-authentication by the same logic as password reset -
             // the caller is here to GET a session. providers is public shopping
@@ -101,7 +129,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
 
         if (HttpMethod.OPTIONS.matches(request.getMethod()) || isPublic(path)) {
-            filterChain.doFilter(request, response);
+            // Public paths get no HeaderAddingRequestWrapper, so a
+            // client-supplied X-Auth-User would flow downstream into logs and
+            // traces. The gateway is that header's only legitimate author -
+            // inbound copies are dropped (GUEST_CHECKIN_MODULE.md §2.9).
+            filterChain.doFilter(
+                    new com.skybook.praveen.apigateway.security.HeaderStrippingRequestWrapper(
+                            request, AUTH_USER_HEADER),
+                    response);
             return;
         }
 
@@ -130,7 +165,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring("Bearer ".length());
         } else {
-            token = sessionCookieValue(request);
+            // Two ambient credentials can coexist since guest check-in
+            // (GUEST_CHECKIN_MODULE.md §3.2): the account session and the
+            // booking-scoped guest cookie. Precedence is deterministic and
+            // path-decided - the guest cookie wins ONLY inside the
+            // guest-capable surface, the account session everywhere else -
+            // so a signed-in user who looked up a booking as a guest is
+            // never silently downgraded outside the check-in pages.
+            String sessionToken = cookieValue(request, SESSION_COOKIE);
+            String guestToken = cookieValue(request, GUEST_COOKIE);
+            token = (guestToken != null && isGuestCapable(path)) ? guestToken : sessionToken;
             fromCookie = token != null;
         }
 
@@ -160,14 +204,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
     }
 
-    /** The browser session cookie, or null when the request has none. */
-    private String sessionCookieValue(HttpServletRequest request) {
+    /** The named cookie's value, or null when the request has none. */
+    private String cookieValue(HttpServletRequest request, String name) {
         Cookie[] cookies = request.getCookies();
         if (cookies == null) {
             return null;
         }
         for (Cookie cookie : cookies) {
-            if (SESSION_COOKIE.equals(cookie.getName())) {
+            if (name.equals(cookie.getName())) {
                 return cookie.getValue();
             }
         }
@@ -177,6 +221,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private boolean isPublic(String path) {
         PathContainer pathContainer = PathContainer.parsePath(path);
         return PUBLIC_PATHS.stream().anyMatch(pattern -> pattern.matches(pathContainer));
+    }
+
+    private boolean isGuestCapable(String path) {
+        PathContainer pathContainer = PathContainer.parsePath(path);
+        return GUEST_CAPABLE_PATHS.stream().anyMatch(pattern -> pattern.matches(pathContainer));
     }
 
     private HttpServletRequest wrapWithAuthUser(HttpServletRequest request, String subject) {

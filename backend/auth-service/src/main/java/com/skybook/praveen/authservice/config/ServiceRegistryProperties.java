@@ -28,5 +28,7 @@ public class ServiceRegistryProperties {
         private String secret;
         /** Comma-separated audiences this client may request tokens for. */
         private String allowedAudiences;
+        /** Grant to mint browser-facing guest sessions (GUEST_CHECKIN_MODULE.md §3.1). */
+        private boolean mayIssueGuestTokens = false;
     }
 }

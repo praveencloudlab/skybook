@@ -84,6 +84,31 @@ public class JwtService {
                 .compact();
     }
 
+    /**
+     * A booking-scoped GUEST session token (GUEST_CHECKIN_MODULE.md §3.1).
+     * {@code sub} carries the NUMERIC id, never the booking reference -
+     * subjects flow into X-Auth-User, access logs and traces, and the
+     * reference is half the guest credential. The {@code booking_id} claim is
+     * the scope: the one booking this session may touch. User audience, so the
+     * gateway and the opted-in services accept it through the normal edge.
+     */
+    public String generateGuestToken(long bookingId) {
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + properties.getGuestExpiration());
+
+        return Jwts.builder()
+                .subject("guest:" + bookingId)
+                .issuer(properties.getIssuer())
+                .audience().add(properties.getAudience()).and()
+                .claim("token_type", "guest")
+                .claim("roles", List.of("ROLE_GUEST"))
+                .claim("booking_id", bookingId)
+                .issuedAt(now)
+                .expiration(expiry)
+                .signWith(privateKey, Jwts.SIG.RS256)
+                .compact();
+    }
+
     public String extractUsername(String token) {
         return parse(token).getPayload().getSubject();
     }

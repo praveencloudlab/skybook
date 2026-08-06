@@ -78,9 +78,31 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET,
                                 "/api/boarding-passes/verify", "/api/boarding-passes/*").hasRole("ADMIN")
 
-                        // Passenger self-service - authenticated at the URL, OWNER
-                        // enforced in the controller via CheckInAccessGuard.
-                        .anyRequest().authenticated()
+                        // The guest-permitted passenger surface, ENUMERATED
+                        // (GUEST_CHECKIN_MODULE.md §2.3): exactly the check-in
+                        // journey - state, check-in, seat, baggage, pass, email.
+                        // Scope (WHICH booking) is enforced by the guard's
+                        // requireBookingAccess.
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/checkins/{id:\\d+}", "/api/checkins/booking/*",
+                                "/api/boarding-passes/checkin/*", "/api/baggage/checkin/*")
+                        .hasAnyRole("USER", "ADMIN", "GUEST")
+                        .requestMatchers(HttpMethod.PATCH,
+                                "/api/checkins/*/checkin", "/api/checkins/*/seat")
+                        .hasAnyRole("USER", "ADMIN", "GUEST")
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/baggage", "/api/boarding-passes/checkin/*/email")
+                        .hasAnyRole("USER", "ADMIN", "GUEST")
+
+                        // The cage (GUEST_CHECKIN_MODULE.md §2.3): the chain no
+                        // longer ends in authenticated(), which would have
+                        // silently admitted guests to every FUTURE endpoint.
+                        // Absence of a rule now means "no guests" - and, like
+                        // booking-service, no ROLE_SERVICE either: checkin has
+                        // no inbound service-to-service API (its integrations
+                        // are Kafka), so a machine token here is defense in
+                        // depth refusing an unused privilege.
+                        .anyRequest().hasAnyRole("USER", "ADMIN")
                 )
                 .exceptionHandling(e -> e
                         .authenticationEntryPoint(entryPoint)
