@@ -3,24 +3,22 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GuestCheckInPage } from './GuestCheckInPage';
 import { guestApi } from '../../api/guest';
-import { bookingsApi } from '../../api/bookings';
-import { checkinApi } from '../../api/checkin';
 import { ApiError } from '../../lib/errors';
 
 vi.mock('../../api/guest', () => ({
-  guestApi: { start: vi.fn(), end: vi.fn(), emailBoardingPass: vi.fn() },
-}));
-vi.mock('../../api/bookings', () => ({ bookingsApi: { byId: vi.fn() } }));
-vi.mock('../../api/checkin', () => ({
-  checkinApi: { forBooking: vi.fn(), checkIn: vi.fn(), boardingPass: vi.fn() },
+  guestApi: {
+    start: vi.fn(), end: vi.fn(), emailBoardingPass: vi.fn(),
+    booking: vi.fn(), checkIns: vi.fn(), checkIn: vi.fn(), boardingPass: vi.fn(),
+  },
 }));
 
 const start = vi.mocked(guestApi.start);
 const end = vi.mocked(guestApi.end);
 const emailPass = vi.mocked(guestApi.emailBoardingPass);
-const byId = vi.mocked(bookingsApi.byId);
-const forBooking = vi.mocked(checkinApi.forBooking);
-const boardingPass = vi.mocked(checkinApi.boardingPass);
+const byId = vi.mocked(guestApi.booking);
+const forBooking = vi.mocked(guestApi.checkIns);
+const boardingPass = vi.mocked(guestApi.boardingPass);
+const guestCheckIn = vi.mocked(guestApi.checkIn);
 
 function checkInRecord(overrides: Record<string, unknown> = {}) {
   return {
@@ -119,6 +117,27 @@ describe('guest check-in (GUEST_CHECKIN_MODULE.md §7)', () => {
       expect(emailPass).toHaveBeenCalledWith(7, 'traveller@example.com'),
     );
     expect(await screen.findByText('Your boarding pass is on its way.')).toBeDefined();
+  });
+
+  it('returns a lapsed guest to the lookup form, NEVER to the sign-in page', async () => {
+    // Reported live: the page bounced to /sign-in. Every guest call now runs
+    // silent401 (api/guest.ts) because the shared client's 401 handling is
+    // written for account holders - a passenger with no account cannot sign
+    // in, and being thrown at a login screen loses the booking they just
+    // found. A 401 must mean "look it up again", here.
+    start.mockResolvedValue({ bookingId: 41 });
+    forBooking.mockResolvedValue([checkInRecord()]);
+    guestCheckIn.mockRejectedValue(new ApiError('unauthenticated', 401, 'expired'));
+
+    await lookup();
+    fireEvent.click(await screen.findByRole('button', { name: /check in/i }));
+
+    expect(
+      await screen.findByText('That session ended — enter your details again.'),
+    ).toBeDefined();
+    // Back at the two-field form, not at a login screen.
+    expect(screen.getByLabelText('Booking reference')).toBeDefined();
+    expect(screen.queryByText(/password/i)).toBeNull();
   });
 
   it('ends the session explicitly on Done', async () => {

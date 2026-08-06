@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { bookingsApi, type Booking } from '../../api/bookings';
-import { checkinApi, type BoardingPass, type CheckIn } from '../../api/checkin';
+import type { Booking } from '../../api/bookings';
+import type { BoardingPass, CheckIn } from '../../api/checkin';
 import { guestApi } from '../../api/guest';
 import { Alert, ErrorAlert } from '../../components/Alert';
 import { Button } from '../../components/Button';
@@ -35,18 +35,30 @@ export function GuestCheckInPage() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async (id: number) => {
+    // guestApi, not the signed-in page's clients: these calls must not carry
+    // the global "401 → go to /sign-in" behaviour, which would strand a
+    // passenger who has no account on a login screen (see api/guest.ts).
     const [bookingRecord, records] = await Promise.all([
-      bookingsApi.byId(id),
-      checkinApi.forBooking(id),
+      guestApi.booking(id),
+      guestApi.checkIns(id),
     ]);
     setBooking(bookingRecord);
     setCheckIns(records);
 
     const issued = records.filter((r) => r.status === 'CHECKED_IN' || r.status === 'BOARDED');
     const fetched = await Promise.all(
-      issued.map((r) => checkinApi.boardingPass(r.id).then((p) => [r.id, p] as const).catch(() => null)),
+      issued.map((r) => guestApi.boardingPass(r.id).then((p) => [r.id, p] as const).catch(() => null)),
     );
     setPasses(Object.fromEntries(fetched.filter(Boolean) as (readonly [number, BoardingPass])[]));
+  }, []);
+
+  /** A lapsed or rejected guest session returns to the lookup form, never to /sign-in. */
+  const endSessionLocally = useCallback((message: string) => {
+    setBookingId(null);
+    setBooking(null);
+    setCheckIns([]);
+    setPasses({});
+    setNotice(message);
   }, []);
 
   /**
@@ -58,23 +70,15 @@ export function GuestCheckInPage() {
    * happen at all.
    */
   useEffect(() => {
-    function reset() {
-      setBookingId(null);
-      setBooking(null);
-      setCheckIns([]);
-      setPasses({});
-    }
     function onPageShow(event: PageTransitionEvent) {
       if (event.persisted && bookingId !== null) {
-        load(bookingId).catch(() => {
-          reset();
-          setNotice('That session ended — enter your details again.');
-        });
+        load(bookingId).catch(() =>
+          endSessionLocally('That session ended — enter your details again.'));
       }
     }
     window.addEventListener('pageshow', onPageShow);
     return () => window.removeEventListener('pageshow', onPageShow);
-  }, [bookingId, load]);
+  }, [bookingId, load, endSessionLocally]);
 
   async function handleLookup(event: FormEvent) {
     event.preventDefault();
@@ -96,9 +100,13 @@ export function GuestCheckInPage() {
     setError(null);
     setBusy(true);
     try {
-      await checkinApi.checkIn(checkInId);
+      await guestApi.checkIn(checkInId);
       if (bookingId !== null) await load(bookingId);
     } catch (cause) {
+      if (cause instanceof ApiError && cause.kind === 'unauthenticated') {
+        endSessionLocally('That session ended — enter your details again.');
+        return;
+      }
       setError(cause instanceof ApiError ? cause : null);
     } finally {
       setBusy(false);
