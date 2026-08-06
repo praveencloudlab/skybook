@@ -22,8 +22,31 @@ echo "2/3  stage flight ids + haul class across databases"
 # (see seed.sh for the full account).
 docker exec "$C" psql -U postgres -d skybook_inventory -c \
   "DROP TABLE IF EXISTS tmp_all_flights; CREATE TABLE tmp_all_flights(flight_id bigint, short_haul boolean);"
+# Haul class = BLOCK time < 4h. Arrivals are stored destination-local, so the
+# raw column difference is block time +/- the zone offset (a JFK->LAX 5h30m
+# flight reads 2h30m and would seed as short-haul). Resolve each end on its
+# own zone (mirror of AirportTimeZones.java) before comparing.
 docker exec "$C" psql -U postgres -d skybook_flight -c \
-  "COPY (SELECT id, (arrival_time - departure_time) < INTERVAL '4 hours' FROM flights) TO STDOUT" \
+  "COPY (
+     WITH zones(code, zone) AS (VALUES
+       ('ATL','America/New_York'), ('JFK','America/New_York'), ('MIA','America/New_York'),
+       ('ORD','America/Chicago'),  ('DFW','America/Chicago'),
+       ('LAX','America/Los_Angeles'), ('SFO','America/Los_Angeles'),
+       ('LHR','Europe/London'), ('MAN','Europe/London'), ('BHX','Europe/London'),
+       ('EDI','Europe/London'), ('GLA','Europe/London'),
+       ('CDG','Europe/Paris'), ('FRA','Europe/Berlin'), ('IST','Europe/Istanbul'),
+       ('JNB','Africa/Johannesburg'), ('NBO','Africa/Nairobi'),
+       ('DXB','Asia/Dubai'), ('AUH','Asia/Dubai'), ('DOH','Asia/Qatar'),
+       ('BOM','Asia/Kolkata'), ('DEL','Asia/Kolkata'), ('HYD','Asia/Kolkata'),
+       ('MAA','Asia/Kolkata'), ('BLR','Asia/Kolkata'), ('CCU','Asia/Kolkata'),
+       ('HKG','Asia/Hong_Kong'), ('SIN','Asia/Singapore'), ('SYD','Australia/Sydney'))
+     SELECT f.id,
+            ((f.arrival_time AT TIME ZONE COALESCE(dz.zone,'UTC'))
+           - (f.departure_time AT TIME ZONE COALESCE(oz.zone,'UTC'))) < INTERVAL '4 hours'
+     FROM flights f
+     LEFT JOIN zones oz ON oz.code = f.origin_airport_code
+     LEFT JOIN zones dz ON dz.code = f.destination_airport_code
+   ) TO STDOUT" \
 | docker exec -i "$C" psql -U postgres -d skybook_inventory -c "COPY tmp_all_flights FROM STDIN"
 
 echo "3/3  inventory for flights that lack it (skybook_inventory)"

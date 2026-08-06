@@ -50,19 +50,10 @@ echo "modern fleet + re-fleet (10_modern_fleet.sql, refleet.sh)"
 docker exec -i "$C" psql -U postgres -d skybook_inventory -v ON_ERROR_STOP=1 < "$DIR/10_modern_fleet.sql"
 bash "$DIR/refleet.sh" "$C"
 
-# Seeded schedules author arrivals on the origin's clock; the platform stores
-# them destination-local (scripts/fix-arrival-times-to-destination-local.sql).
-# Chained here so EVERY freshly seeded environment - local re-seed or ladder
-# rung - comes up with correct arrival boards.
-#
-# The marker is cleared FIRST, deliberately: the fix records itself so that
-# running the fix twice cannot shift arrivals twice - but a reseed has just
-# REPLACED the flights, so the recorded "already applied" refers to rows that
-# no longer exist. Without this delete, a reseed on a previously fixed
-# database quietly comes up with origin-local arrivals again - observed, not
-# hypothesised, on the first reseed after the network expansion.
-echo "arrival times: re-expressing cross-timezone arrivals on the destination clock"
-docker exec "$C" psql -U postgres -d skybook_flight -c \
-  "DELETE FROM flight_data_fixes WHERE name='arrival_times_to_destination_local';" 2>/dev/null || true
-docker exec -i "$C" psql -U postgres -d skybook_flight -v ON_ERROR_STOP=1 \
-  < "$DIR/../fix-arrival-times-to-destination-local.sql"
+# Arrival times: every seed script now AUTHORS arrivals destination-local
+# (the platform contract), so no correction pass is chained here any more.
+# The old chain (clear the flight_data_fixes marker, re-run
+# scripts/fix-arrival-times-to-destination-local.sql) was only safe after a
+# full wipe-and-replace; run after an ADDITIVE step like seed_mesh.sh it
+# would shift already-correct rows a second time. The standalone fix script
+# remains, marker-guarded, for databases seeded before this change.

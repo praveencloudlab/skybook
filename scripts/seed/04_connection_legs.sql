@@ -31,6 +31,16 @@ INSERT INTO onward_tpl VALUES
   ('TK720', 'TK', 'IST', 'DEL', TIME '18:35', INTERVAL '390 minutes'),
   ('SQ231', 'SQ', 'SIN', 'SYD', TIME '09:40', INTERVAL '460 minutes');
 
+-- Mirror of AirportTimeZones.java (the airports these templates touch).
+-- duration is BLOCK time; the stored arrival reads on the DESTINATION's
+-- clock (platform contract), converted through real zone names per date.
+CREATE TEMP TABLE onward_zones (code varchar(3) PRIMARY KEY, zone text NOT NULL);
+INSERT INTO onward_zones VALUES
+  ('DXB','Asia/Dubai'), ('AUH','Asia/Dubai'), ('DOH','Asia/Qatar'),
+  ('IST','Europe/Istanbul'), ('CDG','Europe/Paris'),
+  ('BOM','Asia/Kolkata'), ('DEL','Asia/Kolkata'),
+  ('SIN','Asia/Singapore'), ('HKG','Asia/Hong_Kong'), ('SYD','Australia/Sydney');
+
 -- Idempotency: re-running replaces only THESE onward flights (no bookings
 -- reference them on first run; on re-runs ids change only for these legs).
 DELETE FROM flights WHERE flight_number IN (SELECT flight_number FROM onward_tpl);
@@ -41,10 +51,13 @@ INSERT INTO flights
    destination_airport_code, flight_number, origin_airport_code, status, schedule_id)
 SELECT now(), now(), 'data-seed-connections', NULL, 0,
   r.airline_code,
-  (d::date + r.dep_time) + r.duration,
+  (((d::date + r.dep_time) AT TIME ZONE COALESCE(oz.zone,'UTC')) + r.duration)
+    AT TIME ZONE COALESCE(dz.zone,'UTC'),
   (d::date + r.dep_time),
   r.destination_airport_code, r.flight_number, r.origin_airport_code, 'SCHEDULED', NULL
 FROM onward_tpl r
+LEFT JOIN onward_zones oz ON oz.code = r.origin_airport_code
+LEFT JOIN onward_zones dz ON dz.code = r.destination_airport_code
 CROSS JOIN generate_series(CURRENT_DATE, CURRENT_DATE + 365, INTERVAL '1 day') AS d;
 
 \echo onward flights generated:

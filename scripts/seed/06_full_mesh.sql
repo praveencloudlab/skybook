@@ -10,20 +10,26 @@ BEGIN;
 -- those routes SB simply adds frequency, like a second carrier would.
 -- Run against skybook_flight.
 
-CREATE TEMP TABLE mesh_airports (code varchar(3) PRIMARY KEY, region varchar(6) NOT NULL);
+-- zone mirrors AirportTimeZones.java: arrivals are AUTHORED destination-local
+-- (the platform contract), not corrected afterwards - this script is additive,
+-- so a blanket after-the-fact shift would also move rows a previous run
+-- already wrote correctly.
+CREATE TEMP TABLE mesh_airports (code varchar(3) PRIMARY KEY, region varchar(6) NOT NULL, zone text NOT NULL);
 INSERT INTO mesh_airports VALUES
-  ('LHR','UK'), ('MAN','UK'), ('EDI','UK'), ('GLA','UK'), ('BHX','UK'),
-  ('CDG','EU'), ('FRA','EU'),
-  ('IST','TR'),
-  ('DXB','GULF'), ('AUH','GULF'), ('DOH','GULF'),
-  ('DEL','SASIA'), ('BOM','SASIA'),
-  ('HKG','EASIA'), ('SIN','EASIA'),
-  ('SYD','OCE'),
-  ('JFK','NAME'), ('ATL','NAME'), ('MIA','NAME'),
-  ('ORD','NAMC'), ('DFW','NAMC'),
-  ('LAX','NAMW'), ('SFO','NAMW'),
-  ('HYD','SASIA'), ('MAA','SASIA'), ('BLR','SASIA'), ('CCU','SASIA'),
-  ('JNB','AFR'), ('NBO','AFR');
+  ('LHR','UK','Europe/London'), ('MAN','UK','Europe/London'), ('EDI','UK','Europe/London'),
+  ('GLA','UK','Europe/London'), ('BHX','UK','Europe/London'),
+  ('CDG','EU','Europe/Paris'), ('FRA','EU','Europe/Berlin'),
+  ('IST','TR','Europe/Istanbul'),
+  ('DXB','GULF','Asia/Dubai'), ('AUH','GULF','Asia/Dubai'), ('DOH','GULF','Asia/Qatar'),
+  ('DEL','SASIA','Asia/Kolkata'), ('BOM','SASIA','Asia/Kolkata'),
+  ('HKG','EASIA','Asia/Hong_Kong'), ('SIN','EASIA','Asia/Singapore'),
+  ('SYD','OCE','Australia/Sydney'),
+  ('JFK','NAME','America/New_York'), ('ATL','NAME','America/New_York'), ('MIA','NAME','America/New_York'),
+  ('ORD','NAMC','America/Chicago'), ('DFW','NAMC','America/Chicago'),
+  ('LAX','NAMW','America/Los_Angeles'), ('SFO','NAMW','America/Los_Angeles'),
+  ('HYD','SASIA','Asia/Kolkata'), ('MAA','SASIA','Asia/Kolkata'), ('BLR','SASIA','Asia/Kolkata'),
+  ('CCU','SASIA','Asia/Kolkata'),
+  ('JNB','AFR','Africa/Johannesburg'), ('NBO','AFR','Africa/Nairobi');
 
 -- Approximate block times (minutes) between regions; symmetric.
 CREATE TEMP TABLE region_dur (r1 varchar(6), r2 varchar(6), mins int);
@@ -57,6 +63,7 @@ INSERT INTO region_dur VALUES
 CREATE TEMP TABLE mesh_pairs AS
 SELECT row_number() OVER (ORDER BY o.code, d.code) AS pair_id,
        o.code AS origin, d.code AS destination,
+       o.zone AS origin_zone, d.zone AS dest_zone,
        rd.mins
 FROM mesh_airports o
 JOIN mesh_airports d ON d.code <> o.code
@@ -76,7 +83,9 @@ INSERT INTO flights
    destination_airport_code, flight_number, origin_airport_code, status, schedule_id)
 SELECT now(), now(), 'data-seed-mesh', NULL, 0,
   'SB',
-  dep.ts + make_interval(mins => p.mins),
+  -- p.mins is the block time; the stored arrival must read on the
+  -- DESTINATION's clock (each end resolved on its own zone, DST-correct).
+  ((dep.ts AT TIME ZONE p.origin_zone) + make_interval(mins => p.mins)) AT TIME ZONE p.dest_zone,
   dep.ts,
   p.destination,
   'SB' || lpad((1000 + p.pair_id * 3 + s.slot)::text, 4, '0'),
