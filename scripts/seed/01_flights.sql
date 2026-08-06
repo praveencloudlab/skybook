@@ -97,6 +97,25 @@ INSERT INTO route_tpl VALUES
   ('SB5207', 'SB', 'DEL', 'CCU', TIME '06:40', INTERVAL '140 minutes'),
   ('SB5208', 'SB', 'CCU', 'DEL', TIME '09:50', INTERVAL '145 minutes');
 
+-- Mirror of AirportTimeZones.java. duration above is the BLOCK time; the
+-- stored arrival must read on the DESTINATION's clock (platform contract),
+-- so each row is converted through real zone names - DST-correct per date.
+-- Authored at source: no after-the-fact fix pass to chain, nothing to
+-- double-shift on a re-run.
+CREATE TEMP TABLE seed_zones (code varchar(3) PRIMARY KEY, zone text NOT NULL);
+INSERT INTO seed_zones VALUES
+  ('ATL','America/New_York'), ('JFK','America/New_York'), ('MIA','America/New_York'),
+  ('ORD','America/Chicago'),  ('DFW','America/Chicago'),
+  ('LAX','America/Los_Angeles'), ('SFO','America/Los_Angeles'),
+  ('LHR','Europe/London'), ('MAN','Europe/London'), ('BHX','Europe/London'),
+  ('EDI','Europe/London'), ('GLA','Europe/London'),
+  ('CDG','Europe/Paris'), ('FRA','Europe/Berlin'), ('IST','Europe/Istanbul'),
+  ('JNB','Africa/Johannesburg'), ('NBO','Africa/Nairobi'),
+  ('DXB','Asia/Dubai'), ('AUH','Asia/Dubai'), ('DOH','Asia/Qatar'),
+  ('BOM','Asia/Kolkata'), ('DEL','Asia/Kolkata'), ('HYD','Asia/Kolkata'),
+  ('MAA','Asia/Kolkata'), ('BLR','Asia/Kolkata'), ('CCU','Asia/Kolkata'),
+  ('HKG','Asia/Hong_Kong'), ('SIN','Asia/Singapore'), ('SYD','Australia/Sydney');
+
 \echo route templates:
 SELECT count(*) FROM route_tpl;
 
@@ -112,10 +131,13 @@ INSERT INTO flights
    destination_airport_code, flight_number, origin_airport_code, status, schedule_id)
 SELECT now(), now(), 'data-seed', NULL, 0,
   r.airline_code,
-  (d::date + r.dep_time) + r.duration,
+  (((d::date + r.dep_time) AT TIME ZONE COALESCE(oz.zone,'UTC')) + r.duration)
+    AT TIME ZONE COALESCE(dz.zone,'UTC'),
   (d::date + r.dep_time),
   r.destination_airport_code, r.flight_number, r.origin_airport_code, 'SCHEDULED', NULL
 FROM route_tpl r
+LEFT JOIN seed_zones oz ON oz.code = r.origin_airport_code
+LEFT JOIN seed_zones dz ON dz.code = r.destination_airport_code
 CROSS JOIN generate_series(CURRENT_DATE, CURRENT_DATE + 365, INTERVAL '1 day') AS d;
 
 \echo generated flights:

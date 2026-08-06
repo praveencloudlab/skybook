@@ -18,7 +18,11 @@
 --
 -- Applies only to rows whose two airports are in different zones; a domestic
 -- hop is already correct. Flights generated after this release are written
--- correctly at source by FlightScheduleServiceImpl and need no correction.
+-- correctly at source by FlightScheduleServiceImpl AND by every seed script
+-- (01/04/05/06 author destination-local arrivals themselves), so this exists
+-- only for databases whose rows predate that - e.g. an environment seeded
+-- with the old scripts. Never run it after a seed that authored arrivals
+-- correctly: it would shift them a second time.
 --
 -- SAFETY
 -- Running this twice would shift twice and put every arrival badly wrong, so it
