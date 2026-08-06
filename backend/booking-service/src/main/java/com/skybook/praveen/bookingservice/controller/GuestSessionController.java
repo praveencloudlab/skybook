@@ -36,7 +36,18 @@ import java.util.Map;
 @RequestMapping("/api/bookings/guest-session")
 public class GuestSessionController {
 
+    /**
+     * The name is DERIVED from the secure flag, not fixed - because the
+     * {@code __Host-} prefix is a contract, not decoration: a browser rejects
+     * a {@code __Host-} cookie that lacks {@code Secure}, silently and
+     * entirely. Shipping the prefixed name with the flag off produced a
+     * session cookie no browser would store, so the passenger's next call was
+     * anonymous - the live "bounced back to the login page" report. The two
+     * move together or not at all.
+     */
     public static final String COOKIE_NAME = "__Host-skybook_guest";
+    /** The same cookie where Secure is off (test fleets only) - prefix dropped, contract honoured. */
+    public static final String INSECURE_COOKIE_NAME = "skybook_guest";
 
     /** Matches the token's own 30-minute life (GUEST_CHECKIN_MODULE.md §3.1). */
     private static final Duration COOKIE_TTL = Duration.ofMinutes(30);
@@ -57,10 +68,13 @@ public class GuestSessionController {
      */
     private final boolean secure;
 
+    private final String cookieName;
+
     public GuestSessionController(GuestSessionService guestSessionService,
                                   @Value("${skybook.guest.cookie-secure:true}") boolean secure) {
         this.guestSessionService = guestSessionService;
         this.secure = secure;
+        this.cookieName = secure ? COOKIE_NAME : INSECURE_COOKIE_NAME;
     }
 
     public record GuestLookupRequest(
@@ -75,7 +89,7 @@ public class GuestSessionController {
         GuestSessionService.GuestSession session =
                 guestSessionService.issue(request.bookingReference(), request.lastName());
 
-        ResponseCookie cookie = ResponseCookie.from(COOKIE_NAME, session.token())
+        ResponseCookie cookie = ResponseCookie.from(cookieName, session.token())
                 .httpOnly(true)
                 .secure(secure)          // __Host- requires it, browser-enforced
                 .sameSite("Lax")
@@ -95,7 +109,7 @@ public class GuestSessionController {
      */
     @DeleteMapping
     public ResponseEntity<Void> end() {
-        ResponseCookie expired = ResponseCookie.from(COOKIE_NAME, "")
+        ResponseCookie expired = ResponseCookie.from(cookieName, "")
                 .httpOnly(true)
                 .secure(secure)
                 .sameSite("Lax")

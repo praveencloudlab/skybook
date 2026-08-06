@@ -50,8 +50,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     /** Must match auth-service's SessionCookie.NAME. */
     public static final String SESSION_COOKIE = "skybook_session";
 
-    /** Must match booking-service's GuestSessionController.COOKIE_NAME. */
+    /**
+     * Must match booking-service's GuestSessionController names. Two, because
+     * the {@code __Host-} prefix is only valid alongside {@code Secure}: on a
+     * test fleet driven over plain HTTP the issuer drops both together, and a
+     * gateway that knew only the prefixed name would ignore the very cookie
+     * that fleet issues. The prefixed form is what every real environment
+     * uses.
+     */
     public static final String GUEST_COOKIE = "__Host-skybook_guest";
+    public static final String GUEST_COOKIE_INSECURE = "skybook_guest";
 
     /**
      * The guest-capable surface (GUEST_CHECKIN_MODULE.md §3.2): ON these
@@ -174,6 +182,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // never silently downgraded outside the check-in pages.
             String sessionToken = cookieValue(request, SESSION_COOKIE);
             String guestToken = cookieValue(request, GUEST_COOKIE);
+            if (guestToken == null) {
+                guestToken = cookieValue(request, GUEST_COOKIE_INSECURE);
+            }
             token = (guestToken != null && isGuestCapable(path)) ? guestToken : sessionToken;
             fromCookie = token != null;
         }

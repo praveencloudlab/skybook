@@ -86,7 +86,7 @@ class GuestCheckInE2ETest {
         assertThat(session.jsonPath().getLong("bookingId")).isEqualTo(bookingId);
 
         String setCookie = session.getHeaders().getValues("Set-Cookie").stream()
-                .filter(h -> h.startsWith("__Host-skybook_guest="))
+                .filter(h -> h.startsWith("__Host-skybook_guest=") || h.startsWith("skybook_guest="))
                 .findFirst().orElseThrow(() -> new AssertionError("no guest cookie was set"));
         guestToken = setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';'));
 
