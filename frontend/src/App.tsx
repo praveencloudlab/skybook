@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BrowserRouter,
   Link,
@@ -88,6 +88,16 @@ function SessionBootstrap({ children }: { children: React.ReactNode }) {
 function Header() {
   const { signedIn, subject, isAdmin } = useSession();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
+
+  // Close on navigation: a drawer still covering the page you just asked for
+  // is the classic mobile-menu bug.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname, location.search]);
 
   // Account preferences (passenger features): on sign-in, the language and
   // currency saved on the account win over this device's defaults - and a
@@ -126,8 +136,8 @@ function Header() {
 
   return (
     <header className="glass sticky top-0 z-20 text-white">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
-        <Link to="/" className="group flex items-center gap-2.5">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-3.5">
+        <Link to="/" className="group flex min-h-11 items-center gap-2.5" onClick={closeMenu}>
           {/* A mark, not just a wordmark - it is what makes the header read as
               an airline rather than an admin console. */}
           <span className="grid h-9 w-9 place-items-center rounded-full bg-accent-500 transition group-hover:bg-accent-400">
@@ -138,7 +148,33 @@ function Header() {
           <span className="text-lg font-bold tracking-tight text-white">SkyBook</span>
         </Link>
 
-        <nav className="flex items-center gap-1 text-sm sm:gap-2">
+        {/*
+          The phone header carries ONE control, not eight.
+
+          Measured on an iPhone 12 (390 px): the old single-row nav - logo,
+          two selects and up to four links - demanded 517 px, so a quarter of
+          it was simply cut off the side of the screen on every page in the
+          app. Below lg the links and the two preference selects move into a
+          drawer with 44 px rows; above it, the original row is untouched.
+        */}
+        <button
+          type="button"
+          onClick={() => setMenuOpen((open) => !open)}
+          aria-expanded={menuOpen}
+          aria-controls="mobile-menu"
+          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-white/90 transition hover:bg-white/10 lg:hidden"
+        >
+          <svg viewBox="0 0 24 24" className="h-6 w-6 fill-current" aria-hidden="true">
+            {menuOpen ? (
+              <path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z" />
+            ) : (
+              <path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z" />
+            )}
+          </svg>
+        </button>
+
+        <nav className="hidden items-center gap-1 text-sm lg:flex lg:gap-2">
           {/* Language + display currency. Both persist and reload so every
               t()/price() call site repaints - a settings change, not a hot path. */}
           <select
@@ -226,7 +262,97 @@ function Header() {
           )}
         </nav>
       </div>
+
+      {/* The drawer. Same destinations as the desktop row, at thumb size. */}
+      {menuOpen ? (
+        <div id="mobile-menu" className="border-t border-white/10 bg-brand-950/95 px-4 pb-4 pt-2 lg:hidden">
+          <nav className="flex flex-col">
+            {isAdmin ? (
+              <MobileNavLink to="/admin" onClick={closeMenu} accent>Admin console</MobileNavLink>
+            ) : (
+              <MobileNavLink
+                to="/search"
+                onClick={() => { sessionStorage.removeItem(JOURNEY_KEY); closeMenu(); }}
+              >
+                {t('nav.search')}
+              </MobileNavLink>
+            )}
+            {!isAdmin ? <MobileNavLink to="/check-in" onClick={closeMenu}>Check-in</MobileNavLink> : null}
+            {signedIn ? (
+              <>
+                {!isAdmin ? <MobileNavLink to="/bookings" onClick={closeMenu}>{t('nav.trips')}</MobileNavLink> : null}
+                <MobileNavLink to="/profile" onClick={closeMenu}>{t('nav.profile')}</MobileNavLink>
+                <button
+                  type="button"
+                  onClick={() => { closeMenu(); signOut(); }}
+                  className="flex min-h-11 items-center rounded-xl px-3 text-left text-base font-medium text-white/85 transition hover:bg-white/10"
+                >
+                  {t('nav.signout')}
+                </button>
+              </>
+            ) : (
+              <MobileNavLink to="/sign-in" onClick={closeMenu}>{t('nav.signin')}</MobileNavLink>
+            )}
+
+            {/* Preferences last: they are settings, not destinations. */}
+            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/10 pt-3">
+              <label className="text-xs font-medium text-white/60">
+                Language
+                <select
+                  aria-label="Language"
+                  value={currentLanguage()}
+                  onChange={(e) => chooseLanguage(e.target.value as LanguageCode)}
+                  className="mt-1 min-h-11 w-full rounded-xl border border-white/20 bg-transparent px-2 text-sm font-medium text-white [&>option]:text-slate-900"
+                >
+                  {LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code}>{l.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-medium text-white/60">
+                Currency
+                <select
+                  aria-label="Currency"
+                  value={displayCurrency()}
+                  onChange={(e) => chooseCurrency(e.target.value)}
+                  className="mt-1 min-h-11 w-full rounded-xl border border-white/20 bg-transparent px-2 text-sm font-medium text-white [&>option]:text-slate-900"
+                >
+                  {DISPLAY_CURRENCIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </nav>
+        </div>
+      ) : null}
     </header>
+  );
+}
+
+/** One drawer row: full width, 44 px tall, the size a thumb expects. */
+function MobileNavLink({
+  to,
+  onClick,
+  accent = false,
+  children,
+}: {
+  to: string;
+  onClick: () => void;
+  accent?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      to={to}
+      onClick={onClick}
+      className={
+        'flex min-h-11 items-center rounded-xl px-3 text-base font-medium transition hover:bg-white/10 ' +
+        (accent ? 'text-accent-200' : 'text-white/85')
+      }
+    >
+      {children}
+    </Link>
   );
 }
 
@@ -358,7 +484,7 @@ function BookingAuthGate({
   }, []);
 
   return (
-    <main className="mx-auto max-w-md px-6 py-12">
+    <main className="mx-auto max-w-md px-4 sm:px-6 py-12">
       <button
         type="button"
         onClick={onBack}
@@ -398,7 +524,10 @@ function BookingAuthGate({
 
         <p className="mt-5 text-center text-sm text-slate-600">
           New to SkyBook?{' '}
-          <Link to="/register" className="font-medium text-brand-700 hover:underline">
+          <Link
+            to="/register"
+            className="inline-flex min-h-11 items-center font-medium text-brand-700 hover:underline sm:min-h-0"
+          >
             Create an account
           </Link>
         </p>

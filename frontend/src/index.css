@@ -67,6 +67,65 @@ body {
   /* A warm near-white canvas - the sand undertone premium carriers sit their
      white cards on, instead of a cool grey. */
   background: #f8f5f0;
+  /* Nothing in this app is meant to be read sideways. A single rogue wide
+     element used to drag the whole page off-centre on a phone; now it is
+     contained rather than allowed to break the layout. */
+  overflow-x: hidden;
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Phone rules
+ * ---------------------------------------------------------------------------
+ * Measured on an iPhone 12 (390 px) before these existed: 40 controls under
+ * the 44 px minimum a thumb needs (17 px nav links, 23 px date fields, 27 px
+ * selects), 11 px filter captions, and a header wanting 517 px of a 390 px
+ * screen. The floors below are set once, globally, because the alternative -
+ * remembering a min-height on every future button - is a rule nobody keeps.
+ *
+ * 44 px is Apple's Human Interface minimum and matches Material's 48 dp
+ * guidance closely enough; 16 px on text INPUTS is not taste but mechanics:
+ * iOS Safari zooms the viewport when you focus a field under 16 px, which is
+ * why forms on so many sites lurch sideways on an iPhone.
+ */
+@media (max-width: 640px) {
+  button,
+  a[role='button'],
+  [type='button'],
+  [type='submit'],
+  select {
+    min-height: 2.75rem;
+  }
+
+  input:not([type='checkbox']):not([type='radio']),
+  textarea {
+    min-height: 2.75rem;
+    /* The anti-zoom floor. */
+    font-size: max(1rem, 100%);
+  }
+
+  /* Checkboxes and radios stay visually small but gain a comfortable target. */
+  input[type='checkbox'],
+  input[type='radio'] {
+    min-width: 1.25rem;
+    min-height: 1.25rem;
+  }
+
+  /* Nothing smaller than 12 px on a phone: below that, text stops being
+     information and becomes texture. */
+  .text-\[10px\],
+  .text-\[11px\] {
+    font-size: 0.75rem;
+  }
+}
+
+/* Modern phones have rounded corners and a home indicator; content should not
+   sit under either. Harmless (0 px) everywhere else. */
+@supports (padding: env(safe-area-inset-left)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
 }
 
 /* Display headings: large, LIGHT and airy - etihad.com sets its 48px hero

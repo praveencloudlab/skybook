@@ -248,7 +248,7 @@ export function SearchPage({
           <circle cx="900" cy="72" r="3.5" fill="white" fillOpacity="0.6" />
         </svg>
 
-        <div className="relative mx-auto max-w-6xl px-6 pb-10 pt-12">
+        <div className="relative mx-auto max-w-6xl px-4 sm:px-6 pb-10 pt-12">
           <h1 className="display text-4xl text-white sm:text-5xl">
             Search flights
           </h1>
@@ -265,7 +265,7 @@ export function SearchPage({
         </div>
       </div>
 
-      <main className="mx-auto max-w-6xl px-6 pb-12 pt-6">
+      <main className="mx-auto max-w-6xl px-4 sm:px-6 pb-12 pt-6">
 
         {/* Before any search: curated routes that always return data (§10.4). */}
         {results === null && !busy ? (

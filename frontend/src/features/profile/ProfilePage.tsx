@@ -40,7 +40,7 @@ export function ProfilePage() {
   const firstName = profile?.fullName?.trim().split(/\s+/)[0];
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-8">
+    <main className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
       <h1 className="display text-3xl text-slate-900">
         Welcome{firstName ? `, ${firstName}` : ''}
       </h1>

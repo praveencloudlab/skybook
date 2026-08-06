@@ -43,7 +43,7 @@ export function SignInPage() {
       subtitle={
         <>
           New here?{' '}
-          <Link to="/register" className="font-medium text-brand-700 hover:underline">
+          <Link to="/register" className="inline-flex min-h-11 items-center font-medium text-brand-700 hover:underline sm:min-h-0">
             Create an account
           </Link>
         </>

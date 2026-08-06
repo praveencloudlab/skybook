@@ -43,7 +43,7 @@ export function ForgotPasswordPage() {
       subtitle={
         <>
           Remembered it?{' '}
-          <Link to="/sign-in" className="font-medium text-brand-700 hover:underline">
+          <Link to="/sign-in" className="inline-flex min-h-11 items-center font-medium text-brand-700 hover:underline sm:min-h-0">
             Back to log in
           </Link>
         </>
@@ -60,7 +60,7 @@ export function ForgotPasswordPage() {
             <button
               type="button"
               onClick={() => setSent(false)}
-              className="font-medium text-brand-700 hover:underline"
+              className="inline-flex min-h-11 items-center font-medium text-brand-700 hover:underline sm:min-h-0"
             >
               try another address
             </button>

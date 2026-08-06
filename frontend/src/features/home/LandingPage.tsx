@@ -114,7 +114,7 @@ export function LandingPage() {
           <circle cx="930" cy="118" r="4" fill="white" fillOpacity="0.55" />
         </svg>
 
-        <div className="relative mx-auto max-w-6xl px-6 pt-8 pb-12 sm:pt-10">
+        <div className="relative mx-auto max-w-6xl px-4 sm:px-6 pt-8 pb-12 sm:pt-10">
           <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3.5 py-1.5 text-xs font-medium text-white/80 backdrop-blur">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-300" />
             Real schedules · live fares · scannable boarding passes
@@ -145,7 +145,7 @@ export function LandingPage() {
       </section>
 
       {/* Popular destinations */}
-      <section className="mx-auto max-w-6xl px-6 py-14">
+      <section className="mx-auto max-w-6xl px-4 sm:px-6 py-14">
         <div className="flex items-end justify-between">
           <div>
             <h2 className="display text-3xl text-slate-900">Popular destinations</h2>
@@ -188,7 +188,7 @@ export function LandingPage() {
 
       {/* Why SkyBook */}
       <section className="border-y border-slate-200 bg-white">
-        <div className="mx-auto max-w-6xl px-6 py-14">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 py-14">
           <h2 className="display text-3xl text-slate-900">Built like the real thing</h2>
           <p className="mt-1.5 max-w-xl text-sm text-slate-500">
             Not a mockup — a full booking platform behind the scenes, all the way to the gate.
@@ -210,7 +210,7 @@ export function LandingPage() {
       </section>
 
       {/* CTA */}
-      <section className="mx-auto max-w-6xl px-6 py-16">
+      <section className="mx-auto max-w-6xl px-4 sm:px-6 py-16">
         <div className="relative overflow-hidden rounded-3xl bg-brand-950 px-8 py-14 text-center shadow-[var(--shadow-glow)]">
           <div className="aurora" aria-hidden="true" />
           <div className="grid-texture absolute inset-0" />

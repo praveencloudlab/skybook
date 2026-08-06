@@ -55,7 +55,7 @@ export function ResetPasswordPage() {
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             This reset link is missing its token. Please request a new one.
           </div>
-          <Link to="/forgot-password" className="text-sm font-medium text-brand-700 hover:underline">
+          <Link to="/forgot-password" className="inline-flex min-h-11 items-center text-sm font-medium text-brand-700 hover:underline sm:min-h-0">
             Request a new link
           </Link>
         </div>
@@ -84,7 +84,7 @@ export function ResetPasswordPage() {
       subtitle={
         <>
           Changed your mind?{' '}
-          <Link to="/sign-in" className="font-medium text-brand-700 hover:underline">
+          <Link to="/sign-in" className="inline-flex min-h-11 items-center font-medium text-brand-700 hover:underline sm:min-h-0">
             Back to log in
           </Link>
         </>
@@ -94,7 +94,7 @@ export function ResetPasswordPage() {
         <ErrorAlert error={error} />
         {error && error.status === 400 ? (
           <p className="text-sm text-slate-600">
-            <Link to="/forgot-password" className="font-medium text-brand-700 hover:underline">
+            <Link to="/forgot-password" className="inline-flex min-h-11 items-center font-medium text-brand-700 hover:underline sm:min-h-0">
               Request a fresh link
             </Link>{' '}
             and try again.

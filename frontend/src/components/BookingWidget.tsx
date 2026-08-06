@@ -222,7 +222,10 @@ export function BookingWidget({
               const from = i === 0 ? destination : extraLegs[i - 1].destination;
               const minDate = i === 0 ? date : extraLegs[i - 1].date || date;
               return (
-                <div key={i} className="grid items-center gap-2 md:grid-cols-[7rem_1fr_1fr_auto]">
+                // lg, not md: at 768 px the four-column row wanted 720 px of a
+                // 688 px panel and clipped its remove button off the edge. A
+                // tablet gets the stacked layout, which fits.
+                <div key={i} className="grid items-center gap-2 lg:grid-cols-[7rem_1fr_1fr_auto]">
                   <span className="text-xs font-semibold text-slate-500">
                     Leg {i + 2} · from <span className="tabular text-slate-800">{from || '—'}</span>
                   </span>

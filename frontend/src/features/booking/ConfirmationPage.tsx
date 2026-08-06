@@ -46,7 +46,7 @@ export function ConfirmationPage({
   const current = confirmation.data ?? booking;
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-12">
+    <main className="mx-auto max-w-2xl px-4 sm:px-6 py-12">
       <div className="card rise-in p-8 shadow-[var(--shadow-lift)]">
         <span className="grid h-14 w-14 place-items-center rounded-full bg-emerald-50 ring-8 ring-emerald-50/60">
           <svg viewBox="0 0 24 24" className="h-7 w-7 fill-emerald-600" aria-hidden="true">

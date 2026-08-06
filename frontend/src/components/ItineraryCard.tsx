@@ -86,17 +86,23 @@ export function ItineraryCard({
           ) : null}
         </div>
 
-        <div className="px-5 py-3">
+        <div className="px-3 py-3 sm:px-5">
           {legs.map((leg, index) => (
             <div key={leg.id}>
-              {/* Leg row. */}
-              <div className="flex items-center gap-4 py-2.5">
+              {/*
+                Leg row. The gaps and the fixed time columns shrink on a
+                phone, and the row is allowed to wrap: measured at 390 px the
+                old fixed sizing needed 399 px inside a 377 px card, so the
+                arrival time and airport were clipped off the right edge -
+                the single worst thing this screen could lose.
+              */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-2 py-2.5 sm:flex-nowrap sm:gap-4">
                 <AirlineLogo code={leg.airlineCode} />
-                <div className="min-w-[4.2rem]">
+                <div className="min-w-[3.5rem] sm:min-w-[4.2rem]">
                   <div className="tabular text-xl font-bold leading-none text-slate-900">{time(leg.departureTime)}</div>
                   <div className="mt-1 text-xs font-semibold text-slate-500">{leg.originAirportCode}</div>
                 </div>
-                <div className="flex min-w-[5rem] flex-1 flex-col items-center">
+                <div className="flex min-w-[4rem] flex-1 flex-col items-center sm:min-w-[5rem]">
                   <span className="tabular text-[10px] font-semibold text-slate-500">
                     {durationFromMinutes(leg.durationMinutes)}
                   </span>
@@ -111,7 +117,7 @@ export function ItineraryCard({
                   </div>
                   <span className="tabular mt-0.5 text-[10px] text-slate-400">{leg.flightNumber}</span>
                 </div>
-                <div className="min-w-[4.2rem] text-right">
+                <div className="min-w-[3.5rem] text-right sm:min-w-[4.2rem]">
                   <div className="tabular text-xl font-bold leading-none text-slate-900">
                     {time(leg.arrivalTime)}
                     {dayOffset(leg.departureTime, leg.arrivalTime) > 0 ? (
@@ -128,7 +134,7 @@ export function ItineraryCard({
                     type="button"
                     onClick={() => onSelectLeg(leg)}
                     disabled={leg.status === 'CANCELLED'}
-                    className="shrink-0 rounded-full border border-accent-500 px-3.5 py-1.5 text-xs font-bold text-accent-600 transition hover:bg-accent-500 hover:text-white disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-300"
+                    className="w-full shrink-0 rounded-full border border-accent-500 px-3.5 py-1.5 text-xs font-bold text-accent-600 transition hover:bg-accent-500 hover:text-white disabled:cursor-not-allowed disabled:border-slate-300 disabled:text-slate-300 sm:w-auto"
                   >
                     Book leg {index + 1}
                   </button>
