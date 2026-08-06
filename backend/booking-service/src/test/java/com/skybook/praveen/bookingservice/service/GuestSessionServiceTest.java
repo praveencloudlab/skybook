@@ -12,8 +12,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
+import com.skybook.praveen.bookingservice.exception.GuestLookupFailedException;
+import com.skybook.praveen.bookingservice.exception.GuestLookupThrottledException;
 
 import java.time.Instant;
 import java.util.List;
@@ -98,12 +98,8 @@ class GuestSessionServiceTest {
         for (String[] attempt : new String[][]{
                 {"GHOST1", "Varma"}, {"SKY41X", "Smith"}, {"SKY77Y", "Varma"}}) {
             assertThatThrownBy(() -> service.issue(attempt[0], attempt[1]))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .satisfies(e -> {
-                        ResponseStatusException rse = (ResponseStatusException) e;
-                        assertThat(rse.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-                        assertThat(rse.getReason()).isEqualTo(GuestSessionService.GENERIC_MISMATCH);
-                    });
+                    .isInstanceOf(GuestLookupFailedException.class)
+                    .hasMessage(GuestSessionService.GENERIC_MISMATCH);
         }
         verifyNoInteractions(guestTokenFetcher);
     }
@@ -118,9 +114,7 @@ class GuestSessionServiceTest {
         when(bookingRepository.findByBookingReference(REF)).thenReturn(Optional.of(booking));
 
         assertThatThrownBy(() -> service.issue(REF, "Removed"))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
-                        .isEqualTo(HttpStatus.NOT_FOUND));
+                .isInstanceOf(GuestLookupFailedException.class);
     }
 
     @Test
@@ -129,7 +123,7 @@ class GuestSessionServiceTest {
         when(bookingRepository.findByBookingReference("GHOST1")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.issue("ghost1", "Anyone"))
-                .isInstanceOf(ResponseStatusException.class);
+                .isInstanceOf(GuestLookupFailedException.class);
 
         var captor = org.mockito.ArgumentCaptor.forClass(GuestLookupAttempt.class);
         verify(attemptRepository).save(captor.capture());
@@ -145,9 +139,7 @@ class GuestSessionServiceTest {
         when(attemptRepository.countByBookingReferenceAndAttemptedAtAfter(eq(REF), any())).thenReturn(5L);
 
         assertThatThrownBy(() -> service.issue(REF, "Varma"))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
-                        .isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
+                .isInstanceOf(GuestLookupThrottledException.class);
 
         verifyNoInteractions(bookingRepository);
         verifyNoInteractions(guestTokenFetcher);

@@ -19,7 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.server.ResponseStatusException;
+import com.skybook.praveen.checkinservice.exception.BoardingPassEmailException;
 
 import java.util.List;
 
@@ -78,8 +78,8 @@ class BoardingPassEmailServiceTest {
         when(checkInService.getById(7L)).thenReturn(open);
 
         assertThatThrownBy(() -> service.emailBoardingPass(7L, "me@example.com"))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
+                .isInstanceOf(BoardingPassEmailException.class)
+                .satisfies(e -> assertThat(((BoardingPassEmailException) e).status())
                         .isEqualTo(HttpStatus.CONFLICT));
 
         verifyNoInteractions(emailLogRepository, eventProducer);
@@ -92,8 +92,8 @@ class BoardingPassEmailServiceTest {
         when(emailLogRepository.countByCheckInIdAndSentAtAfter(eq(7L), any())).thenReturn(3L);
 
         assertThatThrownBy(() -> service.emailBoardingPass(7L, "me@example.com"))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
+                .isInstanceOf(BoardingPassEmailException.class)
+                .satisfies(e -> assertThat(((BoardingPassEmailException) e).status())
                         .isEqualTo(HttpStatus.TOO_MANY_REQUESTS));
 
         verifyNoInteractions(eventProducer);

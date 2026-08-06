@@ -57,6 +57,12 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(BoardingPassEmailException.class)
+    public ResponseEntity<ErrorResponse> handleBoardingPassEmail(
+            BoardingPassEmailException exception, HttpServletRequest request) {
+        return build(exception.status(), exception.getMessage(), request);
+    }
+
     @ExceptionHandler(com.skybook.praveen.security.ResourceConcealedException.class)
     public ResponseEntity<ErrorResponse> handleResourceConcealed(
             com.skybook.praveen.security.ResourceConcealedException exception, HttpServletRequest request) {

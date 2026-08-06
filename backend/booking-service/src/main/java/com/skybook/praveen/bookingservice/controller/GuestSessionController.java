@@ -3,7 +3,7 @@ package com.skybook.praveen.bookingservice.controller;
 import com.skybook.praveen.bookingservice.service.GuestSessionService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -34,7 +34,6 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/bookings/guest-session")
-@RequiredArgsConstructor
 public class GuestSessionController {
 
     public static final String COOKIE_NAME = "__Host-skybook_guest";
@@ -43,6 +42,26 @@ public class GuestSessionController {
     private static final Duration COOKIE_TTL = Duration.ofMinutes(30);
 
     private final GuestSessionService guestSessionService;
+
+    /**
+     * Secure-by-default, exactly like the account session cookie - and the
+     * {@code __Host-} prefix REQUIRES it, which is the point.
+     *
+     * <p>Configurable only because of a real gap the e2e suite exposed:
+     * browsers treat {@code http://localhost} as a secure context and happily
+     * accept the cookie there, but non-browser HTTP clients (the
+     * certification suite's, any script) refuse to send a Secure cookie over
+     * plain HTTP - so the cookie half of this feature would have been
+     * untestable end to end. Set false ONLY in the e2e overlay, where the
+     * fleet is driven over HTTP by a client and no browser is involved.
+     */
+    private final boolean secure;
+
+    public GuestSessionController(GuestSessionService guestSessionService,
+                                  @Value("${skybook.guest.cookie-secure:true}") boolean secure) {
+        this.guestSessionService = guestSessionService;
+        this.secure = secure;
+    }
 
     public record GuestLookupRequest(
             @NotBlank(message = "Booking reference is required")
@@ -58,7 +77,7 @@ public class GuestSessionController {
 
         ResponseCookie cookie = ResponseCookie.from(COOKIE_NAME, session.token())
                 .httpOnly(true)
-                .secure(true)          // __Host- requires it, browser-enforced
+                .secure(secure)          // __Host- requires it, browser-enforced
                 .sameSite("Lax")
                 .path("/")             // __Host- requires exactly "/"
                 .maxAge(COOKIE_TTL)
@@ -78,7 +97,7 @@ public class GuestSessionController {
     public ResponseEntity<Void> end() {
         ResponseCookie expired = ResponseCookie.from(COOKIE_NAME, "")
                 .httpOnly(true)
-                .secure(true)
+                .secure(secure)
                 .sameSite("Lax")
                 .path("/")
                 .maxAge(0)

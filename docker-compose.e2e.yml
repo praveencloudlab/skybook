@@ -85,6 +85,12 @@ services:
       # an orphaned DRAFT behind.
       BOOKING_DRAFT_TTL_MINUTES: "1"
       BOOKING_DRAFT_SWEEP_INTERVAL_MS: "5000"
+      # The guest cookie is Secure in every real environment (the __Host-
+      # prefix requires it, and browsers accept it on localhost). The
+      # certification suite is not a browser: its HTTP client refuses to send
+      # a Secure cookie over plain HTTP, so the cookie half of guest check-in
+      # would be untestable end to end. Off here, and only here.
+      SKYBOOK_GUEST_COOKIE_SECURE: "false"
 
   api-gateway:
     environment:

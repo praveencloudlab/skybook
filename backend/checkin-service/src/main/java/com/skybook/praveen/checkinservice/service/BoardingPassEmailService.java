@@ -4,6 +4,7 @@ import com.skybook.praveen.checkinservice.dto.response.BoardingPassResponse;
 import com.skybook.praveen.checkinservice.dto.response.CheckInResponse;
 import com.skybook.praveen.checkinservice.entity.BoardingPassEmailLog;
 import com.skybook.praveen.checkinservice.enums.CheckInStatus;
+import com.skybook.praveen.checkinservice.exception.BoardingPassEmailException;
 import com.skybook.praveen.checkinservice.producer.CheckInEventProducer;
 import com.skybook.praveen.checkinservice.repository.BoardingPassEmailLogRepository;
 import com.skybook.praveen.security.SecurityAccess;
@@ -49,14 +50,12 @@ public class BoardingPassEmailService {
         // No pass, no email: before check-in there is nothing to send, and an
         // endpoint that mails on demand without this gate is a spam cannon.
         if (checkIn.status() != CheckInStatus.CHECKED_IN && checkIn.status() != CheckInStatus.BOARDED) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "Check in first - then we can send your boarding pass.");
+            throw BoardingPassEmailException.notCheckedIn();
         }
 
         Instant windowStart = Instant.now().minus(WINDOW);
         if (emailLogRepository.countByCheckInIdAndSentAtAfter(checkInId, windowStart) >= MAX_SENDS_PER_WINDOW) {
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
-                    "That pass was emailed recently - try again in a little while.");
+            throw BoardingPassEmailException.throttled();
         }
 
         BoardingPassResponse pass = boardingPassService.getActiveForCheckIn(checkInId);

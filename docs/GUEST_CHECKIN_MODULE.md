@@ -246,7 +246,7 @@ e-ticket doesn't support. The privacy consequence is stated and tested
 | Register baggage (manifest data) | ✅ | same + CHECKED_IN-only rule; no chargeable path (verified §10 step 4) |
 | View/download boarding pass, QR | ✅ | same |
 | Email boarding pass to chosen address | ✅ | checked-in only + counters (§5) |
-| Cancel / modify / payments / invoices | ❌ 403 | the blanket-rule cages (§2.3) |
+| Cancel / modify / payments / invoices | ❌ **401 by cookie, 403 by bearer** | two layers, verified live: outside the guest-capable path list the gateway never consults the guest cookie (so the request arrives anonymous → 401), and the service cage refuses `ROLE_GUEST` outright if the token is presented explicitly → 403 |
 | Any other booking | ❌ **404** | `booking_id` mismatch (§3.3) |
 | Any non-opted-in service | ❌ 401 | `accept-guest-tokens=false` (§3.4) |
 | Admin/gate operations | ❌ 403 | existing per-endpoint ADMIN rules |
@@ -417,6 +417,41 @@ was cancelled" page shows anyway. Traced, tested (§9), accepted.
 - Passenger-level guest scoping (revisit if a privacy requirement arrives).
 - Consumer-side email dedupe — lands with the transactional outbox.
 - Guest access to IRROPS rebooking (waits for IRROPS).
+
+# 12a. What the First Live Run Changed (2026-08-06)
+
+Three things no unit test could have caught, found by running the real
+journey against the real stack before pushing:
+
+1. **`ResponseStatusException` arrived as `401`, not `404`.** Spring renders
+   it by forwarding to `/error`, and the ERROR dispatch re-enters the
+   security chain, where `/error` is not permitted. The guest's generic
+   "no booking matching those details" therefore reached the browser as an
+   authentication failure — and the frontend's not-found branch would never
+   have fired. Fixed by giving both services dedicated exceptions handled by
+   their `@RestControllerAdvice`, which writes the response directly with no
+   forward. (Same trap, same fix, in checkin-service's email endpoint.)
+2. **Check-in called flight-service with the GUEST's token and got 401.**
+   `FlightServiceFeignClient` propagated the caller's credential, which was
+   invisible while every caller was a USER; flight-service does not accept
+   guest tokens (correctly), so "is this flight cancelled?" failed and the
+   whole check-in surfaced as a 502. The propagation was wrong on principle:
+   validating a flight before acting is checkin-service asking on its OWN
+   behalf. It now carries a `ROLE_SERVICE` token scoped to `flight-service`
+   — the audience its credential was already provisioned for — exactly like
+   its inventory client.
+3. **The money endpoints refuse at the gateway, not the cage** (§4): the
+   guest cookie is not consulted outside the guest-capable path list, so
+   those requests arrive anonymous (401) rather than reaching the service's
+   `ROLE_GUEST` refusal (403). Stronger than designed; both layers are now
+   asserted separately in the e2e suite rather than one being assumed.
+
+Proven end to end on the local stack: an agency account books, a passenger
+with no account retrieves with a mis-cased reference and the surname
+`obrien` against a stored `O'Brien`, checks in, receives a boarding pass,
+and has it delivered to their own address — Mailpit shows the message
+("Your boarding pass — SB6MM3") carrying the existing QR + PDF pipeline.
+Concealment, the cage, and session-end all behave as specified.
 
 # 13. Review Round 1 — Disposition of All 30 Findings
 

@@ -2,6 +2,8 @@ package com.skybook.praveen.bookingservice.service;
 
 import com.skybook.praveen.bookingservice.entity.Booking;
 import com.skybook.praveen.bookingservice.entity.GuestLookupAttempt;
+import com.skybook.praveen.bookingservice.exception.GuestLookupFailedException;
+import com.skybook.praveen.bookingservice.exception.GuestLookupThrottledException;
 import com.skybook.praveen.bookingservice.repository.BookingRepository;
 import com.skybook.praveen.bookingservice.repository.GuestLookupAttemptRepository;
 import com.skybook.praveen.bookingservice.security.GuestTokenFetcher;
@@ -54,8 +56,7 @@ public class GuestSessionService {
         if (attemptRepository.countByBookingReferenceAndAttemptedAtAfter(reference, windowStart)
                 >= MAX_FAILURES_PER_WINDOW) {
             log.warn("Guest lookup throttled for reference {}**", mask(reference));
-            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
-                    "Too many attempts for this booking - try again in a few minutes.");
+            throw new GuestLookupThrottledException();
         }
 
         Booking booking = bookingRepository.findByBookingReference(reference).orElse(null);
@@ -76,7 +77,7 @@ public class GuestSessionService {
             attemptRepository.save(failure);
             // Opportunistic pruning keeps the table tiny without a scheduler.
             attemptRepository.deleteOlderThan(Instant.now().minus(WINDOW.multipliedBy(4)));
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, GENERIC_MISMATCH);
+            throw new GuestLookupFailedException();
         }
 
         String token = guestTokenFetcher.fetch(booking.getId());

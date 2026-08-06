@@ -39,6 +39,8 @@ class GuestCheckInE2ETest {
 
     /** Carries the __Host-skybook_guest cookie exactly as a browser would. */
     private CookieFilter guestSession;
+    /** The same token, captured at issuance, for the explicit-credential arm of the cage test. */
+    private String guestToken;
 
     @BeforeAll
     void agencyBooksForThePassenger() {
@@ -82,6 +84,25 @@ class GuestCheckInE2ETest {
                 .as("guest session refused: %s", session.asString())
                 .isEqualTo(200);
         assertThat(session.jsonPath().getLong("bookingId")).isEqualTo(bookingId);
+
+        String setCookie = session.getHeaders().getValues("Set-Cookie").stream()
+                .filter(h -> h.startsWith("__Host-skybook_guest="))
+                .findFirst().orElseThrow(() -> new AssertionError("no guest cookie was set"));
+        guestToken = setCookie.substring(setCookie.indexOf('=') + 1, setCookie.indexOf(';'));
+
+        // The invariants that hold in EVERY environment. Secure is
+        // deliberately absent under the e2e overlay and only there (an HTTP
+        // client will not send a Secure cookie over plain HTTP, which would
+        // make this whole journey untestable); everywhere a browser is
+        // involved it is on, which is what the __Host- prefix requires.
+        assertThat(setCookie)
+                .as("the guest credential is never readable by script, and never scoped to a parent domain")
+                .contains("HttpOnly").contains("Path=/").doesNotContain("Domain=");
+        assertThat(guestToken).isNotBlank();
+
+        // Distinct from the account session, which is the whole point: a
+        // signed-in agency looking up a guest booking must not be logged out.
+        assertThat(setCookie).doesNotContain("skybook_session=");
 
         Response booking = RestAssured.given().filter(guestSession)
                 .when().get("/api/bookings/" + bookingId);
@@ -140,20 +161,40 @@ class GuestCheckInE2ETest {
 
     @Test
     @Order(5)
-    @DisplayName("the guest session is refused on every money endpoint")
+    @DisplayName("the money endpoints refuse the guest at BOTH layers")
     void theCageHolds() {
-        int cancel = RestAssured.given().filter(guestSession)
-                .when().delete("/api/bookings/" + bookingId).statusCode();
-        int listAll = RestAssured.given().filter(guestSession)
-                .when().get("/api/bookings").statusCode();
-        int mine = RestAssured.given().filter(guestSession)
+        // Layer 1 - the gateway. Outside the guest-capable path list the guest
+        // cookie is not even consulted, so the request arrives anonymous and
+        // is refused at the edge. Verified live: 401, never a 200.
+        int mineByCookie = RestAssured.given().filter(guestSession)
                 .when().get("/api/bookings/mine").statusCode();
+        int listByCookie = RestAssured.given().filter(guestSession)
+                .when().get("/api/bookings").statusCode();
 
-        assertThat(cancel)
+        assertThat(mineByCookie).isIn(401, 403);
+        assertThat(listByCookie).isIn(401, 403);
+
+        // Layer 2 - the service cage, which is what actually holds if the
+        // token is presented explicitly rather than ambiently. This is the
+        // arm that would catch a future path wrongly added to the
+        // guest-capable list: booking-service ends its chain in
+        // hasAnyRole(USER, ADMIN), so ROLE_GUEST is refused by default.
+        assertThat(guestToken).as("captured at issuance").isNotBlank();
+
+        int mineByBearer = RestAssured.given().header("Authorization", "Bearer " + guestToken)
+                .when().get("/api/bookings/mine").statusCode();
+        int listByBearer = RestAssured.given().header("Authorization", "Bearer " + guestToken)
+                .when().get("/api/bookings").statusCode();
+        int cancelByBearer = RestAssured.given().header("Authorization", "Bearer " + guestToken)
+                .when().delete("/api/bookings/" + bookingId).statusCode();
+
+        assertThat(mineByBearer)
+                .as("a guest token is not a USER token, whatever it rides in on")
+                .isEqualTo(403);
+        assertThat(listByBearer).isEqualTo(403);
+        assertThat(cancelByBearer)
                 .as("cancelling is the owning account's business, never a guest's")
                 .isIn(403, 405);
-        assertThat(listAll).isEqualTo(403);
-        assertThat(mine).isEqualTo(403);
     }
 
     @Test
@@ -188,6 +229,12 @@ class GuestCheckInE2ETest {
         assertThat(reservations)
                 .as("inventory-service never opted in to guest tokens")
                 .isIn(401, 403);
+        // Not a hollow assertion: the same paths answer 200 to the OWNING
+        // account, so these refusals are about the credential, not the route.
+        assertThat(RestAssured.given().header("Authorization", agency.bearer())
+                .when().get("/api/payments/booking/" + bookingId).statusCode())
+                .as("the owner can see their own payment - the refusal above is the guest's")
+                .isEqualTo(200);
     }
 
     @Test

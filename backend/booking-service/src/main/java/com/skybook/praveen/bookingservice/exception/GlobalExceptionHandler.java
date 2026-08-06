@@ -21,6 +21,18 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, exception.getMessage(), request);
     }
 
+    @ExceptionHandler(GuestLookupFailedException.class)
+    public ResponseEntity<ErrorResponse> handleGuestLookupFailed(
+            GuestLookupFailedException exception, HttpServletRequest request) {
+        return build(HttpStatus.NOT_FOUND, exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(GuestLookupThrottledException.class)
+    public ResponseEntity<ErrorResponse> handleGuestLookupThrottled(
+            GuestLookupThrottledException exception, HttpServletRequest request) {
+        return build(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), request);
+    }
+
     @ExceptionHandler(com.skybook.praveen.security.ResourceConcealedException.class)
     public ResponseEntity<ErrorResponse> handleResourceConcealed(
             com.skybook.praveen.security.ResourceConcealedException exception, HttpServletRequest request) {
