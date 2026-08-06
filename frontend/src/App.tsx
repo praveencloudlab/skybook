@@ -14,6 +14,7 @@ import { setUnauthenticatedHandler } from './api/client';
 import { useSession } from './features/auth/useSession';
 import { RegisterPage } from './features/auth/RegisterPage';
 import { SignInPage } from './features/auth/SignInPage';
+import { GuestCheckInPage } from './features/guest/GuestCheckInPage';
 import { SignInForm } from './features/auth/SignInForm';
 import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage';
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage';
@@ -177,6 +178,19 @@ function Header() {
               {t('nav.search')}
             </Link>
           )}
+          {/* Check-in is top-level and account-free (GUEST_CHECKIN_MODULE.md
+              §7): agency-booked passengers have no login, and a signed-in
+              traveller standing at the airport with a lapsed session needs
+              the same door. Hidden from admins, whose gate tools live in the
+              console. */}
+          {!isAdmin ? (
+            <Link
+              to="/check-in"
+              className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+            >
+              Check-in
+            </Link>
+          ) : null}
           {signedIn ? (
             <>
               {!isAdmin ? (
@@ -935,6 +949,9 @@ export default function App() {
               {/* Public search + booking journey; the booking steps gate
                   themselves on the session (see BookingJourney). */}
               <Route path="/search" element={<BookingJourney />} />
+              {/* Public by design: the guest session IS the credential
+                  (GUEST_CHECKIN_MODULE.md §7). */}
+              <Route path="/check-in" element={<GuestCheckInPage />} />
               <Route
                 path="/bookings"
                 element={
