@@ -66,12 +66,11 @@ public class FlightServiceImpl implements FlightService {
     }
 
     @Override
-    public List<FlightResponse> getAllFlights() {
-
-        return flightRepository.findAll()
-                .stream()
-                .map(FlightMapper::toResponse)
-                .toList();
+    public org.springframework.data.domain.Page<FlightResponse> getAllFlights(
+            org.springframework.data.domain.Pageable pageable) {
+        // findAll(Pageable) issues LIMIT/OFFSET + a count - one page of rows,
+        // never the whole ~920k table into memory.
+        return flightRepository.findAll(pageable).map(FlightMapper::toResponse);
     }
 
     @Override

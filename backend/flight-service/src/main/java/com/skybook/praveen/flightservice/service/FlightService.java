@@ -21,7 +21,8 @@ public interface FlightService {
 
     FlightResponse getFlightById(Long id);
 
-    List<FlightResponse> getAllFlights();
+    org.springframework.data.domain.Page<FlightResponse> getAllFlights(
+            org.springframework.data.domain.Pageable pageable);
 
     FlightResponse updateFlight(Long id, UpdateFlightRequest request);
 

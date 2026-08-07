@@ -166,12 +166,21 @@ class FlightControllerTest {
     }
 
     @Test
-    void getAllReturns200WithTheList() throws Exception {
-        when(flightService.getAllFlights()).thenReturn(List.of(response(FlightStatus.SCHEDULED)));
+    void getAllReturnsAPageAndCapsAnOversizedRequest() throws Exception {
+        // The endpoint is paged (it fronts ~920k rows); an absurd size is
+        // clamped to 200, which is the whole point of the change.
+        when(flightService.getAllFlights(any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(
+                        List.of(response(FlightStatus.SCHEDULED))));
 
-        mockMvc.perform(get("/api/flights"))
+        mockMvc.perform(get("/api/flights").param("size", "999999"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(1));
+                .andExpect(jsonPath("$.content.length()").value(1));
+
+        org.mockito.ArgumentCaptor<org.springframework.data.domain.Pageable> pageCaptor =
+                org.mockito.ArgumentCaptor.forClass(org.springframework.data.domain.Pageable.class);
+        verify(flightService).getAllFlights(pageCaptor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(200, pageCaptor.getValue().getPageSize());
     }
 
     @Test

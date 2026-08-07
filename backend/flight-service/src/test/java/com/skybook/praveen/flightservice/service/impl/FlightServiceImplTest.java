@@ -201,11 +201,13 @@ class FlightServiceImplTest {
         }
 
         @Test
-        void getAllMapsEveryRow() {
-            when(flightRepository.findAll()).thenReturn(List.of(
-                    flight(1L, FlightStatus.SCHEDULED), flight(2L, FlightStatus.DELAYED)));
+        void getAllMapsEveryRowOfThePage() {
+            var pageable = org.springframework.data.domain.PageRequest.of(0, 50);
+            when(flightRepository.findAll(pageable)).thenReturn(
+                    new org.springframework.data.domain.PageImpl<>(List.of(
+                            flight(1L, FlightStatus.SCHEDULED), flight(2L, FlightStatus.DELAYED))));
 
-            assertThat(flightService.getAllFlights()).hasSize(2)
+            assertThat(flightService.getAllFlights(pageable).getContent()).hasSize(2)
                     .extracting(FlightResponse::status)
                     .containsExactly(FlightStatus.SCHEDULED, FlightStatus.DELAYED);
         }

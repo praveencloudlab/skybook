@@ -72,9 +72,25 @@ public class FlightController {
             summary = "Get All Flights",
             description = "Returns all flights."
     )
+    /**
+     * List flights, a PAGE at a time.
+     *
+     * <p>This used to be an unbounded {@code findAll()}. The seed network is
+     * ~920,000 rows; mapping every one into a DTO exhausted the heap, and the
+     * failure surfaced at the edge as a misleading 401 (the error re-dispatch
+     * to {@code /error} is not a public path). Nothing in the app consumed the
+     * full list - shopping goes through {@code /search} and {@code /itineraries}
+     * - so the endpoint is now paged, capped, and honest about its size.
+     */
     @GetMapping
-    public List<FlightResponse> getAllFlights() {
-        return flightService.getAllFlights();
+    public org.springframework.data.domain.Page<FlightResponse> getAllFlights(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        // Hard ceiling: a caller asking for a million rows a page is the very
+        // request this endpoint exists to refuse.
+        int capped = Math.min(Math.max(size, 1), 200);
+        return flightService.getAllFlights(
+                org.springframework.data.domain.PageRequest.of(Math.max(page, 0), capped));
     }
 
     @Operation(
