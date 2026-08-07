@@ -76,6 +76,8 @@ public class BookingEventConsumer {
         }
 
         int tierPercent = event.getRefundTierPercent() != null ? event.getRefundTierPercent() : 100;
+        // PREMIUM lines ride their own waiver tier (FARE_RULES); null = same tier.
+        Integer premiumPercent = event.getPremiumTierPercent();
         if (tierPercent == 0) {
             log.info("Booking {} partially cancelled in the zero-refund window - fare forfeited, keeping payment {}",
                     event.getBookingReference(), payment.paymentReference());
@@ -95,7 +97,7 @@ public class BookingEventConsumer {
                         .toList();
 
         paymentFacade.refund(payment.id(),
-                new RefundRequest(lines, tierPercent,
+                new RefundRequest(lines, tierPercent, premiumPercent,
                         "Partial cancellation on booking " + event.getBookingReference()), ctx);
     }
 
@@ -113,6 +115,8 @@ public class BookingEventConsumer {
 
         // Time-tier percent quoted at cancellation (null on legacy events = 100).
         int tierPercent = event.getRefundTierPercent() != null ? event.getRefundTierPercent() : 100;
+        // PREMIUM lines ride their own waiver tier (FARE_RULES); null = same tier.
+        Integer premiumPercent = event.getPremiumTierPercent();
 
         if (status == PaymentStatus.CAPTURED || status == PaymentStatus.PARTIALLY_REFUNDED) {
             if (tierPercent == 0) {
@@ -135,7 +139,7 @@ public class BookingEventConsumer {
                                     .toList()
                             : null;
             paymentFacade.refund(payment.id(),
-                    new RefundRequest(lines, tierPercent,
+                    new RefundRequest(lines, tierPercent, premiumPercent,
                             "Booking " + event.getBookingReference() + " cancelled"), ctx);
         } else if (status == PaymentStatus.PENDING || status == PaymentStatus.AUTHORIZED
                 || status == PaymentStatus.AUTHORIZATION_FAILED || status == PaymentStatus.CAPTURE_FAILED) {

@@ -16,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CancellationPolicyTest {
 
     private final CancellationPolicy policy = new CancellationPolicy(
-            new BigDecimal("30"), 72, 24, 2);
+            new BigDecimal("30"), 72, 24, 2, 6);
 
     private static final LocalDateTime DEPARTURE = LocalDateTime.of(2026, 8, 10, 12, 0);
 
@@ -82,6 +82,46 @@ class CancellationPolicyTest {
         assertThat(comp.refundAmount()).isEqualByComparingTo("100.00");
         assertThat(comp.fareRuleFee()).isEqualByComparingTo("0.00");
         assertThat(comp.timePenalty()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void premiumIsFullyRefundableInsideItsWaiverWindow() {
+        // THE REPORTED BUG. A Premium passenger cancelling two days out was
+        // quoted the standard 50% tier and lost half a fare their fare rules
+        // call fully refundable. Premium rides its own tier instead.
+        assertThat(policy.premiumRefundPercent(DEPARTURE.minusHours(48), DEPARTURE)).isEqualTo(100);
+
+        var comp = policy.computeRefund(
+                List.of(new CancellationPolicy.FareLine("PREMIUM", new BigDecimal("500.00"))), 50, 100);
+        assertThat(comp.refundAmount()).isEqualByComparingTo("500.00");
+        assertThat(comp.timePenalty()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void premiumDropsToHalfOnlyInsideTheLastSixHours() {
+        // Not a cliff to zero: late is not the same as forfeited.
+        assertThat(policy.premiumRefundPercent(DEPARTURE.minusHours(7), DEPARTURE)).isEqualTo(100);
+        assertThat(policy.premiumRefundPercent(DEPARTURE.minusHours(5), DEPARTURE)).isEqualTo(50);
+
+        var comp = policy.computeRefund(
+                List.of(new CancellationPolicy.FareLine("PREMIUM", new BigDecimal("500.00"))), 0, 50);
+        assertThat(comp.refundAmount()).isEqualByComparingTo("250.00");
+    }
+
+    @Test
+    void aMixedBookingRefundsEachFareByItsOwnTier() {
+        // The second defect the fix removed: pooling the lines and applying
+        // one percent could only express ONE fare family's rules, so the
+        // Premium row was dragged down to the Saver row's tier.
+        var comp = policy.computeRefund(List.of(
+                new CancellationPolicy.FareLine("PREMIUM", new BigDecimal("400.00")),
+                new CancellationPolicy.FareLine("SAVER", new BigDecimal("100.00"))), 50, 100);
+
+        // Premium: all 400 back. Saver: 30% rule fee -> 70, halved -> 35.
+        assertThat(comp.refundAmount()).isEqualByComparingTo("435.00");
+        assertThat(comp.fareRuleFee()).isEqualByComparingTo("30.00");
+        assertThat(comp.refundAmount().add(comp.fareRuleFee()).add(comp.timePenalty()))
+                .isEqualByComparingTo("500.00");
     }
 
     @Test

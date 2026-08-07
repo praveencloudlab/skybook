@@ -35,16 +35,20 @@ public class CancellationPolicy {
     private final int fullRefundHours;
     private final int halfRefundHours;
     private final int closeHours;
+    /** Where the Premium full-refund waiver ends (see {@link #premiumRefundPercent}). */
+    private final int premiumWaiverHours;
 
     public CancellationPolicy(
             @Value("${booking.cancellation.saver-fee-percent:30}") BigDecimal saverFeePercent,
             @Value("${booking.cancellation.full-refund-hours:72}") int fullRefundHours,
             @Value("${booking.cancellation.half-refund-hours:24}") int halfRefundHours,
-            @Value("${booking.cancellation.close-hours:2}") int closeHours) {
+            @Value("${booking.cancellation.close-hours:2}") int closeHours,
+            @Value("${booking.cancellation.premium-waiver-hours:6}") int premiumWaiverHours) {
         this.saverFeePercent = saverFeePercent;
         this.fullRefundHours = fullRefundHours;
         this.halfRefundHours = halfRefundHours;
         this.closeHours = closeHours;
+        this.premiumWaiverHours = premiumWaiverHours;
     }
 
     /** One passenger row's money: its fare type decides the fare-rule fee. */
@@ -82,29 +86,72 @@ public class CancellationPolicy {
     }
 
     /**
-     * Fare-rule fee first (Saver keeps {@code saverFeePercent}%), then the
-     * time tier scales what survived. refund + fareRuleFee + timePenalty
-     * always equals the sum of the lines.
+     * The Premium waiver tier (FARE_RULES: "Cancellation fee: Waived",
+     * "Refund: Fully refundable before departure").
+     *
+     * <p>Premium does NOT ride the standard 72/24 tiers - that was the live
+     * defect: a Premium passenger cancelling two days out was quoted 50%,
+     * losing half a fare their fare rules say is fully refundable. Its own
+     * tier is deliberately flatter:
+     *
+     * <pre>
+     *   until 6h before departure : 100% - the entitlement
+     *   6h - 2h                   :  50% - late, not punished
+     *   &lt; 2h                      : online cancellation closed (as for all)
+     * </pre>
+     *
+     * <p>Six hours rather than "right up to departure" because that is where
+     * the airline's own exposure begins (catering and crew are committed,
+     * and a seat released six hours out rarely resells); 50% rather than a
+     * hard stop because 100% at 6h01m and nothing at 5h59m is a cliff no
+     * passenger would accept as fair.
      */
-    public RefundComputation computeRefund(List<FareLine> lines, int refundPercent) {
+    public int premiumRefundPercent(LocalDateTime now, LocalDateTime departure) {
+        if (now.isBefore(departure.minusHours(premiumWaiverHours))) {
+            return 100;
+        }
+        return 50;
+    }
+
+    /**
+     * Fare-rule fee first (Saver keeps {@code saverFeePercent}%), then a time
+     * tier scales what survived - PER LINE, because the tier a line rides
+     * depends on its fare type. refund + fareRuleFee + timePenalty always
+     * equals the sum of the lines.
+     *
+     * <p>Pooling the lines and applying one percent (the previous shape) can
+     * only ever express one fare family's rules, which is why a mixed
+     * Premium+Saver booking used to refund both at the Saver tier.
+     */
+    public RefundComputation computeRefund(List<FareLine> lines, int refundPercent, int premiumPercent) {
 
         BigDecimal ruleRefundable = BigDecimal.ZERO;
         BigDecimal ruleFee = BigDecimal.ZERO;
+        BigDecimal refund = BigDecimal.ZERO;
 
         for (FareLine line : lines) {
+            BigDecimal lineRefundable;
             if ("SAVER".equalsIgnoreCase(line.fareType())) {
                 BigDecimal lineFee = line.amount().multiply(saverFeePercent)
                         .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
                 ruleFee = ruleFee.add(lineFee);
-                ruleRefundable = ruleRefundable.add(line.amount().subtract(lineFee));
+                lineRefundable = line.amount().subtract(lineFee);
             } else {
-                ruleRefundable = ruleRefundable.add(line.amount());
+                lineRefundable = line.amount();
             }
+            ruleRefundable = ruleRefundable.add(lineRefundable);
+
+            int tier = "PREMIUM".equalsIgnoreCase(line.fareType()) ? premiumPercent : refundPercent;
+            refund = refund.add(lineRefundable.multiply(BigDecimal.valueOf(tier))
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP));
         }
 
-        BigDecimal refund = ruleRefundable.multiply(BigDecimal.valueOf(refundPercent))
-                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
         return new RefundComputation(refund, ruleFee, ruleRefundable.subtract(refund));
+    }
+
+    /** Back-compat for callers with no Premium context: one tier for every line. */
+    public RefundComputation computeRefund(List<FareLine> lines, int refundPercent) {
+        return computeRefund(lines, refundPercent, refundPercent);
     }
 
     /** Convenience for callers that only need the hours, e.g. error copy. */

@@ -58,8 +58,9 @@ public class RefundServiceImpl implements RefundService {
                 : RefundCalculator.parse(payment.getFareBreakdown(),
                         payment.getCapturedAmount().subtract(payment.getRefundedAmount()));
 
-        RefundCalculator.RefundComputation computation = refundCalculator.compute(lines,
-                request.refundPercent() != null ? request.refundPercent() : 100);
+        int tier = request.refundPercent() != null ? request.refundPercent() : 100;
+        RefundCalculator.RefundComputation computation = refundCalculator.compute(lines, tier,
+                request.premiumPercent() != null ? request.premiumPercent() : tier);
 
         paymentValidator.validateRefundable(payment, computation.refundAmount());
 

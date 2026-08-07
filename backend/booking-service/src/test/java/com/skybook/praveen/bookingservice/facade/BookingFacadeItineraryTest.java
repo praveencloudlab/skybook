@@ -88,7 +88,7 @@ class BookingFacadeItineraryTest {
     void setUp() {
         facade = new BookingFacade(flightServiceClient, inventoryServiceClient, bookingService,
                 bookingEventProducer, new FareCalculator(), fareAlertRepository,
-                new CancellationPolicy(new BigDecimal("30"), 72, 24, 2));
+                new CancellationPolicy(new BigDecimal("30"), 72, 24, 2, 6));
     }
 
     private FlightDetails flight(Long id, String origin, String destination,

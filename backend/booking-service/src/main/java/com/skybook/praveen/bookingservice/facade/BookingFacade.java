@@ -200,6 +200,7 @@ public class BookingFacade {
         // bypasses the window and refunds per the fare rules alone.
         BookingResponse current = bookingService.getBookingById(id);
         int refundPercent = assessOnlineCancellation(current, null);
+        int premiumPercent = assessPremiumTier(current, null);
         // Flown legs carry no refund value: the event ships the UPCOMING
         // rows' fare lines so payment-service refunds those, never the
         // whole remaining capture of a half-used journey.
@@ -219,7 +220,7 @@ public class BookingFacade {
         }
 
         bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking), refundPercent,
-                refundBreakdown);
+                premiumPercent, refundBreakdown);
 
         return booking;
     }
@@ -265,6 +266,7 @@ public class BookingFacade {
         BookingResponse preCancel = bookingService.getBookingById(bookingId);
         int refundPercent = assessOnlineCancellation(preCancel,
                 new java.util.HashSet<>(bookingPassengerIds));
+        int premiumPercent = assessPremiumTier(preCancel, new java.util.HashSet<>(bookingPassengerIds));
 
         CancelPassengersResponse result =
                 bookingService.cancelPassengers(bookingId, bookingPassengerIds, refundPercent);
@@ -283,9 +285,9 @@ public class BookingFacade {
 
         if (result.bookingCancelled()) {
             bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking), refundPercent,
-                    upcomingRefundBreakdown(preCancel));
+                    premiumPercent, upcomingRefundBreakdown(preCancel));
         } else {
-            publishPartialCancellation(result, refundPercent,
+            publishPartialCancellation(result, refundPercent, premiumPercent,
                     result.cancelledRowIds().size() + " passenger seat(s)");
         }
 
@@ -306,6 +308,7 @@ public class BookingFacade {
                 .collect(java.util.stream.Collectors.toSet());
         int refundPercent = assessOnlineCancellation(current,
                 segmentRowIds.isEmpty() ? null : segmentRowIds);
+        int premiumPercent = assessPremiumTier(current, segmentRowIds.isEmpty() ? null : segmentRowIds);
 
         CancelPassengersResponse result = bookingService.cancelSegment(bookingId, segmentIndex, refundPercent);
         BookingResponse booking = result.booking();
@@ -322,9 +325,9 @@ public class BookingFacade {
 
         if (result.bookingCancelled()) {
             bookingEventProducer.publishBookingCancelled(booking, flightsOrNull(booking), refundPercent,
-                    upcomingRefundBreakdown(current));
+                    premiumPercent, upcomingRefundBreakdown(current));
         } else {
-            publishPartialCancellation(result, refundPercent, "the return journey");
+            publishPartialCancellation(result, refundPercent, premiumPercent, "the return journey");
         }
 
         return result;
@@ -337,7 +340,8 @@ public class BookingFacade {
      * (checkin-service closes those check-ins). Nothing captured = nothing
      * to move = no event; the booking-side numbers already tell the story.
      */
-    private void publishPartialCancellation(CancelPassengersResponse result, int refundPercent, String what) {
+    private void publishPartialCancellation(CancelPassengersResponse result, int refundPercent,
+                                            int premiumPercent, String what) {
 
         BookingResponse booking = result.booking();
         boolean paid = booking.payment() != null
@@ -354,7 +358,7 @@ public class BookingFacade {
                 .collect(java.util.stream.Collectors.joining(";"));
 
         bookingEventProducer.publishBookingPartiallyCancelled(booking, flightsOrNull(booking),
-                refundPercent, breakdown, result.cancelledRowIds(), what, result.refundAmount());
+                refundPercent, premiumPercent, breakdown, result.cancelledRowIds(), what, result.refundAmount());
     }
 
     /**
@@ -419,6 +423,50 @@ public class BookingFacade {
             throw new IllegalStateException(assessment.blockedReason());
         }
         return assessment.refundPercent();
+    }
+
+    /**
+     * The Premium tier for the same scope, on the same governing flight
+     * (FARE_RULES: Premium is fully refundable until T-6h, then 50%).
+     *
+     * <p>Computed alongside {@link #assessOnlineCancellation} and carried on
+     * the CANCELLED event rather than recomputed in payment-service: the
+     * passenger must be REFUNDED exactly what they were QUOTED, and two
+     * services deriving a time-sensitive percentage from their own clocks
+     * would drift apart across the seconds between quote and capture.
+     */
+    private int assessPremiumTier(BookingResponse booking, java.util.Set<Long> scopeRowIds) {
+
+        if (com.skybook.praveen.security.SecurityAccess.isAdmin()) {
+            return 100;
+        }
+
+        boolean paid = booking.payment() != null
+                && booking.payment().paymentStatus() == com.skybook.praveen.bookingservice.enums.PaymentStatus.PAID;
+        if (!paid) {
+            return 100;
+        }
+
+        FlightDetails governing = booking.passengers().stream()
+                .filter(p -> !p.cancelled())
+                .filter(p -> scopeRowIds == null || scopeRowIds.contains(p.id()))
+                .map(BookingPassengerResponse::flightId)
+                .distinct()
+                .map(this::flightOrNull)
+                .filter(java.util.Objects::nonNull)
+                .filter(f -> f.departureTime() != null && f.departureTime().isAfter(
+                        com.skybook.praveen.common.time.AirportTimeZones.nowAt(f.originAirportCode())))
+                .min(java.util.Comparator.comparing(f -> f.departureTime()
+                        .atZone(com.skybook.praveen.common.time.AirportTimeZones.zoneOf(f.originAirportCode()))
+                        .toInstant()))
+                .orElse(null);
+        if (governing == null) {
+            return 100;
+        }
+
+        return cancellationPolicy.premiumRefundPercent(
+                com.skybook.praveen.common.time.AirportTimeZones.nowAt(governing.originAirportCode()),
+                governing.departureTime());
     }
 
     /**
@@ -495,6 +543,13 @@ public class BookingFacade {
         }
 
         int percent = paid ? assessment.refundPercent() : 0;
+        // Premium rides its own waiver tier (FARE_RULES / CancellationPolicy).
+        int premiumPercent = paid
+                ? cancellationPolicy.premiumRefundPercent(
+                        com.skybook.praveen.common.time.AirportTimeZones.nowAt(
+                                governingFlight.originAirportCode()),
+                        governing)
+                : 0;
 
         List<com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse.Line> lines =
                 new ArrayList<>();
@@ -505,7 +560,7 @@ public class BookingFacade {
             String fareType = row.fareType() != null ? row.fareType().name() : "FLEXI";
             var comp = cancellationPolicy.computeRefund(
                     List.of(new com.skybook.praveen.bookingservice.domain.CancellationPolicy.FareLine(
-                            fareType, row.fare())), percent);
+                            fareType, row.fare())), percent, premiumPercent);
             BigDecimal refund = paid ? comp.refundAmount() : ZERO_MONEY;
             lines.add(new com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse.Line(
                     row.id(), row.segmentIndex(), row.firstName() + " " + row.lastName(),
@@ -520,8 +575,16 @@ public class BookingFacade {
                 ? totalPaid.subtract(totalRuleFee).subtract(totalRefund)
                 : ZERO_MONEY;
 
+        // The headline percent must be the one the passenger will actually
+        // get. An all-Premium booking rides the waiver tier, so quoting the
+        // standard tier here would print "50% cancellation window" above a
+        // 100% refund - the same mismatch, just in the other direction.
+        boolean allPremium = !upcoming.isEmpty() && upcoming.stream()
+                .allMatch(r -> r.fareType() == com.skybook.praveen.bookingservice.enums.FareType.PREMIUM);
+        int headlinePercent = allPremium ? premiumPercent : percent;
+
         return new com.skybook.praveen.bookingservice.dto.response.CancellationPreviewResponse(
-                allowed, allowed ? null : blockedReason, percent, governing,
+                allowed, allowed ? null : blockedReason, headlinePercent, governing,
                 assessment.fullRefundUntil(), assessment.halfRefundUntil(), assessment.cancelClosesAt(),
                 !paid, totalPaid, totalRuleFee, timePenalty, totalRefund, lines);
     }

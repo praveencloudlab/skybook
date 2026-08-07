@@ -99,6 +99,19 @@ public class BookingEvent {
     private Integer refundTierPercent;
 
     /**
+     * CANCELLED events only: the tier PREMIUM rows ride instead of
+     * {@link #refundTierPercent} - 100 inside the Premium waiver window
+     * (until 6h before departure), 50 after it. Carried rather than
+     * recomputed downstream so the refund matches the quote exactly; two
+     * services deriving a time-sensitive percent from their own clocks would
+     * disagree across the seconds between quoting and capturing.
+     *
+     * <p>Null on legacy events = "no separate Premium tier", so
+     * {@code refundTierPercent} applies to every line as it always did.
+     */
+    private Integer premiumTierPercent;
+
+    /**
      * PARTIALLY_CANCELLED only: the cancelled rows' fares in payment-service's
      * compact breakdown format ("FLEXI:100.00;SAVER:80.00") - exactly what
      * RefundCalculator parses, so payment refunds those lines (scaled by

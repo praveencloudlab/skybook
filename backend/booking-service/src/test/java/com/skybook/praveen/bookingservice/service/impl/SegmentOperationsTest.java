@@ -70,7 +70,7 @@ class SegmentOperationsTest {
                 bookingRepository, bookingPassengerRepository,
                 pnrGenerator, new BookingStateMachine(), bookingValidator,
                 new FareCalculator(Clock.fixed(Instant.parse("2030-06-04T09:00:00Z"), ZoneOffset.UTC)),
-                new com.skybook.praveen.bookingservice.domain.CancellationPolicy(new java.math.BigDecimal("30"), 72, 24, 2), 15);
+                new com.skybook.praveen.bookingservice.domain.CancellationPolicy(new java.math.BigDecimal("30"), 72, 24, 2, 6), 15);
         lenient().when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 

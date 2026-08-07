@@ -87,7 +87,7 @@ class BookingFacadeCancellationTest {
     void setUp() {
         facade = new BookingFacade(flightServiceClient, inventoryServiceClient, bookingService,
                 bookingEventProducer, new FareCalculator(), fareAlertRepository,
-                new CancellationPolicy(new BigDecimal("30"), 72, 24, 2));
+                new CancellationPolicy(new BigDecimal("30"), 72, 24, 2, 6));
     }
 
     @AfterEach
@@ -179,7 +179,7 @@ class BookingFacadeCancellationTest {
 
             // Every active row's fare line rides the event so payment-service
             // refunds exactly what the tier quoted.
-            verify(bookingEventProducer).publishBookingCancelled(eq(cancelled), any(), eq(100),
+            verify(bookingEventProducer).publishBookingCancelled(eq(cancelled), any(), eq(100), anyInt(),
                     eq("FLEXI:100.00;SAVER:100.00"));
             verify(inventoryServiceClient).releaseHoldQuietly(10L, "12A", 7L, "booking cancelled");
             verify(inventoryServiceClient).cancelReservationQuietly(10L, "12B", 7L, "booking cancelled");
@@ -195,7 +195,7 @@ class BookingFacadeCancellationTest {
             facade.cancelBooking(7L, "changed plans");
 
             verify(bookingService).cancelBooking(7L, "changed plans", 50);
-            verify(bookingEventProducer).publishBookingCancelled(any(), any(), eq(50), anyString());
+            verify(bookingEventProducer).publishBookingCancelled(any(), any(), eq(50), anyInt(), anyString());
         }
 
         @Test
@@ -225,7 +225,7 @@ class BookingFacadeCancellationTest {
             // release, no event.
             verify(bookingService, never()).cancelBooking(anyLong(), anyString(), anyInt());
             verify(inventoryServiceClient, never()).releaseHoldQuietly(anyLong(), anyString(), anyLong(), anyString());
-            verify(bookingEventProducer, never()).publishBookingCancelled(any(), any(), anyInt(), any());
+            verify(bookingEventProducer, never()).publishBookingCancelled(any(), any(), anyInt(), anyInt(), any());
         }
 
         @Test
@@ -269,7 +269,7 @@ class BookingFacadeCancellationTest {
 
             // Nothing was captured, so there is nothing to refund and no
             // breakdown to ship - only seats go back to the pool.
-            verify(bookingEventProducer).publishBookingCancelled(any(), any(), eq(100), eq(null));
+            verify(bookingEventProducer).publishBookingCancelled(any(), any(), eq(100), anyInt(), eq(null));
         }
 
         @Test
@@ -290,7 +290,7 @@ class BookingFacadeCancellationTest {
 
             verify(bookingService).cancelBooking(7L, "changed plans", 50);
             // Both legs are still to fly, so both carry refund value.
-            verify(bookingEventProducer).publishBookingCancelled(any(), any(), eq(50),
+            verify(bookingEventProducer).publishBookingCancelled(any(), any(), eq(50), anyInt(),
                     eq("FLEXI:100.00;FLEXI:120.00"));
         }
 
@@ -310,7 +310,7 @@ class BookingFacadeCancellationTest {
 
             // The used outbound carries no refund value; the tier is judged on
             // the return, which is the only leg still upcoming.
-            verify(bookingEventProducer).publishBookingCancelled(any(), any(), eq(100), eq("FLEXI:120.00"));
+            verify(bookingEventProducer).publishBookingCancelled(any(), any(), eq(100), anyInt(), eq("FLEXI:120.00"));
         }
     }
 
@@ -343,10 +343,10 @@ class BookingFacadeCancellationTest {
             verify(inventoryServiceClient).releaseHoldQuietly(10L, "12A", 7L, "passenger cancelled");
             verify(inventoryServiceClient, never())
                     .releaseHoldQuietly(anyLong(), eq("12B"), anyLong(), anyString());
-            verify(bookingEventProducer).publishBookingPartiallyCancelled(eq(survivor), any(), eq(100),
+            verify(bookingEventProducer).publishBookingPartiallyCancelled(eq(survivor), any(), eq(100), anyInt(),
                     eq("FLEXI:100.00"), eq(List.of(1L)), eq("1 passenger seat(s)"),
                     eq(new BigDecimal("100.00")));
-            verify(bookingEventProducer, never()).publishBookingCancelled(any(), any(), anyInt(), any());
+            verify(bookingEventProducer, never()).publishBookingCancelled(any(), any(), anyInt(), anyInt(), any());
         }
 
         @Test
@@ -363,10 +363,10 @@ class BookingFacadeCancellationTest {
 
             facade.cancelPassengers(7L, List.of(1L, 2L));
 
-            verify(bookingEventProducer).publishBookingCancelled(eq(emptied), any(), eq(100),
+            verify(bookingEventProducer).publishBookingCancelled(eq(emptied), any(), eq(100), anyInt(),
                     eq("FLEXI:100.00;FLEXI:100.00"));
             verify(bookingEventProducer, never())
-                    .publishBookingPartiallyCancelled(any(), any(), anyInt(), any(), any(), any(), any());
+                    .publishBookingPartiallyCancelled(any(), any(), anyInt(), anyInt(), any(), any(), any(), any());
         }
 
         @Test
@@ -385,7 +385,7 @@ class BookingFacadeCancellationTest {
             // to move - the booking-side numbers already tell the story.
             verify(inventoryServiceClient).releaseHoldQuietly(10L, "12A", 7L, "passenger cancelled");
             verify(bookingEventProducer, never())
-                    .publishBookingPartiallyCancelled(any(), any(), anyInt(), any(), any(), any(), any());
+                    .publishBookingPartiallyCancelled(any(), any(), anyInt(), anyInt(), any(), any(), any(), any());
         }
 
         @Test
@@ -409,7 +409,7 @@ class BookingFacadeCancellationTest {
             verify(inventoryServiceClient).releaseHoldQuietly(20L, "14C", 7L, "segment cancelled");
             verify(inventoryServiceClient, never())
                     .releaseHoldQuietly(anyLong(), eq("12A"), anyLong(), anyString());
-            verify(bookingEventProducer).publishBookingPartiallyCancelled(eq(survivor), any(), eq(100),
+            verify(bookingEventProducer).publishBookingPartiallyCancelled(eq(survivor), any(), eq(100), anyInt(),
                     eq("FLEXI:120.00"), eq(List.of(2L)), eq("the return journey"),
                     eq(new BigDecimal("120.00")));
         }
@@ -433,10 +433,10 @@ class BookingFacadeCancellationTest {
 
             // The outbound was already cancelled, so dropping the return
             // empties the booking - that is a full cancellation, not a partial.
-            verify(bookingEventProducer).publishBookingCancelled(eq(emptied), any(), eq(100),
+            verify(bookingEventProducer).publishBookingCancelled(eq(emptied), any(), eq(100), anyInt(),
                     eq("FLEXI:120.00"));
             verify(bookingEventProducer, never())
-                    .publishBookingPartiallyCancelled(any(), any(), anyInt(), any(), any(), any(), any());
+                    .publishBookingPartiallyCancelled(any(), any(), anyInt(), anyInt(), any(), any(), any(), any());
         }
 
         @Test
@@ -477,7 +477,7 @@ class BookingFacadeCancellationTest {
             facade.cancelSegment(7L, 1);
 
             verify(bookingService).cancelSegment(7L, 1, 50);
-            verify(bookingEventProducer).publishBookingPartiallyCancelled(eq(survivor), any(), eq(50),
+            verify(bookingEventProducer).publishBookingPartiallyCancelled(eq(survivor), any(), eq(50), anyInt(),
                     eq("FLEXI:120.00"), eq(List.of(2L)), eq("the return journey"),
                     eq(new BigDecimal("60.00")));
         }

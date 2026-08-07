@@ -393,7 +393,7 @@ class BookingEventProducerTest {
         @Test
         @DisplayName("a 100% tier promises the refund and tells payment-service to pay in full")
         void fullTierPromisesTheRefund() {
-            producer.publishBookingCancelled(oneWayBooking(), List.of(outboundFlight()), 100, null);
+            producer.publishBookingCancelled(oneWayBooking(), List.of(outboundFlight()), 100, 100, null);
 
             BookingEvent event = captureSentEvent();
             assertThat(event.getType()).isEqualTo(BookingEventType.CANCELLED);
@@ -405,7 +405,7 @@ class BookingEventProducerTest {
         @Test
         @DisplayName("a 0% tier says no refund is due - payment-service must create none")
         void sameDayTierSaysNoRefundIsDue() {
-            producer.publishBookingCancelled(oneWayBooking(), List.of(outboundFlight()), 0, null);
+            producer.publishBookingCancelled(oneWayBooking(), List.of(outboundFlight()), 0, 100, null);
 
             BookingEvent event = captureSentEvent();
             assertThat(event.getRefundTierPercent()).isZero();
@@ -415,7 +415,7 @@ class BookingEventProducerTest {
         @Test
         @DisplayName("a partial tier names the exact percent the passenger was quoted")
         void aPartialTierNamesTheExactPercent() {
-            producer.publishBookingCancelled(oneWayBooking(), List.of(outboundFlight()), 50, null);
+            producer.publishBookingCancelled(oneWayBooking(), List.of(outboundFlight()), 50, 100, null);
 
             BookingEvent event = captureSentEvent();
             assertThat(event.getRefundTierPercent()).isEqualTo(50);
@@ -426,7 +426,7 @@ class BookingEventProducerTest {
         @DisplayName("the fare breakdown rides along so only the unused legs are refunded")
         void theFareBreakdownRidesAlong() {
             producer.publishBookingCancelled(roundTripBooking(),
-                    List.of(outboundFlight(), returnFlight()), 50, "FLEXI:100.00;SAVER:80.00");
+                    List.of(outboundFlight(), returnFlight()), 50, 100, "FLEXI:100.00;SAVER:80.00");
 
             BookingEvent event = captureSentEvent();
             assertThat(event.getRefundBreakdown()).isEqualTo("FLEXI:100.00;SAVER:80.00");
@@ -442,7 +442,7 @@ class BookingEventProducerTest {
         @DisplayName("the mail names what went and the exact amount coming back")
         void theMailNamesWhatWentAndTheAmount() {
             producer.publishBookingPartiallyCancelled(roundTripBooking(),
-                    List.of(outboundFlight(), returnFlight()), 100, "SAVER:142.00",
+                    List.of(outboundFlight(), returnFlight()), 100, 100, "SAVER:142.00",
                     List.of(12L), "the return", new BigDecimal("142.00"));
 
             BookingEvent event = captureSentEvent();
@@ -458,7 +458,7 @@ class BookingEventProducerTest {
         @DisplayName("check-in-service is told exactly which rows to close")
         void checkInServiceIsToldWhichRowsToClose() {
             producer.publishBookingPartiallyCancelled(roundTripBooking(),
-                    List.of(outboundFlight(), returnFlight()), 50, "SAVER:142.00",
+                    List.of(outboundFlight(), returnFlight()), 50, 100, "SAVER:142.00",
                     List.of(11L, 12L), "2 passengers", new BigDecimal("71.00"));
 
             BookingEvent event = captureSentEvent();
@@ -471,7 +471,7 @@ class BookingEventProducerTest {
         @DisplayName("a zero tier promises nothing even if a breakdown was computed")
         void aZeroTierPromisesNothing() {
             producer.publishBookingPartiallyCancelled(roundTripBooking(),
-                    List.of(outboundFlight()), 0, "SAVER:142.00",
+                    List.of(outboundFlight()), 0, 50, "SAVER:142.00",
                     List.of(12L), "the return", new BigDecimal("142.00"));
 
             assertThat(captureSentEvent().getMessage())
@@ -483,7 +483,7 @@ class BookingEventProducerTest {
         @DisplayName("a null refund amount promises nothing - the facade could not price it")
         void aNullRefundAmountPromisesNothing() {
             producer.publishBookingPartiallyCancelled(roundTripBooking(),
-                    List.of(outboundFlight()), 100, null, List.of(12L), "the return", null);
+                    List.of(outboundFlight()), 100, 100, null, List.of(12L), "the return", null);
 
             assertThat(captureSentEvent().getMessage()).contains("no refund is due for this change");
         }
@@ -492,7 +492,7 @@ class BookingEventProducerTest {
         @DisplayName("a refund that computes to zero promises nothing either")
         void aZeroRefundAmountPromisesNothing() {
             producer.publishBookingPartiallyCancelled(roundTripBooking(),
-                    List.of(outboundFlight()), 100, "SAVER:0.00", List.of(12L), "the return",
+                    List.of(outboundFlight()), 100, 100, "SAVER:0.00", List.of(12L), "the return",
                     new BigDecimal("0.00"));
 
             assertThat(captureSentEvent().getMessage()).contains("no refund is due for this change");

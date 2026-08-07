@@ -44,6 +44,16 @@ export function ModifyBookingDialog({
     [booking.passengers],
   );
 
+  // Premium buys unlimited free changes, and this screen is not how you spend
+  // that: a rebook re-prices the WHOLE journey at today's fares, while the
+  // per-flight "Change date" keeps the booking and charges only the
+  // difference. The refund side is no longer a trap (Premium now refunds in
+  // full inside its waiver window), but sending a Premium passenger through
+  // the expensive door without a word would still be quietly charging them
+  // for something their fare gives away.
+  const allPremium =
+    activePassengers.length > 0 && activePassengers.every((p) => p.fareType === 'PREMIUM');
+
   const [date, setDate] = useState(
     () => currentFlight?.departureTime.slice(0, 10) ?? addDaysIso(todayIso(), 1),
   );
@@ -266,6 +276,15 @@ export function ModifyBookingDialog({
           is cancelled with a refund per its fare rules and the cancellation time windows. Chosen
           seats are not carried over — seats on the new flight are assigned free at check-in.
         </div>
+
+        {allPremium ? (
+          <div className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-xs leading-relaxed text-emerald-900 ring-1 ring-inset ring-emerald-200">
+            <span className="font-semibold">Your Premium fare includes free changes.</span> To move
+            to another date, close this and use <span className="font-semibold">Change date</span> on
+            the flight above — it keeps this booking and charges only the fare difference. Rebooking
+            here re-prices the whole journey at today's fares instead.
+          </div>
+        ) : null}
 
         {modifyBlocked && cancelPreview?.blockedReason ? (
           <div className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-xs leading-relaxed text-red-700 ring-1 ring-inset ring-red-200">

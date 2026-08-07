@@ -157,9 +157,9 @@ class PaymentConcurrencyTest extends AbstractPaymentIntegrationTest {
 
         List<Throwable> failures = race(List.of(
                 () -> paymentFacade.refund(id,
-                        new com.skybook.praveen.paymentservice.dto.request.RefundRequest(null, null, "race A"), ctx),
+                        new com.skybook.praveen.paymentservice.dto.request.RefundRequest(null, null, null, "race A"), ctx),
                 () -> paymentFacade.refund(id,
-                        new com.skybook.praveen.paymentservice.dto.request.RefundRequest(null, null, "race B"), ctx)
+                        new com.skybook.praveen.paymentservice.dto.request.RefundRequest(null, null, null, "race B"), ctx)
         ));
 
         // Exactly one refund goes through.

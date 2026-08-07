@@ -156,7 +156,7 @@ class PaymentFacadeTest {
 
     @Test
     void refundSuccessPublishesRefundCompleted() {
-        RefundRequest request = new RefundRequest(null, null, "booking cancelled");
+        RefundRequest request = new RefundRequest(null, null, null, "booking cancelled");
         when(refundService.beginRefund(1L, request, CTX)).thenReturn(
                 new RefundService.RefundContext(77L, "SIM-ref", new BigDecimal("70.00")));
         when(gateway.refund("SIM-ref", new BigDecimal("70.00"))).thenReturn(success());

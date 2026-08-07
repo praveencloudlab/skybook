@@ -115,6 +115,41 @@ class RefundCalculatorTest {
     }
 
     @Test
+    void premiumRidesItsOwnTierSoTheRefundMatchesTheQuote() {
+        // The money half of the reported bug: booking-service quotes Premium
+        // 100% inside its waiver window, so the refund actually paid must be
+        // 100% too. Both percents ride the CANCELLED event precisely so these
+        // two services cannot disagree.
+        var comp = calculator.compute(
+                List.of(new RefundCalculator.FareLine("PREMIUM", new BigDecimal("500.00"))), 50, 100);
+
+        assertThat(comp.refundAmount()).isEqualByComparingTo("500.00");
+        assertThat(comp.cancellationFee()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void aMixedBookingRefundsEachFareByItsOwnTier() {
+        // Pooling the lines under one percent used to drag the Premium row
+        // down to the Saver row's tier.
+        var comp = calculator.compute(List.of(
+                new RefundCalculator.FareLine("PREMIUM", new BigDecimal("400.00")),
+                new RefundCalculator.FareLine("SAVER", new BigDecimal("100.00"))), 50, 100);
+
+        // Premium 400 in full + Saver (100 - 30 fee) halved = 35.
+        assertThat(comp.refundAmount()).isEqualByComparingTo("435.00");
+        assertThat(comp.refundAmount().add(comp.cancellationFee())).isEqualByComparingTo("500.00");
+    }
+
+    @Test
+    void anAbsentPremiumTierLeavesEveryLineOnTheStandardTier() {
+        List<RefundCalculator.FareLine> lines = List.of(
+                new RefundCalculator.FareLine("PREMIUM", new BigDecimal("200.00")));
+
+        // Legacy events carry no premium tier; behaviour must not change.
+        assertThat(calculator.compute(lines, 50).refundAmount()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
     void hundredPercentTierMatchesTheLegacyComputation() {
         List<RefundCalculator.FareLine> lines = List.of(
                 new RefundCalculator.FareLine("SAVER", new BigDecimal("80.00")),

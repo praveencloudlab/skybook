@@ -63,7 +63,8 @@ public class BookingEventProducer {
      * refund (unpaid bookings, or a desk cancel of a fully-departed one).
      */
     public void publishBookingCancelled(BookingResponse booking, List<FlightDetails> flights,
-                                        int refundTierPercent, String refundBreakdown) {
+                                        int refundTierPercent, Integer premiumTierPercent,
+                                        String refundBreakdown) {
         String refundLine = switch (refundTierPercent) {
             case 100 -> " If a refund is due, it will be processed shortly.";
             case 0 -> " Under the same-day cancellation policy no refund is due for this booking.";
@@ -73,7 +74,7 @@ public class BookingEventProducer {
         publish(booking, flights, BookingEventType.CANCELLED,
                 "Your SkyBook booking " + booking.bookingReference() + " has been cancelled",
                 "Your booking " + booking.bookingReference() + " has been cancelled." + refundLine,
-                refundTierPercent, refundBreakdown, null);
+                refundTierPercent, premiumTierPercent, refundBreakdown, null);
     }
 
     /**
@@ -84,7 +85,8 @@ public class BookingEventProducer {
      * "the return"), because only it knows what was cancelled.
      */
     public void publishBookingPartiallyCancelled(BookingResponse booking, List<FlightDetails> flights,
-                                                 int refundTierPercent, String refundBreakdown,
+                                                 int refundTierPercent, Integer premiumTierPercent,
+                                                 String refundBreakdown,
                                                  List<Long> cancelledRowIds, String what,
                                                  java.math.BigDecimal refundAmount) {
         String refundLine = refundTierPercent == 0 || refundAmount == null
@@ -96,23 +98,23 @@ public class BookingEventProducer {
                 "Your SkyBook booking " + booking.bookingReference() + " has been updated",
                 "On booking " + booking.bookingReference() + ", " + what
                         + " has been cancelled. The rest of the booking is unchanged." + refundLine,
-                refundTierPercent, refundBreakdown, cancelledRowIds);
+                refundTierPercent, premiumTierPercent, refundBreakdown, cancelledRowIds);
     }
 
     private void publish(BookingResponse booking, List<FlightDetails> flights,
                          BookingEventType type, String subject, String message) {
-        publish(booking, flights, type, subject, message, null, null, null);
+        publish(booking, flights, type, subject, message, null, null, null, null);
     }
 
     private void publish(BookingResponse booking, List<FlightDetails> flights,
                          BookingEventType type, String subject, String message,
                          Integer refundTierPercent) {
-        publish(booking, flights, type, subject, message, refundTierPercent, null, null);
+        publish(booking, flights, type, subject, message, refundTierPercent, null, null, null);
     }
 
     private void publish(BookingResponse booking, List<FlightDetails> flights,
                          BookingEventType type, String subject, String message, Integer refundTierPercent,
-                         String refundBreakdown, List<Long> cancelledRowIds) {
+                         Integer premiumTierPercent, String refundBreakdown, List<Long> cancelledRowIds) {
 
         if (booking.contact() == null) {
             log.warn("Booking {} has no contact on file - skipping notification", booking.bookingReference());
@@ -186,6 +188,7 @@ public class BookingEventProducer {
                                 .toList())
                 .totalFare(booking.totalFare())
                 .refundTierPercent(refundTierPercent)
+                .premiumTierPercent(premiumTierPercent)
                 .refundBreakdown(refundBreakdown)
                 .cancelledBookingPassengerIds(cancelledRowIds)
                 .currency(booking.payment() != null ? booking.payment().currency() : null)

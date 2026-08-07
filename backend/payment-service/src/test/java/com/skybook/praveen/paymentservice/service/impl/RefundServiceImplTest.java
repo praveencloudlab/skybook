@@ -113,7 +113,7 @@ class RefundServiceImplTest {
     void beginRefundComputesFareRulesAndCreatesPendingRefund() {
 
         RefundService.RefundContext context = refundService.beginRefund(1L,
-                new RefundRequest(null, null, "booking cancelled"), CTX);
+                new RefundRequest(null, null, null, "booking cancelled"), CTX);
 
         // FLEXI 100 full + SAVER 80 at 30% fee = 100 + 56 = 156, fee 24.
         assertThat(context.refundAmount()).isEqualByComparingTo("156.00");
@@ -133,7 +133,7 @@ class RefundServiceImplTest {
 
         RefundService.RefundContext context = refundService.beginRefund(1L,
                 new RefundRequest(List.of(new FareLineRequest("SAVER", new BigDecimal("80.00"))),
-                        null, "one passenger cancelled"), CTX);
+                        null, null, "one passenger cancelled"), CTX);
 
         assertThat(context.refundAmount()).isEqualByComparingTo("56.00");
     }
@@ -142,7 +142,7 @@ class RefundServiceImplTest {
     void beginRefundRejectsNonCapturedPayments() {
         payment.setStatus(PaymentStatus.AUTHORIZED);
 
-        assertThatThrownBy(() -> refundService.beginRefund(1L, new RefundRequest(null, null, null), CTX))
+        assertThatThrownBy(() -> refundService.beginRefund(1L, new RefundRequest(null, null, null, null), CTX))
                 .isInstanceOf(PaymentConflictException.class);
     }
 

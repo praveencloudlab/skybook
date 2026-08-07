@@ -37,31 +37,49 @@ public class RefundCalculator {
         return compute(lines, 100);
     }
 
-    /**
-     * Fare rules first, then the cancellation-policy time tier scales what
-     * survived (booking-service CancellationPolicy - the same percent the
-     * passenger was quoted). refund + fee always equals the lines' total.
-     */
+    /** One tier for every line - callers with no Premium context. */
     public RefundComputation compute(List<FareLine> lines, int refundPercent) {
+        return compute(lines, refundPercent, refundPercent);
+    }
+
+    /**
+     * Fare rules first, then a time tier scales what survived - PER LINE,
+     * because the tier a line rides depends on its fare type (booking-service
+     * CancellationPolicy quotes exactly this, and both percents ride the
+     * CANCELLED event so the refund cannot drift from the quote).
+     *
+     * <p>PREMIUM lines take {@code premiumPercent}: 100 inside the waiver
+     * window, 50 after it. Everything else takes {@code refundPercent}. The
+     * previous shape pooled every line and applied one percent, which is why
+     * a mixed Premium+Saver booking refunded BOTH at the Saver tier - a
+     * Premium passenger silently losing half a fully-refundable fare.
+     *
+     * <p>refund + fee always equals the lines' total.
+     */
+    public RefundComputation compute(List<FareLine> lines, int refundPercent, int premiumPercent) {
 
         BigDecimal total = BigDecimal.ZERO;
-        BigDecimal ruleRefundable = BigDecimal.ZERO;
+        BigDecimal refund = BigDecimal.ZERO;
 
         for (FareLine line : lines) {
             total = total.add(line.amount());
+
+            BigDecimal lineRefundable;
             if ("SAVER".equalsIgnoreCase(line.fareType())) {
                 BigDecimal lineFee = line.amount()
                         .multiply(saverFeePercent)
                         .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-                ruleRefundable = ruleRefundable.add(line.amount().subtract(lineFee));
+                lineRefundable = line.amount().subtract(lineFee);
             } else {
-                ruleRefundable = ruleRefundable.add(line.amount());
+                lineRefundable = line.amount();
             }
+
+            int tier = "PREMIUM".equalsIgnoreCase(line.fareType()) ? premiumPercent : refundPercent;
+            refund = refund.add(lineRefundable
+                    .multiply(BigDecimal.valueOf(tier))
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP));
         }
 
-        BigDecimal refund = ruleRefundable
-                .multiply(BigDecimal.valueOf(refundPercent))
-                .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
         return new RefundComputation(refund, total.subtract(refund));
     }
 

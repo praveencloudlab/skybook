@@ -74,7 +74,7 @@ class BookingFacadeTest {
                         java.time.Clock.fixed(java.time.Instant.parse("2030-06-04T09:00:00Z"), java.time.ZoneOffset.UTC)),
                 fareAlertRepository,
                 new com.skybook.praveen.bookingservice.domain.CancellationPolicy(
-                        new BigDecimal("30"), 72, 24, 2));
+                        new BigDecimal("30"), 72, 24, 2, 6));
     }
 
     private BookingPassengerResponse passenger(long id, String seat) {
@@ -505,6 +505,7 @@ class BookingFacadeTest {
 
         verify(inventoryServiceClient).releaseHoldQuietly(eq(10L), eq("12A"), eq(7L), anyString());
         verify(inventoryServiceClient).cancelReservationQuietly(eq(10L), eq("12B"), eq(7L), anyString());
-        verify(bookingEventProducer).publishBookingCancelled(eq(cancelled), any(), eq(100), any());
+        verify(bookingEventProducer).publishBookingCancelled(eq(cancelled), any(), eq(100),
+                org.mockito.ArgumentMatchers.anyInt(), any());
     }
 }

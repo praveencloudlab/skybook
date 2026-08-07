@@ -26,6 +26,15 @@ public record RefundRequest(
         @jakarta.validation.constraints.Max(value = 100, message = "refundPercent must be at most 100")
         Integer refundPercent,
 
+        /**
+         * The tier PREMIUM lines ride instead of {@code refundPercent} -
+         * 100 inside the Premium waiver window, 50 after it. Null = no
+         * separate Premium tier, so refundPercent applies to every line.
+         */
+        @jakarta.validation.constraints.Min(value = 1, message = "premiumPercent must be at least 1")
+        @jakarta.validation.constraints.Max(value = 100, message = "premiumPercent must be at most 100")
+        Integer premiumPercent,
+
         @Size(max = 500, message = "reason must be at most 500 characters")
         String reason
 
