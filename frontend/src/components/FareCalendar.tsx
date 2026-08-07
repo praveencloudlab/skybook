@@ -120,10 +120,17 @@ export function FareCalendar({
       </button>
 
       {open ? (
+        <>
+          {/* Bottom sheet on a phone - see GuestsCabinPicker for why. */}
+          <div
+            className="fixed inset-0 z-40 bg-slate-900/40 sm:hidden"
+            aria-hidden="true"
+            onClick={() => setOpen(false)}
+          />
         <div
           role="dialog"
           aria-label="Choose a travel date"
-          className="absolute inset-x-0 top-full z-30 mt-3 rounded-2xl bg-white p-5 shadow-[var(--shadow-float)]"
+          className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[var(--shadow-float)] sm:absolute sm:inset-x-0 sm:bottom-auto sm:top-full sm:z-30 sm:mt-3 sm:max-h-none sm:rounded-2xl sm:p-5"
         >
           <div className="flex items-start gap-2">
             <button
@@ -177,6 +184,7 @@ export function FareCalendar({
             </span>
           </div>
         </div>
+        </>
       ) : null}
     </div>
   );

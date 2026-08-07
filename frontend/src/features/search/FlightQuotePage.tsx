@@ -169,8 +169,10 @@ export function FlightQuotePage({
           </div>
         ) : quote && selectedCabin ? (
           <>
-            {/* Cabin tabs. */}
-            <div className="mt-4 flex flex-wrap gap-2">
+            {/* Cabin tabs. Two even columns on a phone - four pills of very
+                uneven width ("First" vs "Premium Economy") wrapped into a
+                ragged 3+1 that read as a mistake rather than a choice. */}
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
               {cabins.map((c) => {
                 const active = c.travelClass === selectedCabin.travelClass;
                 return (
@@ -180,7 +182,7 @@ export function FlightQuotePage({
                     onClick={() => setCabin(c.travelClass)}
                     aria-pressed={active}
                     className={
-                      'rounded-full px-5 py-2 text-sm font-bold transition ' +
+                      'flex min-h-11 items-center justify-center gap-1 rounded-full px-3 text-center text-sm font-bold transition sm:px-5 sm:py-2 ' +
                       (active
                         ? 'bg-brand-950 text-white'
                         : 'border border-slate-300 bg-white text-slate-700 hover:border-slate-500')

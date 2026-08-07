@@ -56,8 +56,32 @@ export function BookingStepper({
         </div>
       ) : null}
 
-      {/* Stages. */}
-      <div className="mx-auto flex max-w-6xl items-center justify-center gap-1 overflow-x-auto px-6 py-3 sm:gap-2">
+      {/*
+        Phone: a named step and a bar, not five chips and four dotted runs.
+
+        The chip row below is ~640 px of icons joined by wide-tracked dot
+        leaders; on a 390 px screen it overflowed into a horizontal scroller
+        and the first and last stages sat half off the edges - visible in the
+        wild as a cut-off ladder. A progress bar cannot overflow, and "Step 4
+        of 5 · Bags" tells a passenger more than five anonymous icons did.
+      */}
+      <div className="mx-auto max-w-6xl px-4 py-3 sm:hidden">
+        <div className="flex items-baseline justify-between">
+          <span className="text-sm font-semibold text-white">{STAGES[currentIndex]?.label}</span>
+          <span className="tabular text-xs text-white/60">
+            Step {currentIndex + 1} of {STAGES.length}
+          </span>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/15">
+          <div
+            className="h-full rounded-full bg-accent-500 transition-all duration-300"
+            style={{ width: `${((currentIndex + 1) / STAGES.length) * 100}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Stages - sm and up, where the chips genuinely fit. */}
+      <div className="mx-auto hidden max-w-6xl items-center justify-center gap-1 px-6 py-3 sm:flex sm:gap-2">
         {STAGES.map((stage, index) => {
           const done = index < currentIndex;
           const active = index === currentIndex;

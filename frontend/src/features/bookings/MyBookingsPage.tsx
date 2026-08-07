@@ -117,8 +117,40 @@ export function MyBookingsPage({ onOpen }: { onOpen: (booking: Booking) => void 
 
       {/* Sticky group filter - stays put while the list scrolls. */}
       {bookings && bookings.length > 0 ? (
-        <div className="sticky top-0 z-10 -mx-2 mt-5 overflow-x-auto bg-[var(--page-bg,#f8fafc)]/95 px-2 py-2 backdrop-blur">
-          <div className="flex w-max gap-1.5">
+        <div className="sticky top-0 z-10 -mx-2 mt-5 bg-[var(--page-bg,#f8fafc)]/95 px-2 py-2 backdrop-blur">
+          {/*
+            Phone: one control, not a conveyor belt.
+
+            Six count-bearing pills in a w-max row meant the filters
+            themselves scrolled sideways - the options past "Checked in" were
+            simply off-screen unless you thought to drag the strip, which is
+            not a thing people think to do. A native select shows every
+            option in the OS picker, states the current one, and cannot
+            overflow. The pills stay from sm upward, where they fit.
+          */}
+          <label className="sm:hidden">
+            <span className="sr-only">Filter trips</span>
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as typeof filter)}
+              className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800"
+            >
+              {[{ id: 'all' as const, label: 'All' }, ...GROUPS].map((g) => {
+                const count =
+                  g.id === 'all'
+                    ? bookings.length
+                    : bookings.filter((b) => groupOf(b, legsOf(b)) === g.id).length;
+                if (g.id !== 'all' && count === 0) return null;
+                return (
+                  <option key={g.id} value={g.id}>
+                    {g.label} ({count})
+                  </option>
+                );
+              })}
+            </select>
+          </label>
+
+          <div className="hidden flex-wrap gap-1.5 sm:flex">
             {[{ id: 'all' as const, label: 'All' }, ...GROUPS].map((g) => {
               const count =
                 g.id === 'all'

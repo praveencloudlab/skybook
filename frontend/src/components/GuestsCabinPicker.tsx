@@ -101,10 +101,27 @@ export function GuestsCabinPicker({
       </button>
 
       {open ? (
+        <>
+          {/*
+            Phone: a bottom sheet, not a dropdown.
+
+            The panel is absolutely positioned, so it never displaced the
+            fields - but it is tall, it opens below a widget already near the
+            top of the page, and the document grows to contain it. The result
+            on a phone is the page lurching downward the moment you tap a
+            field. A sheet is fixed to the viewport: it cannot lengthen the
+            document, it lands under the thumb rather than above it, and the
+            backdrop gives an obvious way out. Unchanged from sm upward.
+          */}
+          <div
+            className="fixed inset-0 z-40 bg-slate-900/40 sm:hidden"
+            aria-hidden="true"
+            onClick={() => setOpen(false)}
+          />
         <div
           role="dialog"
           aria-label="Choose guests and cabin"
-          className="absolute inset-x-0 top-full z-30 mt-3 rounded-2xl bg-white p-6 shadow-[var(--shadow-float)] sm:p-8"
+          className="fixed inset-x-0 bottom-0 z-50 max-h-[85vh] overflow-y-auto rounded-t-2xl bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-[var(--shadow-float)] sm:absolute sm:inset-x-0 sm:bottom-auto sm:top-full sm:z-30 sm:mt-3 sm:max-h-none sm:rounded-2xl sm:p-8 sm:pb-8"
         >
           <div className="grid gap-8 md:grid-cols-2">
             {/* Guests */}
@@ -192,6 +209,7 @@ export function GuestsCabinPicker({
             </button>
           </div>
         </div>
+        </>
       ) : null}
     </div>
   );

@@ -104,8 +104,18 @@ export function BookingWidget({
 
   return (
     <form onSubmit={submit} className="relative z-20">
-      {/* Trip-type tabs: only one-way flying exists today. */}
-      <div className="inline-flex items-center gap-1 rounded-t-2xl bg-white px-2 pt-2">
+      {/*
+        Trip-type tabs.
+
+        The desktop shape is a folder tab: a content-width strip perched on
+        the panel's top-left, which is why the panel below squares only its
+        top-LEFT corner. On a phone that read as two mismatched cards - the
+        strip ended a third of the way across while the panel ran full width,
+        so their edges never lined up. Below sm the strip is full width and
+        the three options share it equally, so the tabs and the panel are one
+        card with one outline.
+      */}
+      <div className="grid grid-cols-3 gap-1 rounded-t-2xl bg-white px-2 pt-2 sm:inline-flex sm:items-center">
         <button
           type="button"
           onClick={() => {
@@ -114,7 +124,7 @@ export function BookingWidget({
           }}
           aria-pressed={tripType === 'round'}
           className={
-            'flex min-h-11 items-center rounded-full px-4 text-sm font-semibold transition sm:min-h-0 sm:py-1.5 ' +
+            'flex min-h-11 items-center justify-center rounded-full px-2 text-center text-xs font-semibold transition sm:min-h-0 sm:justify-start sm:px-4 sm:py-1.5 sm:text-sm ' +
             (tripType === 'round' ? 'bg-brand-900 text-white' : 'text-slate-500 hover:text-slate-800')
           }
         >
@@ -125,7 +135,7 @@ export function BookingWidget({
           onClick={() => setTripType('oneway')}
           aria-pressed={tripType === 'oneway'}
           className={
-            'flex min-h-11 items-center rounded-full px-4 text-sm font-semibold transition sm:min-h-0 sm:py-1.5 ' +
+            'flex min-h-11 items-center justify-center rounded-full px-2 text-center text-xs font-semibold transition sm:min-h-0 sm:justify-start sm:px-4 sm:py-1.5 sm:text-sm ' +
             (tripType === 'oneway' ? 'bg-brand-900 text-white' : 'text-slate-500 hover:text-slate-800')
           }
         >
@@ -139,7 +149,7 @@ export function BookingWidget({
           }}
           aria-pressed={tripType === 'multi'}
           className={
-            'flex min-h-11 items-center rounded-full px-4 text-sm font-semibold transition sm:min-h-0 sm:py-1.5 ' +
+            'flex min-h-11 items-center justify-center rounded-full px-2 text-center text-xs font-semibold transition sm:min-h-0 sm:justify-start sm:px-4 sm:py-1.5 sm:text-sm ' +
             (tripType === 'multi' ? 'bg-brand-900 text-white' : 'text-slate-500 hover:text-slate-800')
           }
         >
@@ -147,20 +157,30 @@ export function BookingWidget({
         </button>
       </div>
 
-      {/* The relative container both full-width panels resolve against. */}
-      <div className="relative rounded-b-2xl rounded-tr-2xl bg-white p-4 shadow-[var(--shadow-float)]">
+      {/* The relative container both full-width panels resolve against.
+          rounded-tr only from sm: on a phone the tab strip spans the full
+          width, so a square top-right would leave one odd corner. */}
+      <div className="relative rounded-b-2xl bg-white p-4 shadow-[var(--shadow-float)] sm:rounded-tr-2xl">
         <div
           className={
             // lg, not md: at exactly 768 px the multi-column row wanted
             // 720 px of a 688 px panel and clipped its search button. A
             // tablet gets the stacked layout, which fits.
-            'grid items-center gap-2 ' +
+            //
+            // gap-2 from lg only. Stacked, the swap button is lifted OUT of
+            // the flow (below), so a row gap would just reopen the hole it
+            // used to sit in - the fields want to touch, the way they do in
+            // every airline app.
+            'grid items-center gap-y-2 lg:gap-2 ' +
             (tripType === 'round'
               ? 'lg:grid-cols-[1fr_auto_1fr_1fr_1fr_1fr_auto]'
               : 'lg:grid-cols-[1fr_auto_1fr_1fr_1fr_auto]')
           }
         >
-          <AirportField label={t('widget.from')} value={origin} onChange={setOrigin} exclude={destination} />
+          {/* From and To are one visual pair on a phone; the swap control
+              straddles their divider rather than pushing them apart. */}
+          <div className="relative lg:contents">
+            <AirportField label={t('widget.from')} value={origin} onChange={setOrigin} exclude={destination} />
 
           <button
             type="button"
@@ -174,12 +194,13 @@ export function BookingWidget({
               airline app uses); the desktop row keeps the original quiet
               borderless icon.
             */
-            className="grid h-11 w-11 shrink-0 place-items-center justify-self-end rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 hover:text-slate-700 md:h-8 md:w-8 md:justify-self-auto md:border-0 md:bg-transparent md:text-slate-400 md:shadow-none md:hover:bg-slate-100"
+            className="absolute -bottom-5 right-3 z-10 grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-md transition hover:bg-slate-50 hover:text-slate-700 lg:static lg:h-8 lg:w-8 lg:justify-self-auto lg:border-0 lg:bg-transparent lg:text-slate-400 lg:shadow-none lg:hover:bg-slate-100"
           >
             <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
               <path d="M7 7h11l-3-3 1.4-1.4L21.8 8 16.4 13.4 15 12l3-3H7V7zm10 10H6l3 3-1.4 1.4L2.2 16 7.6 10.6 9 12l-3 3h11v2z" />
             </svg>
           </button>
+          </div>
 
           <AirportField label={t('widget.to')} value={destination} onChange={setDestination} exclude={origin} />
 
