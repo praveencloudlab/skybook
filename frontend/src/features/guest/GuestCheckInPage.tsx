@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import type { Booking } from '../../api/bookings';
 import type { BoardingPass, CheckIn } from '../../api/checkin';
+import { flightsApi, type Flight } from '../../api/flights';
 import { guestApi } from '../../api/guest';
 import { Alert, ErrorAlert } from '../../components/Alert';
 import { Button } from '../../components/Button';
@@ -33,6 +34,15 @@ export function GuestCheckInPage() {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [passes, setPasses] = useState<Record<number, BoardingPass>>({});
   const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * The flight behind the check-in rows. Fetched separately because a CheckIn
+   * carries only its DEPARTURE - and a trip card showing where you leave but
+   * not where you land is half a card. Flight schedules are public shopping
+   * data (the gateway's PUBLIC_PATHS), so this needs no credential and cannot
+   * fail the guest session; if it does not answer, the card simply shows the
+   * departure it already had.
+   */
+  const [flightDetails, setFlightDetails] = useState<Flight | null>(null);
 
   const load = useCallback(async (id: number) => {
     // guestApi, not the signed-in page's clients: these calls must not carry
@@ -50,6 +60,11 @@ export function GuestCheckInPage() {
       issued.map((r) => guestApi.boardingPass(r.id).then((p) => [r.id, p] as const).catch(() => null)),
     );
     setPasses(Object.fromEntries(fetched.filter(Boolean) as (readonly [number, BoardingPass])[]));
+
+    const flightId = records[0]?.flightId;
+    if (flightId) {
+      flightsApi.byId(flightId).then(setFlightDetails).catch(() => setFlightDetails(null));
+    }
   }, []);
 
   /** A lapsed or rejected guest session returns to the lookup form, never to /sign-in. */
@@ -168,27 +183,91 @@ export function GuestCheckInPage() {
 
   const flight = checkIns[0];
 
+  const bookingRef = booking?.bookingReference ?? flight?.bookingReference ?? "";
+
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-10">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Your trip</h1>
-          {flight ? (
-            <p className="mt-1 text-sm text-slate-600">
-              {flight.originAirportCode} → {flight.destinationAirportCode} ·{' '}
-              {dayAndMonth(flight.departureTime)} {time(flight.departureTime)} ·{' '}
-              {flight.flightNumber} · {booking?.bookingReference ?? flight.bookingReference}
-            </p>
-          ) : null}
-        </div>
+    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:py-10">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Your trip</h1>
         <button
           type="button"
           onClick={handleDone}
-          className="rounded-full border border-slate-300 bg-white px-5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          className="min-h-11 rounded-full border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
         >
           Done
         </button>
       </div>
+
+      {/*
+        The trip, as a card rather than a sentence.
+
+        This used to be one run-on line - "LHR → DXB · 8 Aug 08:25 · EK001 ·
+        SBPVX6" - which is everything a passenger needs and nothing they can
+        read at a glance. A boarding-pass-shaped card puts the reference where
+        the eye goes first, the route in the middle at the size the times
+        deserve, and the flight underneath. Same information, arranged the way
+        an airline arranges it.
+      */}
+      {flight ? (
+        <section className="mt-4 overflow-hidden rounded-2xl bg-brand-950 text-white shadow-[var(--shadow-float)]">
+          <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5 sm:px-6">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
+                Booking reference
+              </p>
+              <p className="tabular mt-1 text-2xl font-bold tracking-[0.16em] sm:text-3xl">
+                {bookingRef}
+              </p>
+            </div>
+            <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white/85 ring-1 ring-inset ring-white/15">
+              {dayAndMonth(flight.departureTime)}
+            </span>
+          </div>
+
+          <div className="mt-5 flex items-center gap-3 px-5 pb-5 sm:gap-5 sm:px-6">
+            <div className="min-w-0">
+              <p className="tabular text-3xl font-semibold leading-none sm:text-4xl">
+                {time(flight.departureTime)}
+              </p>
+              <p className="mt-1.5 text-sm font-semibold tracking-wide text-white/70">
+                {flight.originAirportCode}
+              </p>
+            </div>
+
+            {/* The connector: a plane between two dots, the airline idiom. */}
+            <div className="flex flex-1 items-center gap-1.5 pb-5" aria-hidden="true">
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/40" />
+              <span className="h-px flex-1 bg-white/25" />
+              <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-accent-300">
+                <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
+              </svg>
+              <span className="h-px flex-1 bg-white/25" />
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/40" />
+            </div>
+
+            <div className="min-w-0 text-right">
+              <p className="tabular text-3xl font-semibold leading-none sm:text-4xl">
+                {time(flightDetails?.arrivalTime ?? flight.departureTime)}
+              </p>
+              <p className="mt-1.5 text-sm font-semibold tracking-wide text-white/70">
+                {flight.destinationAirportCode}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-white/10 bg-white/[0.04] px-5 py-3 text-xs text-white/70 sm:px-6">
+            <span>
+              Flight <span className="tabular font-semibold text-white/90">{flight.flightNumber}</span>
+            </span>
+            <span>
+              {checkIns.length} {checkIns.length === 1 ? 'passenger' : 'passengers'}
+            </span>
+            {flight.travelClass ? (
+              <span className="capitalize">{flight.travelClass.replace('_', ' ').toLowerCase()}</span>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
 
       <div className="mt-4">
         <ErrorAlert error={error} />
@@ -212,6 +291,48 @@ export function GuestCheckInPage() {
         </div>
       )}
     </main>
+  );
+}
+
+/** "Praveenreddy Somireddy" -> "PS". One letter when there is only one word. */
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  const first = parts[0][0] ?? '';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] ?? '' : '';
+  return (first + last).toUpperCase();
+}
+
+/**
+ * Check-in state as a coloured pill rather than a lower-cased enum. The
+ * words are the passenger's, not the schema's: NOT_OPEN is a time, not a
+ * failure, and it should not read like one.
+ */
+function StatusPill({ status }: { status: CheckIn['status'] }) {
+  const style =
+    status === 'CHECKED_IN' || status === 'BOARDED'
+      ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+      : status === 'OPEN'
+        ? 'bg-sky-50 text-sky-700 ring-sky-100'
+        : status === 'NO_SHOW' || status === 'CANCELLED'
+          ? 'bg-red-50 text-red-600 ring-red-100'
+          : 'bg-slate-100 text-slate-500 ring-slate-200';
+  const label =
+    status === 'CHECKED_IN'
+      ? 'Checked in'
+      : status === 'BOARDED'
+        ? 'Boarded'
+        : status === 'OPEN'
+          ? 'Ready to check in'
+          : status === 'NOT_OPEN'
+            ? 'Opens 24h before'
+            : status === 'NO_SHOW'
+              ? 'Check-in closed'
+              : status.replace('_', ' ').toLowerCase();
+  return (
+    <span className={'rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset ' + style}>
+      {label}
+    </span>
   );
 }
 
@@ -246,14 +367,31 @@ function GuestPassengerRow({
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="font-semibold text-slate-900">{record.passengerName}</p>
-          <p className="text-sm text-slate-500">
-            {record.seatNumber ? `Seat ${record.seatNumber}` : 'Seat assigned at check-in'} ·{' '}
-            {record.status.replace('_', ' ').toLowerCase()}
-          </p>
+    <section className="card p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          {/* An initial disc: on a booking with three passengers, the eye
+              finds the row it wants before it reads any of them. */}
+          <span
+            aria-hidden="true"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-50 text-sm font-bold text-brand-700 ring-1 ring-inset ring-brand-100"
+          >
+            {initials(record.passengerName)}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-slate-900">{record.passengerName}</p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <StatusPill status={record.status} />
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                {record.seatNumber ? `Seat ${record.seatNumber}` : 'Seat at check-in'}
+              </span>
+              {record.travelClass ? (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold capitalize text-slate-600">
+                  {record.travelClass.replace('_', ' ').toLowerCase()}
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
         {record.status === 'OPEN' ? (
           <Button onClick={onCheckIn} busy={busy}>

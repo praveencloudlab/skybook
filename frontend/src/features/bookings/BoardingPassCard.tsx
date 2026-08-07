@@ -64,7 +64,100 @@ export function BoardingPassCard({
   };
 
   return (
-    <div className="overflow-x-auto">
+    <>
+      {/*
+        The phone pass.
+
+        The landscape ticket below is 640 px of deliberate airline geometry -
+        main coupon, tear line, tear-off stub - and on a 390 px screen it was
+        simply cut off mid-word inside a horizontal scroller. A boarding pass
+        is the one artifact that is ALWAYS read on a phone, at a gate, in a
+        hurry, so it gets a portrait layout of its own rather than a sideways
+        drag: same data, same red chrome, stacked. The desktop ticket is
+        untouched from `sm` upward.
+      */}
+      <div className="sm:hidden">
+        <div className="overflow-hidden rounded-2xl bg-white shadow-[var(--shadow-lift)] ring-1 ring-slate-200">
+          <div className="flex items-center justify-between px-4 py-3 text-white" style={{ background: RED }}>
+            <div className="flex items-center gap-2">
+              <Logo />
+              <span className="text-lg font-extrabold italic tracking-tight">SkyBook</span>
+            </div>
+            <span className="rounded bg-white/20 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider">
+              {cabin}
+            </span>
+          </div>
+
+          <div className="relative px-4 pb-4 pt-3" style={mapBg}>
+            <div className="text-[10px] font-bold tracking-wide text-slate-400">PASSENGER</div>
+            <div className="text-lg font-extrabold leading-tight tracking-wide text-slate-900">
+              {pass.passengerName.toUpperCase()}
+            </div>
+
+            {/* Route: the biggest thing on the card, as on the ticket. */}
+            <div className="mt-3 flex items-center gap-2">
+              <div className="min-w-0">
+                <div className="text-3xl font-extrabold leading-none text-slate-900">{pass.originAirportCode}</div>
+                <div className="tabular mt-1 text-sm font-semibold text-slate-500">{departTime}</div>
+              </div>
+              <div className="flex flex-1 items-center gap-1" aria-hidden="true">
+                <span className="h-px flex-1 bg-slate-300" />
+                <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" style={{ fill: RED }}>
+                  <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" />
+                </svg>
+                <span className="h-px flex-1 bg-slate-300" />
+              </div>
+              <div className="min-w-0 text-right">
+                <div className="text-3xl font-extrabold leading-none text-slate-900">{pass.destinationAirportCode}</div>
+                <div className="tabular mt-1 text-sm font-semibold text-slate-500">{_arrivalTime ? time(_arrivalTime) : DASH}</div>
+              </div>
+            </div>
+
+            {/* The four numbers a gate agent and a passenger both look for. */}
+            <div className="mt-4 grid grid-cols-4 gap-2 border-t border-dashed border-slate-300 pt-3">
+              <MobileCell label="FLIGHT" value={pass.flightNumber} />
+              <MobileCell label="SEAT" value={pass.seatNumber ?? TBA} />
+              <MobileCell label="GATE" value={gate} />
+              <MobileCell label="GROUP" value={group} />
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <MobileCell label="BOARDING" value={boardTime} />
+              <MobileCell label="AT GATE BY" value={gateBy} />
+            </div>
+
+            {/* The scannable part, big enough for a real scanner. */}
+            {qr ? (
+              <div className="mt-4 flex items-center gap-3 border-t border-dashed border-slate-300 pt-4">
+                <div
+                  className="h-24 w-24 shrink-0 rounded bg-white p-1 ring-1 ring-slate-200 [&>svg]:h-full [&>svg]:w-full"
+                  dangerouslySetInnerHTML={{ __html: qr }}
+                />
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold tracking-wide text-slate-400">BOOKING REF (PNR)</div>
+                  <div className="tabular text-lg font-extrabold" style={{ color: RED }}>{pnr}</div>
+                  <div className="tabular mt-1 break-all font-mono text-[10px] text-slate-500">
+                    {pass.boardingPassNumber}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => printBoardingPass(pass, record, _arrivalTime)}
+          className="mt-3 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-slate-300 bg-white text-sm font-semibold text-slate-700 transition hover:border-red-300 hover:text-red-600"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+            <path d="M5 20h14v-2H5v2zM12 2v10.17l3.59-3.58L17 10l-5 5-5-5 1.41-1.41L12 12.17V2z" />
+          </svg>
+          Download boarding pass
+        </button>
+      </div>
+
+      {/* ---------------- The landscape ticket, sm and up ---------------- */}
+      <div className="hidden overflow-x-auto sm:block">
       {/* Download lives ABOVE the ticket - not stamped onto the pass itself. */}
       <div className="mb-2 flex min-w-[640px] justify-end">
         <button
@@ -185,7 +278,8 @@ export function BoardingPassCard({
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -285,5 +379,15 @@ function PlaneIcon({ className, style }: { className?: string; style?: React.CSS
     <svg viewBox="0 0 24 24" className={className} style={style} aria-hidden="true">
       <path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z" transform="rotate(90 12 12)" />
     </svg>
+  );
+}
+
+/** One labelled value on the phone pass - small caption, prominent value. */
+function MobileCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[10px] font-bold tracking-wide text-slate-400">{label}</div>
+      <div className="tabular truncate text-sm font-extrabold text-slate-900">{value}</div>
+    </div>
   );
 }
