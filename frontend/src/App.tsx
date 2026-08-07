@@ -175,7 +175,13 @@ function Header() {
           </svg>
         </button>
 
-        <nav className="hidden items-center gap-1 text-sm lg:flex lg:gap-2">
+        {/*
+          Two visual tiers, on purpose (the header used to blur them):
+          NAV items are plain TEXT that brightens on hover - they navigate.
+          The one ACTION, Sign in, is a solid button - it does something. A
+          passenger should never have to guess which is which.
+        */}
+        <nav className="hidden items-center gap-5 text-sm lg:flex">
           {/* Language + display currency. Both persist and reload so every
               t()/price() call site repaints - a settings change, not a hot path. */}
           <select
@@ -202,7 +208,7 @@ function Header() {
           {isAdmin ? (
             <Link
               to="/admin"
-              className="rounded-lg px-2.5 py-1.5 font-semibold text-accent-200 transition hover:bg-white/10 hover:text-accent-100"
+              className="font-semibold text-accent-300 transition hover:text-accent-200"
             >
               Admin console
             </Link>
@@ -210,7 +216,7 @@ function Header() {
             <Link
               to="/search"
               onClick={() => sessionStorage.removeItem(JOURNEY_KEY)}
-              className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+              className="font-medium text-white/75 transition hover:text-white"
             >
               {t('nav.search')}
             </Link>
@@ -223,7 +229,7 @@ function Header() {
           {!isAdmin ? (
             <Link
               to="/check-in"
-              className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+              className="font-medium text-white/75 transition hover:text-white"
             >
               Check-in
             </Link>
@@ -233,14 +239,14 @@ function Header() {
               {!isAdmin ? (
                 <Link
                   to="/bookings"
-                  className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+                  className="font-medium text-white/75 transition hover:text-white"
                 >
                   {t('nav.trips')}
                 </Link>
               ) : null}
               <Link
                 to="/profile"
-                className="hidden rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white sm:inline-block"
+                className="hidden font-medium text-white/75 transition hover:text-white sm:inline-block"
                 title={subject ?? ''}
               >
                 {t('nav.profile')}
@@ -248,7 +254,7 @@ function Header() {
               <button
                 type="button"
                 onClick={signOut}
-                className="rounded-lg px-2.5 py-1.5 font-medium text-white/80 transition hover:bg-white/10 hover:text-white"
+                className="font-medium text-white/75 transition hover:text-white"
               >
                 {t('nav.signout')}
               </button>
@@ -256,7 +262,7 @@ function Header() {
           ) : (
             <Link
               to="/sign-in"
-              className="rounded-lg bg-white/10 px-3.5 py-1.5 font-semibold text-white ring-1 ring-white/20 transition hover:bg-white/20"
+              className="rounded-lg bg-white px-4 py-2 font-semibold text-brand-950 shadow-sm transition hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400"
             >
               {t('nav.signin')}
             </Link>

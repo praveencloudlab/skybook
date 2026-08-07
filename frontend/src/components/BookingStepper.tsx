@@ -34,25 +34,37 @@ export function BookingStepper({
 
   return (
     <div className="bg-brand-950 text-white">
-      {/* Trip summary strip. */}
+      {/*
+        Trip summary strip: a leading Back button, then the journey.
+
+        Back sits on the LEFT, where a back control belongs, as an
+        unmistakable button - a filled chip with an arrow, not an outline that
+        blends into the caption beside it. It used to trail the date/time as a
+        faint pill, reading as one more piece of text rather than a control.
+      */}
       {flight ? (
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-1 px-6 pt-3 text-sm text-white/85">
-          {route ? <span className="font-semibold text-white">{route}</span> : null}
-          <span className="hidden text-white/30 sm:inline">|</span>
-          <span className="tabular">
-            {new Date(flight.departureTime).toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short' })}
-            {' · '}
-            {time(flight.departureTime)}
-          </span>
+        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 pt-3 sm:px-6">
           {onModify ? (
             <button
               type="button"
               onClick={onModify}
-              className="inline-flex items-center gap-1 rounded-full border border-white/25 px-3 py-0.5 font-semibold text-white/85 transition hover:bg-white/10"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-white/10 px-3 py-1.5 text-sm font-semibold text-white ring-1 ring-inset ring-white/20 transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400"
             >
-              ← {t('stepper.back')}
+              <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                <path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z" />
+              </svg>
+              {t('stepper.back')}
             </button>
           ) : null}
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-0.5 text-sm text-white/85">
+            {route ? <span className="truncate font-semibold text-white">{route}</span> : null}
+            <span className="hidden text-white/25 sm:inline">|</span>
+            <span className="tabular text-white/70">
+              {new Date(flight.departureTime).toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short' })}
+              {' · '}
+              {time(flight.departureTime)}
+            </span>
+          </div>
         </div>
       ) : null}
 
