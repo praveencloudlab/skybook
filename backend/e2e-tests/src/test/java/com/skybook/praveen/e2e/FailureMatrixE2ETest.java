@@ -124,12 +124,25 @@ class FailureMatrixE2ETest {
     // ---- authentication / authorization -------------------------------------
 
     @Test
-    @DisplayName("no token reaches nothing")
+    @DisplayName("no token reaches nothing PRIVATE - but shopping stays open")
     void unauthenticatedIsRejected() {
+        // Anything belonging to a person needs a credential.
         assertThat(RestAssured.given().when().get("/api/bookings/1").statusCode())
+                .as("someone else's booking must never answer an anonymous caller")
                 .isEqualTo(401);
+        assertThat(RestAssured.given().when().get("/api/bookings/mine").statusCode())
+                .as("'my' anything is meaningless without a token")
+                .isEqualTo(401);
+
+        // Shopping data is deliberately public: a visitor searches and prices
+        // a trip before any account exists, the way every travel site works
+        // (the gateway's PUBLIC_PATHS carries /api/flights/**). This assertion
+        // used to demand 401 here, which quietly became wrong the day public
+        // search shipped - and left this suite red for four nights. It now
+        // pins the boundary as designed rather than as it once was.
         assertThat(RestAssured.given().when().get("/api/flights").statusCode())
-                .isEqualTo(401);
+                .as("public shopping data must remain reachable without an account")
+                .isEqualTo(200);
     }
 
     @Test

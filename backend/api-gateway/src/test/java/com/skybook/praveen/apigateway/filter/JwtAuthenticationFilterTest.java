@@ -151,10 +151,11 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void theGuestCookieWinsInsideTheGuestCapableSurface() throws Exception {
+    void theGuestCookieWinsWhenTheGUEST_PAGE_ASKS_FOR_IT() throws Exception {
         request.setMethod("GET");
         request.setRequestURI("/api/checkins/booking/41");
         bothCookies();
+        request.addHeader(JwtAuthenticationFilter.GUEST_INTENT_HEADER, "1");
         when(jwtValidator.validate("guest-token")).thenReturn(guestPrincipal(41L));
 
         filter.doFilter(request, response, chain());
@@ -162,6 +163,30 @@ class JwtAuthenticationFilterTest {
         assertThat(chainInvoked).isTrue();
         assertThat(((HttpServletRequest) forwardedRequest).getHeader("Authorization"))
                 .isEqualTo("Bearer guest-token");
+    }
+
+    @Test
+    void aLeftoverGuestCookieNeverAnswersForTheAccountThatOWNS_THE_BOOKING() throws Exception {
+        // THE reported bug. An agency checks a passenger in as a guest; the
+        // guest cookie outlives that errand. Later, signed in, the agency
+        // opens its own booking - and the check-in call is a guest-capable
+        // path. Deciding on path alone handed over the stale booking-scoped
+        // guest credential, so the owner's own booking answered "not found"
+        // and the boarding pass they were entitled to see never appeared.
+        //
+        // No X-Skybook-Guest header here: this is the OWNER's page, not the
+        // guest page, so the account session must speak.
+        request.setMethod("GET");
+        request.setRequestURI("/api/checkins/booking/41");
+        bothCookies();
+        when(jwtValidator.validate("session-token")).thenReturn(userPrincipal("agency@skybook.com"));
+
+        filter.doFilter(request, response, chain());
+
+        assertThat(chainInvoked).isTrue();
+        assertThat(((HttpServletRequest) forwardedRequest).getHeader("Authorization"))
+                .as("the owner's session must not be displaced by a leftover guest cookie")
+                .isEqualTo("Bearer session-token");
     }
 
     @Test

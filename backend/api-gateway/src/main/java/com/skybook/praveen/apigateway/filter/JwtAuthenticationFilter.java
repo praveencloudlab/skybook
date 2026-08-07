@@ -62,6 +62,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     public static final String GUEST_COOKIE_INSECURE = "skybook_guest";
 
     /**
+     * The guest check-in page's declaration that THIS call is a guest errand
+     * (see {@link #chooseAmbientCredential}). A header, not a cookie: the
+     * browser sends cookies whether or not they are wanted, which is exactly
+     * how a stale guest session came to answer for an account holder.
+     */
+    public static final String GUEST_INTENT_HEADER = "X-Skybook-Guest";
+
+    /**
      * The guest-capable surface (GUEST_CHECKIN_MODULE.md §3.2): ON these
      * paths, and only these, the guest cookie is preferred over the account
      * session cookie when both are present. Everywhere else the guest cookie
@@ -185,7 +193,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (guestToken == null) {
                 guestToken = cookieValue(request, GUEST_COOKIE_INSECURE);
             }
-            token = (guestToken != null && isGuestCapable(path)) ? guestToken : sessionToken;
+            token = chooseAmbientCredential(request, path, sessionToken, guestToken);
             fromCookie = token != null;
         }
 
@@ -237,6 +245,39 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private boolean isGuestCapable(String path) {
         PathContainer pathContainer = PathContainer.parsePath(path);
         return GUEST_CAPABLE_PATHS.stream().anyMatch(pattern -> pattern.matches(pathContainer));
+    }
+
+    /**
+     * Which ambient credential speaks for this request when the browser
+     * carries both an account session and a guest cookie.
+     *
+     * <p><b>The account session wins by default.</b> The first version of
+     * this decided on PATH alone - guest cookie preferred anywhere in the
+     * guest-capable surface - and that was wrong in the way only a real
+     * browser shows you: a guest cookie outlives the errand that created
+     * it, so an agency that had once checked a passenger in was still
+     * carrying one, and every check-in and boarding-pass call on its OWN
+     * bookings was answered with that stale booking-scoped credential.
+     * The owner saw "not found" on their own booking, and the boarding
+     * pass they had every right to see never appeared. Reported live.
+     *
+     * <p>So the guest credential is now used only when the caller ASKS for
+     * it, by sending {@code X-Skybook-Guest: 1} - which the guest check-in
+     * page does on every call and nothing else does. The cookie stays
+     * httpOnly and unreadable to JavaScript; the page signals intent, not
+     * the credential. When there is no session at all - a passenger with
+     * no account, which is the whole point of the feature - the guest
+     * cookie is used without ceremony.
+     */
+    private String chooseAmbientCredential(HttpServletRequest request, String path,
+                                           String sessionToken, String guestToken) {
+        if (guestToken == null || !isGuestCapable(path)) {
+            return sessionToken;
+        }
+        if (sessionToken == null) {
+            return guestToken;
+        }
+        return "1".equals(request.getHeader(GUEST_INTENT_HEADER)) ? guestToken : sessionToken;
     }
 
     private HttpServletRequest wrapWithAuthUser(HttpServletRequest request, String subject) {

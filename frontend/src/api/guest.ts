@@ -18,7 +18,24 @@ export interface GuestSession {
 }
 
 /** See the note on the journey calls below - a guest is never sent to /sign-in. */
-const SILENT = { silent401: true } as const;
+/*
+ * Every guest call carries two things.
+ *
+ * silent401: a guest has no account to sign in to, so the shared client's
+ * "401 -> go to /sign-in" reflex must not fire here (it once stranded
+ * passengers on a login page they could not use).
+ *
+ * X-Skybook-Guest: this call is a GUEST errand, so the gateway should read
+ * the guest cookie rather than any account session the browser also holds.
+ * Without it the account session wins - which is what an agency wants on
+ * its own booking pages, and what it did NOT get before this header
+ * existed: a leftover guest cookie answered for them and their own
+ * bookings came back "not found".
+ */
+const SILENT = {
+  silent401: true,
+  headers: { 'X-Skybook-Guest': '1' },
+} as const;
 
 export const guestApi = {
   /**

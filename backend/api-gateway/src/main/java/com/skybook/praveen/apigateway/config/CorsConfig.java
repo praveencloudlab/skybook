@@ -26,7 +26,11 @@ public class CorsConfig implements WebMvcConfigurer {
         registry.addMapping("/**")
                 .allowedOrigins(corsProperties.getAllowedOrigins().toArray(new String[0]))
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                .allowedHeaders("Authorization", "Content-Type")
+                // X-Skybook-Guest lets the guest check-in page ask for its own
+                // credential (JwtAuthenticationFilter#chooseAmbientCredential);
+                // a cross-origin preflight carrying it would be refused without
+                // this entry.
+                .allowedHeaders("Authorization", "Content-Type", "X-Skybook-Guest")
                 .allowCredentials(false);
     }
 }
