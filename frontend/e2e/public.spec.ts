@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openNav, closeNav } from './nav';
 
 /**
  * Public browsing + protected routes (FRONTEND_MODULE.md Module 19).
@@ -8,19 +9,28 @@ import { test, expect } from '@playwright/test';
  * pages send them to sign in.
  */
 test.describe('public browsing', () => {
-  test('landing shows the hero and an in-page search', async ({ page }) => {
+  test('landing shows the hero and an in-page search', async ({ page, isMobile }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: /where would you like to fly/i })).toBeVisible();
-    // Anonymous: the header CTA is Log in, not a signed-in nav.
-    await expect(page.getByRole('banner').getByRole('link', { name: 'Log in' })).toBeVisible();
+    // Anonymous: the nav CTA is Sign in, not a signed-in menu.
+    await openNav(page, isMobile);
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toBeVisible();
+    await closeNav(page, isMobile);
   });
 
-  test('anyone can search flights without logging in', async ({ page }) => {
-    await page.goto('/search?from=LHR&to=JFK');
+  test('anyone can search flights without logging in', async ({ page, isMobile }) => {
     // Auto-run from the deep link lands on results with at least one flight.
-    await expect(page.getByRole('button', { name: 'Select flight' }).first()).toBeVisible();
+    // Reload on a miss - the gateway rate-limits bursts during suite runs.
+    await expect(async () => {
+      await page.goto('/search?from=LHR&to=JFK');
+      await expect(page.getByRole('button', { name: 'Select', exact: true }).first()).toBeVisible({
+        timeout: 5_000,
+      });
+    }).toPass({ timeout: 60_000 });
     // Still anonymous.
-    await expect(page.getByRole('banner').getByRole('link', { name: 'Log in' })).toBeVisible();
+    await openNav(page, isMobile);
+    await expect(page.getByRole('banner').getByRole('link', { name: 'Sign in' })).toBeVisible();
+    await closeNav(page, isMobile);
   });
 
   test('a protected page redirects an anonymous visitor to sign in', async ({ page }) => {

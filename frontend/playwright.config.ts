@@ -22,5 +22,11 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    // Phone viewport (393px, touch, mobile UA) on the same Chromium build -
+    // catches layout overflow and mobile-hidden controls without another
+    // browser download. Real-Safari quirks stay out of scope here.
+    { name: 'mobile', use: { ...devices['Pixel 7'] } },
+  ],
 });
