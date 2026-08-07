@@ -74,10 +74,17 @@ class FailureMatrixE2ETest {
     @DisplayName("replaying an Idempotency-Key returns the same payment, not a second charge")
     void idempotentPaymentCreation() {
         String key = UUID.randomUUID().toString();
-        BigDecimal amount = new BigDecimal("250.00");
 
-        Response first = createPaymentAsAdmin(amount, key);
-        Response replay = createPaymentAsAdmin(amount, key);
+        // A replay is the SAME request sent twice - so the body must be
+        // identical, built ONCE. paymentBody() mints a fresh synthetic
+        // bookingId per call (nanoTime), which would make these two genuinely
+        // DIFFERENT requests; the server now (correctly) rejects a key reused
+        // with a different body as a 409 (IDEMPOTENCY_MODULE.md §3.2), so
+        // reusing a single body is what actually exercises replay.
+        String body = paymentBody(new BigDecimal("250.00"));
+
+        Response first = createPaymentAsAdmin(body, key);
+        Response replay = createPaymentAsAdmin(body, key);
 
         assertThat(first.jsonPath().getLong("id"))
                 .as("""
@@ -86,6 +93,15 @@ class FailureMatrixE2ETest {
                 .isEqualTo(replay.jsonPath().getLong("id"));
         assertThat(replay.jsonPath().getString("paymentReference"))
                 .isEqualTo(first.jsonPath().getString("paymentReference"));
+
+        // The other half of §3.2: the SAME key with a DIFFERENT body is a
+        // client bug, and must be refused rather than silently answered with
+        // the first payment. paymentBody() mints a new bookingId, so this is a
+        // genuinely different request under the same key.
+        int mismatch = createPaymentAsAdmin(new BigDecimal("250.00"), key).statusCode();
+        assertThat(mismatch)
+                .as("a key reused for a different request must 409, not replay someone else's payment")
+                .isEqualTo(409);
     }
 
     // ---- cancellation -------------------------------------------------------
@@ -186,11 +202,16 @@ class FailureMatrixE2ETest {
     // ---- helpers ------------------------------------------------------------
 
     private Response createPaymentAsAdmin(BigDecimal amount, String idempotencyKey) {
+        return createPaymentAsAdmin(paymentBody(amount), idempotencyKey);
+    }
+
+    /** Overload taking a PRE-BUILT body, so a replay can resend the identical request. */
+    private Response createPaymentAsAdmin(String body, String idempotencyKey) {
         return RestAssured.given()
                 .header("Authorization", "Bearer " + Identities.adminToken())
                 .header("Idempotency-Key", idempotencyKey)
                 .contentType("application/json")
-                .body(paymentBody(amount))
+                .body(body)
                 .when()
                 .post("/api/payments");
     }
