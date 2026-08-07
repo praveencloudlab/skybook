@@ -44,8 +44,13 @@ public class BookingController {
     )
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public BookingResponse createBooking(@Valid @RequestBody CreateBookingRequest request) {
-        return bookingFacade.createBooking(request);
+    public BookingResponse createBooking(
+            @Valid @RequestBody CreateBookingRequest request,
+            // Optional (IDEMPOTENCY_MODULE.md §3.3): a retry of a lost booking
+            // POST carries the same key and replays the original booking rather
+            // than creating a second one. Absent = the pre-existing behaviour.
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        return bookingFacade.createBooking(request, idempotencyKey);
     }
 
     @Operation(

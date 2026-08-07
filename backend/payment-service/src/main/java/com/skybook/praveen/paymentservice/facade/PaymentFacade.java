@@ -35,6 +35,16 @@ public class PaymentFacade {
 
     public PaymentResponse authorize(Long paymentId, ActionContext ctx) {
 
+        // State-idempotent (IDEMPOTENCY_MODULE.md §3.5): the intent is "be
+        // authorized". If it already is, the intent is satisfied - answer
+        // with the payment instead of a conflict. The client this serves is
+        // the one whose RESPONSE was lost: reporting an error on money that
+        // moved provokes retries and support tickets over a success.
+        PaymentResponse current = paymentService.getById(paymentId);
+        if (current.status() == com.skybook.praveen.paymentservice.enums.PaymentStatus.AUTHORIZED) {
+            return current;
+        }
+
         PaymentService.AuthorizationContext auth = paymentService.beginAuthorize(paymentId);
 
         GatewayResult result = gateway.authorize(auth.paymentReference(), auth.amount(), auth.currency());
@@ -49,6 +59,15 @@ public class PaymentFacade {
     }
 
     public PaymentResponse capture(Long paymentId, ActionContext ctx) {
+
+        // Same §3.5 replay as authorize: a captured payment answers a repeat
+        // capture with itself. Contradictory transitions (capture a CANCELLED
+        // payment) still 409 via the validator - only the satisfied-intent
+        // case replays.
+        PaymentResponse current = paymentService.getById(paymentId);
+        if (current.status() == com.skybook.praveen.paymentservice.enums.PaymentStatus.CAPTURED) {
+            return current;
+        }
 
         PaymentService.CaptureContext capture = paymentService.beginCapture(paymentId);
 

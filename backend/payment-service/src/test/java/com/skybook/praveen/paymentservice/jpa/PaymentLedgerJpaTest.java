@@ -21,6 +21,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Ledger children: PaymentTransaction (append-only), Refund, Invoice (one per captured payment). */
@@ -101,6 +102,47 @@ class PaymentLedgerJpaTest extends AbstractPostgresJpaTest {
         assertThat(transactionRepository.findByPaymentIdOrderByOccurredAtAsc(payment.getId()))
                 .extracting(PaymentTransaction::getType)
                 .containsExactly(TransactionType.AUTHORIZE, TransactionType.CAPTURE);
+    }
+
+    @Test
+    void aNamedRefundCauseHappensAtMostOncePerPayment() {
+        // The V3 partial unique index IS the double-refund fix (IDEMPOTENCY
+        // §3.6): the consumer merely translates this refusal into "already
+        // done". If this constraint ever vanishes, the status guard alone
+        // demonstrably re-admits redelivered cancellations - so the DATABASE
+        // property gets its own test, not just the consumer's handling of it.
+        refundRepository.saveAndFlush(Refund.builder()
+                .payment(payment)
+                .refundReference("REF-2026-CAUSAA")
+                .amount(new BigDecimal("50.00"))
+                .sourceReference("partial:42:12,14")
+                .build());
+
+        assertThatThrownBy(() -> refundRepository.saveAndFlush(Refund.builder()
+                .payment(payment)
+                .refundReference("REF-2026-CAUSAB")
+                .amount(new BigDecimal("50.00"))
+                .sourceReference("partial:42:12,14")
+                .build()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void manualRefundsWithoutACauseMayCoexist() {
+        // Desk refunds have no event behind them; NULL must not collide with
+        // NULL, or a second manual refund would become impossible.
+        refundRepository.saveAndFlush(Refund.builder()
+                .payment(payment)
+                .refundReference("REF-2026-NULLAA")
+                .amount(new BigDecimal("10.00"))
+                .build());
+
+        assertThatCode(() -> refundRepository.saveAndFlush(Refund.builder()
+                .payment(payment)
+                .refundReference("REF-2026-NULLAB")
+                .amount(new BigDecimal("10.00"))
+                .build()))
+                .doesNotThrowAnyException();
     }
 
     @Test

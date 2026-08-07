@@ -5,7 +5,7 @@
 | | |
 |---|---|
 | **Author** | Praveenreddy Somireddy |
-| **Status** | PROPOSED — awaiting review; implementation starts on freeze |
+| **Status** | IMPLEMENTED 2026-08-07 — all seven build steps; booking 490 / payment 126 / frontend 76 green |
 | **Scope** | Booking creation, payment creation/authorize/capture/refund, and the one Kafka path that double-charges on redelivery |
 | **Depends on** | SECURITY_HARDENING_MODULE.md (ownership) · the existing payment `Idempotency-Key` precedent |
 | **Explicitly out of scope** | The transactional outbox (its own increment) · duplicate *emails* on consumer redelivery (harmless, lands with the outbox) · inventory holds (already money-idempotent, §2.4) |

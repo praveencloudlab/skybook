@@ -36,7 +36,21 @@ public record RefundRequest(
         Integer premiumPercent,
 
         @Size(max = 500, message = "reason must be at most 500 characters")
-        String reason
+        String reason,
+
+        /**
+         * The refund's CAUSE, unique per payment (IDEMPOTENCY_MODULE.md §3.6).
+         * Event-driven refunds set it deterministically from the event, so a
+         * Kafka redelivery computes the same value and the V3 unique index
+         * makes the second insert impossible. Null (desk refunds) = no dedupe.
+         */
+        @Size(max = 120, message = "sourceReference must be at most 120 characters")
+        String sourceReference
 
 ) {
+    /** Convenience for the desk path, which has no event-derived cause. */
+    public RefundRequest(List<FareLineRequest> fareLines, Integer refundPercent,
+                         Integer premiumPercent, String reason) {
+        this(fareLines, refundPercent, premiumPercent, reason, null);
+    }
 }

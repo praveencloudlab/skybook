@@ -11,6 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
@@ -30,9 +31,19 @@ import java.time.LocalDateTime;
  * invoices/emails can show what was withheld (design doc section 3.3).
  */
 @Entity
-@Table(name = "refunds", indexes = {
-        @Index(name = "ix_refunds_payment", columnList = "payment_id")
-})
+@Table(name = "refunds",
+        indexes = {
+                @Index(name = "ix_refunds_payment", columnList = "payment_id")
+        },
+        // Once per cause per payment (IDEMPOTENCY_MODULE.md §3.6). Postgres
+        // treats NULLs as DISTINCT in a unique index, so hand-raised refunds
+        // (source_reference NULL) never collide - the same behaviour as the
+        // migration's partial "WHERE source_reference IS NOT NULL" index, and
+        // this declared form is what the ddl-auto JPA tests build from.
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uq_refunds_payment_source",
+                        columnNames = {"payment_id", "source_reference"})
+        })
 @Getter
 @Setter
 @NoArgsConstructor
@@ -62,6 +73,19 @@ public class Refund extends Auditable {
 
     @Column(updatable = false, length = 500)
     private String reason;
+
+    /**
+     * The CAUSE this refund answers, unique per payment when present
+     * (IDEMPOTENCY_MODULE.md §3.6) - e.g. {@code cancel:77} for a whole-booking
+     * cancellation, {@code partial:77:12,14} naming the cancelled passenger
+     * rows. A redelivered Kafka event derives the same value, so the partial
+     * unique index (V3) refuses the second insert: the database enforces
+     * once-per-cause where a status guard demonstrably could not - the first
+     * partial refund left the payment in exactly the state the guard accepted.
+     * Null for hand-raised desk refunds, which have no event behind them.
+     */
+    @Column(name = "source_reference", updatable = false, length = 120)
+    private String sourceReference;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 15)

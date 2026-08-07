@@ -39,6 +39,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,6 +52,8 @@ class BookingFacadeTest {
     private InventoryServiceClient inventoryServiceClient;
     @Mock
     private BookingService bookingService;
+    @Mock
+    private com.skybook.praveen.bookingservice.repository.BookingRepository bookingRepository;
     @Mock
     private BookingEventProducer bookingEventProducer;
     @Mock
@@ -69,7 +72,7 @@ class BookingFacadeTest {
     void setUp() {
         // Real FareCalculator - pure/deterministic, already unit-tested.
         facade = new BookingFacade(flightServiceClient, inventoryServiceClient,
-                bookingService, bookingEventProducer,
+                bookingService, bookingRepository, bookingEventProducer,
                 new com.skybook.praveen.bookingservice.domain.FareCalculator(
                         java.time.Clock.fixed(java.time.Instant.parse("2030-06-04T09:00:00Z"), java.time.ZoneOffset.UTC)),
                 fareAlertRepository,
@@ -137,10 +140,48 @@ class BookingFacadeTest {
         private final BookingResponse draft = booking(BookingStatus.DRAFT, (String) null, (String) null);
 
         @Test
+        void aRetryWithTheSameKeyReplaysTheBookingWithoutBookingAgain() {
+            // IDEMPOTENCY §3.3: the reported-shape defect - one press produced
+            // two bookings, two seat holds, two charges. A retry carries the
+            // same key; the facade must return the ORIGINAL booking without
+            // touching flight-service, inventory, or the payment path.
+            BookingResponse original = booking(BookingStatus.CONFIRMED, "12A", "12B");
+            com.skybook.praveen.bookingservice.entity.Booking existing =
+                    new com.skybook.praveen.bookingservice.entity.Booking();
+            existing.setId(7L);
+            // A null stored fingerprint (legacy row) replays by key alone; a
+            // MATCHING fingerprint would too. Either way this identical retry
+            // must come straight back as the original.
+            when(bookingRepository.findByIdempotencyKey("key-1")).thenReturn(Optional.of(existing));
+            when(bookingService.getBookingById(7L)).thenReturn(original);
+
+            BookingResponse result = facade.createBooking(request, "key-1");
+
+            assertThat(result).isSameAs(original);
+            verifyNoInteractions(flightServiceClient, inventoryServiceClient);
+            verify(bookingService, never()).createDraftBooking(any(), any(), any(), any(), any());
+            verify(bookingEventProducer, never()).publishBookingCreated(any(), any());
+        }
+
+        @Test
+        void aKeyReusedForADifferentTripIsRefused() {
+            com.skybook.praveen.bookingservice.entity.Booking existing =
+                    new com.skybook.praveen.bookingservice.entity.Booking();
+            existing.setId(7L);
+            existing.setIdempotencyFingerprint("a-different-trips-fingerprint");
+            when(bookingRepository.findByIdempotencyKey("key-1")).thenReturn(Optional.of(existing));
+
+            assertThatThrownBy(() -> facade.createBooking(request, "key-1"))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("different booking");
+            verifyNoInteractions(flightServiceClient);
+        }
+
+        @Test
         void holdsEverySeatFinalizesThenPublishes() {
             stubFlightOk();
             BookingResponse created = booking(BookingStatus.CREATED, "12A", "12B");
-            when(bookingService.createDraftBooking(eq(request), any(), any())).thenReturn(draft);
+            when(bookingService.createDraftBooking(eq(request), any(), any(), any(), any())).thenReturn(draft);
             when(inventoryServiceClient.holdSeat(eq(10L), anyString(), eq(7L), anyLong(), eq(TravelClass.ECONOMY)))
                     .thenAnswer(inv -> Optional.of(hold(inv.getArgument(1), "MANUAL", "12.00", "12.00")));
             when(bookingService.finalizeSeatAssignments(eq(7L), any())).thenReturn(created);
@@ -170,7 +211,7 @@ class BookingFacadeTest {
                     1L, 10L, null, null, List.of(detail(null)), null, null);
             BookingResponse autoDraft = booking(BookingStatus.DRAFT, (String) null);
             BookingResponse created = booking(BookingStatus.CREATED, "20B");
-            when(bookingService.createDraftBooking(eq(autoRequest), any(), any())).thenReturn(autoDraft);
+            when(bookingService.createDraftBooking(eq(autoRequest), any(), any(), any(), any())).thenReturn(autoDraft);
             when(inventoryServiceClient.autoHoldSeat(10L, 7L, 1L, TravelClass.ECONOMY))
                     .thenReturn(Optional.of(hold("20B", "AUTO", "0.00", "0.00")));
             when(bookingService.finalizeSeatAssignments(eq(7L), any())).thenReturn(created);
@@ -189,7 +230,7 @@ class BookingFacadeTest {
         void flightWithoutInventoryFinalizesRequestedSeatsUnpriced() {
             stubFlightOk();
             BookingResponse created = booking(BookingStatus.CREATED, "12A", "12B");
-            when(bookingService.createDraftBooking(eq(request), any(), any())).thenReturn(draft);
+            when(bookingService.createDraftBooking(eq(request), any(), any(), any(), any())).thenReturn(draft);
             when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
                     .thenReturn(Optional.empty());
             when(bookingService.finalizeSeatAssignments(eq(7L), any())).thenReturn(created);
@@ -214,7 +255,7 @@ class BookingFacadeTest {
             // state. The earlier hold must be released and the draft
             // cancelled, never finalized unpriced (review hardening).
             stubFlightOk();
-            when(bookingService.createDraftBooking(eq(request), any(), any())).thenReturn(draft);
+            when(bookingService.createDraftBooking(eq(request), any(), any(), any(), any())).thenReturn(draft);
             when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
                     .thenReturn(Optional.of(hold("12A", "MANUAL", "12.00", "12.00")));
             when(inventoryServiceClient.holdSeat(10L, "12B", 7L, 2L, TravelClass.ECONOMY))
@@ -233,7 +274,7 @@ class BookingFacadeTest {
         @Test
         void seatConflictCompensatesAndCancelsTheDraft() {
             stubFlightOk();
-            when(bookingService.createDraftBooking(eq(request), any(), any())).thenReturn(draft);
+            when(bookingService.createDraftBooking(eq(request), any(), any(), any(), any())).thenReturn(draft);
             when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
                     .thenReturn(Optional.of(hold("12A", "MANUAL", "12.00", "12.00")));
             when(inventoryServiceClient.holdSeat(10L, "12B", 7L, 2L, TravelClass.ECONOMY))
@@ -253,7 +294,7 @@ class BookingFacadeTest {
         @Test
         void finalizeFailureReleasesHoldsAndCancelsTheDraft() {
             stubFlightOk();
-            when(bookingService.createDraftBooking(eq(request), any(), any())).thenReturn(draft);
+            when(bookingService.createDraftBooking(eq(request), any(), any(), any(), any())).thenReturn(draft);
             when(inventoryServiceClient.holdSeat(eq(10L), anyString(), eq(7L), anyLong(), eq(TravelClass.ECONOMY)))
                     .thenAnswer(inv -> Optional.of(hold(inv.getArgument(1), "MANUAL", "12.00", "12.00")));
             when(bookingService.finalizeSeatAssignments(eq(7L), any()))
@@ -311,7 +352,7 @@ class BookingFacadeTest {
             when(flightServiceClient.getFlight(20L)).thenReturn(returnFlight);
             BookingResponse draft = roundTripBooking(BookingStatus.DRAFT, null, null);
             BookingResponse created = roundTripBooking(BookingStatus.CREATED, "12A", "20B");
-            when(bookingService.createDraftBooking(eq(request), any(), any()))
+            when(bookingService.createDraftBooking(eq(request), any(), any(), any(), any()))
                     .thenReturn(draft);
             when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
                     .thenReturn(Optional.of(hold("12A", "MANUAL", "12.00", "12.00")));
@@ -339,7 +380,7 @@ class BookingFacadeTest {
             stubFlightOk();
             when(flightServiceClient.getFlight(20L)).thenReturn(returnFlight);
             BookingResponse draft = roundTripBooking(BookingStatus.DRAFT, null, null);
-            when(bookingService.createDraftBooking(eq(request), any(), any()))
+            when(bookingService.createDraftBooking(eq(request), any(), any(), any(), any()))
                     .thenReturn(draft);
             when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
                     .thenReturn(Optional.of(hold("12A", "MANUAL", "12.00", "12.00")));
@@ -367,7 +408,7 @@ class BookingFacadeTest {
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("cancelled return flight");
 
-            verify(bookingService, never()).createDraftBooking(any(), any(), any());
+            verify(bookingService, never()).createDraftBooking(any(), any(), any(), any(), any());
         }
 
         @Test
@@ -382,7 +423,7 @@ class BookingFacadeTest {
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("after the outbound arrives");
 
-            verify(bookingService, never()).createDraftBooking(any(), any(), any());
+            verify(bookingService, never()).createDraftBooking(any(), any(), any(), any(), any());
         }
     }
 

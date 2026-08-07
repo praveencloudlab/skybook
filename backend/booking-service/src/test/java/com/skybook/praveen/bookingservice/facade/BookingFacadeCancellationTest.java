@@ -77,6 +77,8 @@ class BookingFacadeCancellationTest {
     @Mock
     private BookingService bookingService;
     @Mock
+    private com.skybook.praveen.bookingservice.repository.BookingRepository bookingRepository;
+    @Mock
     private BookingEventProducer bookingEventProducer;
     @Mock
     private FareAlertRepository fareAlertRepository;
@@ -86,7 +88,7 @@ class BookingFacadeCancellationTest {
     @BeforeEach
     void setUp() {
         facade = new BookingFacade(flightServiceClient, inventoryServiceClient, bookingService,
-                bookingEventProducer, new FareCalculator(), fareAlertRepository,
+                bookingRepository, bookingEventProducer, new FareCalculator(), fareAlertRepository,
                 new CancellationPolicy(new BigDecimal("30"), 72, 24, 2, 6));
     }
 

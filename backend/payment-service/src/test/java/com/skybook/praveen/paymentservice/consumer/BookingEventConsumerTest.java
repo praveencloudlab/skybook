@@ -22,9 +22,11 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -157,6 +159,44 @@ class BookingEventConsumerTest {
         assertThat(request.fareLines().get(0).fareType()).isEqualTo("SAVER");
         assertThat(request.fareLines().get(0).amount()).isEqualByComparingTo("80.00");
         assertThat(request.reason()).contains("SBTEST");
+    }
+
+    @Test
+    void theSamePartialCancellationDeliveredTwiceRefundsONCE() {
+        // THE live defect this increment exists to kill (IDEMPOTENCY §2.5):
+        // after the first partial refund the payment sits in exactly the
+        // PARTIALLY_REFUNDED state the status guard accepts, so a Kafka
+        // redelivery sailed through and created a SECOND refund and a second
+        // gateway call. The cause key + V3 unique index now refuse the second
+        // insert; the consumer must treat that refusal as "already done" -
+        // swallowing it, not rethrowing into the retry loop that caused the
+        // redelivery in the first place.
+        BookingEvent event = BookingEvent.builder()
+                .type(BookingEventType.PARTIALLY_CANCELLED)
+                .bookingId(42L)
+                .bookingReference("SBTEST")
+                .refundTierPercent(100)
+                .refundBreakdown("FLEXI:120.00")
+                .cancelledBookingPassengerIds(java.util.List.of(14L, 12L))
+                .build();
+        when(paymentService.getByBookingId(42L))
+                .thenReturn(payment(PaymentStatus.CAPTURED))
+                .thenReturn(payment(PaymentStatus.PARTIALLY_REFUNDED));
+        // First delivery refunds; the redelivery's insert dies on the unique
+        // index, surfaced as DataIntegrityViolationException.
+        ArgumentCaptor<RefundRequest> captor = ArgumentCaptor.forClass(RefundRequest.class);
+        when(paymentFacade.refund(eq(1L), captor.capture(), any(ActionContext.class)))
+                .thenReturn(null)
+                .thenThrow(new org.springframework.dao.DataIntegrityViolationException("uq_refunds_payment_source"));
+
+        consumer.consume(event);
+        assertThatCode(() -> consumer.consume(event)).doesNotThrowAnyException();
+
+        verify(paymentFacade, times(2)).refund(eq(1L), any(RefundRequest.class), any(ActionContext.class));
+        // Deterministic cause, ids SORTED - the redelivery names the same one.
+        assertThat(captor.getAllValues())
+                .extracting(RefundRequest::sourceReference)
+                .containsExactly("partial:42:12,14", "partial:42:12,14");
     }
 
     @Test

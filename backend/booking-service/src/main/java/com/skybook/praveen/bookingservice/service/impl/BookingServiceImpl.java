@@ -95,7 +95,8 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public BookingResponse createDraftBooking(CreateBookingRequest request, List<JourneyLeg> journey,
-                                              String ownerSubject) {
+                                              String ownerSubject, String idempotencyKey,
+                                              String idempotencyFingerprint) {
 
         Booking booking = Booking.builder()
                 .bookingReference(generateUniquePnr())
@@ -106,6 +107,9 @@ public class BookingServiceImpl implements BookingService {
                 .remarks(request.remarks())
                 // Ownership captured from the authenticated principal (§4.2).
                 .ownerSubject(ownerSubject)
+                // Idempotency (§3.3): a unique key here is what a retry replays.
+                .idempotencyKey(idempotencyKey)
+                .idempotencyFingerprint(idempotencyFingerprint)
                 .build();
 
         // ONE Passenger identity per traveller, shared by their row on every

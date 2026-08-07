@@ -59,13 +59,31 @@ public class PaymentServiceImpl implements PaymentService {
     // ---------------------------------------------------------------
 
     @Override
-    @Transactional
+    // Deliberately NOT @Transactional (IDEMPOTENCY_MODULE.md §3.4): the race
+    // arm below catches the unique-constraint violation and answers with the
+    // winner - inside a wrapping transaction that violation marks
+    // rollback-only and the answer would explode at commit instead. Each
+    // repository call commits on its own; the save cascades payment+history
+    // in one statement batch, same as before.
     public CreationResult create(CreatePaymentRequest request, String idempotencyKey) {
 
-        // Idempotent replay: same key -> the original payment, no duplicate.
+        // Idempotent replay (IDEMPOTENCY_MODULE.md §3.2): same key -> the
+        // original payment, no duplicate - but only when it is genuinely the
+        // same REQUEST. The stored fingerprint catches the client bug of
+        // reusing a key with a different body; answering that with the first
+        // payment would be a silent wrong answer, which is worse than a 409.
+        String fingerprint = fingerprintOf(request);
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             var existing = paymentRepository.findByIdempotencyKey(idempotencyKey);
             if (existing.isPresent()) {
+                // A NULL stored fingerprint is a pre-V3 row: refusing its
+                // replay would break every key minted before the migration,
+                // so legacy rows keep the old match-by-key-alone behaviour.
+                String stored = existing.get().getIdempotencyFingerprint();
+                if (stored != null && !fingerprint.equals(stored)) {
+                    throw new PaymentConflictException(
+                            "This Idempotency-Key was already used for a different request");
+                }
                 log.info("Idempotency-Key replay for payment {}", existing.get().getPaymentReference());
                 return new CreationResult(PaymentMapper.toResponse(existing.get()), true);
             }
@@ -92,6 +110,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .currency(request.currency().toUpperCase())
                 .method(request.method())
                 .idempotencyKey(idempotencyKey)
+                .idempotencyFingerprint(idempotencyKey != null && !idempotencyKey.isBlank() ? fingerprint : null)
                 .fareBreakdown(fareBreakdown)
                 .build();
 
@@ -99,11 +118,49 @@ public class PaymentServiceImpl implements PaymentService {
                 "USER", "API", idempotencyKey != null ? idempotencyKey : request.bookingReference(),
                 "Payment created for booking " + request.bookingReference());
 
-        Payment saved = paymentRepository.save(payment);
+        Payment saved;
+        try {
+            saved = paymentRepository.saveAndFlush(payment);
+        } catch (org.springframework.dao.DataIntegrityViolationException race) {
+            // Two concurrent requests with the same key: the loser lands here
+            // on the unique constraint. Translate the race and REPLAY the
+            // winner - the register()/SsoAccountService pattern, and the whole
+            // reason this method is NOT @Transactional: inside a wrapping
+            // transaction the violation marks rollback-only, and the re-read
+            // below would explode at commit instead of answering. Without the
+            // arm the loser surfaced a raw 500 - exactly the answer that
+            // provokes a client into a THIRD attempt.
+            var winner = idempotencyKey != null && !idempotencyKey.isBlank()
+                    ? paymentRepository.findByIdempotencyKey(idempotencyKey)
+                    : java.util.Optional.<Payment>empty();
+            if (winner.isPresent() && fingerprint.equals(winner.get().getIdempotencyFingerprint())) {
+                log.info("Idempotency-Key race lost to payment {} - replaying the winner",
+                        winner.get().getPaymentReference());
+                return new CreationResult(PaymentMapper.toResponse(winner.get()), true);
+            }
+            // Not a key race (e.g. the one-payment-per-booking unique) - keep
+            // the established conflict semantics.
+            throw new PaymentConflictException(
+                    "Payment already exists for booking id: " + request.bookingId());
+        }
         log.info("Created payment {} for booking {} ({} {})",
                 saved.getPaymentReference(), request.bookingReference(), request.amount(), request.currency());
 
         return new CreationResult(PaymentMapper.toResponse(saved), false);
+    }
+
+    /** SHA-256 over the fields that decide WHAT is being paid (§3.2). */
+    private static String fingerprintOf(CreatePaymentRequest request) {
+        String canonical = request.bookingId() + "|" + request.amount() + "|"
+                + (request.currency() == null ? "" : request.currency().toUpperCase()) + "|"
+                + request.method();
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
     }
 
     @Override

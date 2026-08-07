@@ -34,7 +34,8 @@ public interface BookingService {
      *                     booking owner (SECURITY_HARDENING_MODULE.md §4.2).
      */
     BookingResponse createDraftBooking(CreateBookingRequest request, List<JourneyLeg> journey,
-                                       String ownerSubject);
+                                       String ownerSubject, String idempotencyKey,
+                                       String idempotencyFingerprint);
 
     /**
      * One leg of the journey being booked (ROUND_TRIP_MODULE.md §3 + the

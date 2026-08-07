@@ -94,6 +94,15 @@ public class Payment extends Auditable {
     @Column(unique = true, updatable = false, length = 64)
     private String idempotencyKey;
 
+    /**
+     * SHA-256 over the request's deciding fields (IDEMPOTENCY_MODULE.md §3.2),
+     * stored beside the key so a replay can prove it is the SAME request. A
+     * key reused with a different body is a client bug; answering it with the
+     * first payment would be silently wrong, so it 409s instead.
+     */
+    @Column(name = "idempotency_fingerprint", updatable = false, length = 64)
+    private String idempotencyFingerprint;
+
     // The gateway's id for the authorization - null until authorized.
     @Column(length = 100)
     private String gatewayReference;

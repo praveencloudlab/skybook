@@ -77,12 +77,40 @@ public class BookingFacade {
     private final FlightServiceClient flightServiceClient;
     private final InventoryServiceClient inventoryServiceClient;
     private final BookingService bookingService;
+    private final com.skybook.praveen.bookingservice.repository.BookingRepository bookingRepository;
     private final BookingEventProducer bookingEventProducer;
     private final FareCalculator fareCalculator;
     private final FareAlertRepository fareAlertRepository;
     private final com.skybook.praveen.bookingservice.domain.CancellationPolicy cancellationPolicy;
 
     public BookingResponse createBooking(CreateBookingRequest request) {
+        return createBooking(request, null);
+    }
+
+    /**
+     * Create a booking, idempotently (IDEMPOTENCY_MODULE.md §3.3).
+     *
+     * <p>The whole method is a three-stage saga - draft, seat holds, finalize -
+     * that ends by taking money. A retry of a lost POST must not run it twice.
+     * The key check up front makes a replay cheap (no flight lookups, no
+     * holds); the race arm at the draft insert catches two simultaneous
+     * first-attempts. The fingerprint is what turns "same key, different trip"
+     * into a 409 rather than silently returning someone else's booking.
+     */
+    public BookingResponse createBooking(CreateBookingRequest request, String idempotencyKey) {
+
+        String fingerprint = fingerprintOf(request);
+        if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+            var existing = bookingRepository.findByIdempotencyKey(idempotencyKey);
+            if (existing.isPresent()) {
+                String stored = existing.get().getIdempotencyFingerprint();
+                if (stored != null && !fingerprint.equals(stored)) {
+                    throw new IllegalStateException(
+                            "This Idempotency-Key was already used for a different booking");
+                }
+                return bookingService.getBookingById(existing.get().getId());
+            }
+        }
 
         FlightDetails flight = flightServiceClient.getFlight(request.flightId());
 
@@ -144,7 +172,23 @@ public class BookingFacade {
                     returnFlight.departureTime(), 1, true));
         }
 
-        BookingResponse draft = bookingService.createDraftBooking(request, journey, currentSubject());
+        BookingResponse draft;
+        try {
+            draft = bookingService.createDraftBooking(request, journey, currentSubject(),
+                    idempotencyKey, idempotencyKey != null && !idempotencyKey.isBlank() ? fingerprint : null);
+        } catch (org.springframework.dao.DataIntegrityViolationException race) {
+            // A concurrent first-attempt with the same key won the unique
+            // index. No holds or money have happened on THIS path yet (the
+            // draft insert is the first write), so replaying the winner is
+            // clean - the translate-the-race pattern, booking-side.
+            var winner = idempotencyKey != null && !idempotencyKey.isBlank()
+                    ? bookingRepository.findByIdempotencyKey(idempotencyKey)
+                    : java.util.Optional.<com.skybook.praveen.bookingservice.entity.Booking>empty();
+            if (winner.isPresent()) {
+                return bookingService.getBookingById(winner.get().getId());
+            }
+            throw race;
+        }
 
         List<SeatAssignmentResult> assignments = holdSeatsOrCompensate(draft, request);
 
@@ -159,6 +203,31 @@ public class BookingFacade {
         bookingEventProducer.publishBookingCreated(booking, journeyFlights);
 
         return booking;
+    }
+
+    /**
+     * SHA-256 over the fields that decide WHAT is being booked (§3.2): the
+     * flights, the passengers' identities, and the cabin/fare. Deliberately
+     * NOT the volatile parts (contact remarks). Passenger order is normalised
+     * so the same party in a different sequence fingerprints identically.
+     */
+    private static String fingerprintOf(CreateBookingRequest request) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(request.flightId()).append('|')
+          .append(request.returnFlightId()).append('|')
+          .append(request.connectionFlightIds()).append('|');
+        request.passengers().stream()
+                .map(p -> (p.firstName() + ' ' + p.lastName() + '/' + p.dob() + '/'
+                        + p.travelClass() + '/' + p.fareType()).toLowerCase(java.util.Locale.ROOT))
+                .sorted()
+                .forEach(s -> sb.append(s).append(';'));
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
     }
 
     /** Back-office override - the normal path is confirmBookingFromPayment via PaymentEventConsumer. */

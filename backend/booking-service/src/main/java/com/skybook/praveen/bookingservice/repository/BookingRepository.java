@@ -12,6 +12,9 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     Optional<Booking> findByBookingReference(String bookingReference);
 
+    /** Idempotent-replay lookup (IDEMPOTENCY_MODULE.md §3.3): the booking a retry re-reads. */
+    Optional<Booking> findByIdempotencyKey(String idempotencyKey);
+
     boolean existsByBookingReference(String bookingReference);
 
     List<Booking> findByFlightId(Long flightId);

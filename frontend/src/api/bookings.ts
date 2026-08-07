@@ -206,8 +206,20 @@ export const bookingsApi = {
     return api.get<Booking[]>('/api/bookings/mine', { signal });
   },
 
-  create(request: CreateBookingRequest, signal?: AbortSignal): Promise<Booking> {
-    return api.post<Booking>('/api/bookings', request, { signal });
+  /**
+   * Create a booking.
+   *
+   * `idempotencyKey` is minted ONCE per booking intent (bookingIntentKey below)
+   * and reused across retries, so a lost response or a second press replays the
+   * original booking instead of creating a second one with a second charge. The
+   * server (booking-service §3.3) keys on it; without it the old behaviour is
+   * unchanged.
+   */
+  create(request: CreateBookingRequest, idempotencyKey?: string, signal?: AbortSignal): Promise<Booking> {
+    return api.post<Booking>('/api/bookings', request, {
+      signal,
+      ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
+    });
   },
 
   byId(id: number, signal?: AbortSignal): Promise<Booking> {

@@ -69,6 +69,8 @@ class BookingFacadeItineraryTest {
     @Mock
     private BookingService bookingService;
     @Mock
+    private com.skybook.praveen.bookingservice.repository.BookingRepository bookingRepository;
+    @Mock
     private BookingEventProducer bookingEventProducer;
     @Mock
     private FareAlertRepository fareAlertRepository;
@@ -87,7 +89,7 @@ class BookingFacadeItineraryTest {
     @BeforeEach
     void setUp() {
         facade = new BookingFacade(flightServiceClient, inventoryServiceClient, bookingService,
-                bookingEventProducer, new FareCalculator(), fareAlertRepository,
+                bookingRepository, bookingEventProducer, new FareCalculator(), fareAlertRepository,
                 new CancellationPolicy(new BigDecimal("30"), 72, 24, 2, 6));
     }
 
@@ -167,7 +169,7 @@ class BookingFacadeItineraryTest {
                             row(2L, 1, 11L, FareType.FLEXI, "7C", "0.00", CheckInStatus.NOT_OPEN, false)));
             when(flightServiceClient.getFlight(10L)).thenReturn(firstLeg);
             when(flightServiceClient.getFlight(11L)).thenReturn(onwardLeg);
-            when(bookingService.createDraftBooking(eq(request), any(), any())).thenReturn(draft());
+            when(bookingService.createDraftBooking(eq(request), any(), any(), any(), any())).thenReturn(draft());
             when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
                     .thenReturn(Optional.of(hold("12A", "MANUAL", "12.00", "12.00")));
             when(inventoryServiceClient.holdSeat(11L, "7C", 7L, 2L, TravelClass.ECONOMY))
@@ -176,7 +178,7 @@ class BookingFacadeItineraryTest {
 
             facade.createBooking(request);
 
-            verify(bookingService).createDraftBooking(eq(request), journeyCaptor.capture(), any());
+            verify(bookingService).createDraftBooking(eq(request), journeyCaptor.capture(), any(), any(), any());
             List<BookingService.JourneyLeg> journey = journeyCaptor.getValue();
             assertThat(journey).hasSize(2);
             assertThat(journey).extracting(BookingService.JourneyLeg::flightId).containsExactly(10L, 11L);
@@ -200,7 +202,7 @@ class BookingFacadeItineraryTest {
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("cancelled connection flight");
 
-            verify(bookingService, never()).createDraftBooking(any(), any(), any());
+            verify(bookingService, never()).createDraftBooking(any(), any(), any(), any(), any());
         }
 
         @Test
@@ -213,7 +215,7 @@ class BookingFacadeItineraryTest {
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("departs before the previous leg arrives");
 
-            verify(bookingService, never()).createDraftBooking(any(), any(), any());
+            verify(bookingService, never()).createDraftBooking(any(), any(), any(), any(), any());
         }
 
         @Test
@@ -239,7 +241,7 @@ class BookingFacadeItineraryTest {
             BookingResponse saverCreated = booking(BookingStatus.CREATED, oneWay,
                     List.of(row(1L, 0, 10L, FareType.SAVER, "12A", "12.00", CheckInStatus.NOT_OPEN, false)));
             when(flightServiceClient.getFlight(10L)).thenReturn(firstLeg);
-            when(bookingService.createDraftBooking(eq(saverRequest), any(), any())).thenReturn(saverDraft);
+            when(bookingService.createDraftBooking(eq(saverRequest), any(), any(), any(), any())).thenReturn(saverDraft);
             when(inventoryServiceClient.holdSeat(10L, "12A", 7L, 1L, TravelClass.ECONOMY))
                     .thenReturn(Optional.of(hold("12A", "MANUAL", "12.00", "12.00")));
             when(bookingService.finalizeSeatAssignments(eq(7L), any())).thenReturn(saverCreated);

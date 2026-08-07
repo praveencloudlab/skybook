@@ -31,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -79,6 +80,9 @@ class PaymentFacadeTest {
 
     @Test
     void authorizeRunsBeginGatewayRecordInOrder() {
+        // Not-yet-authorized, so the §3.5 replay short-circuit does NOT fire
+        // and the real gateway path runs.
+        when(paymentService.getById(1L)).thenReturn(payment(PaymentStatus.PENDING));
         when(paymentService.beginAuthorize(1L)).thenReturn(
                 new PaymentService.AuthorizationContext(1L, "PAY-2026-TESTAA", new BigDecimal("100.00"), "USD"));
         when(gateway.authorize("PAY-2026-TESTAA", new BigDecimal("100.00"), "USD")).thenReturn(success());
@@ -96,6 +100,7 @@ class PaymentFacadeTest {
 
     @Test
     void declinedAuthorizationIsRecordedPublishedThenThrown422() {
+        when(paymentService.getById(1L)).thenReturn(payment(PaymentStatus.PENDING));
         when(paymentService.beginAuthorize(1L)).thenReturn(
                 new PaymentService.AuthorizationContext(1L, "PAY-2026-TESTAA", new BigDecimal("100.00"), "USD"));
         when(gateway.authorize(any(), any(), any())).thenReturn(declined());
@@ -113,6 +118,7 @@ class PaymentFacadeTest {
 
     @Test
     void captureSuccessPublishesPaymentSucceededWithTheInvoiceNumber() {
+        when(paymentService.getById(1L)).thenReturn(payment(PaymentStatus.AUTHORIZED));
         when(paymentService.beginCapture(1L)).thenReturn(
                 new PaymentService.CaptureContext(1L, "SIM-ref", new BigDecimal("100.00")));
         when(gateway.capture("SIM-ref", new BigDecimal("100.00"))).thenReturn(success());
@@ -126,6 +132,35 @@ class PaymentFacadeTest {
         facade.capture(1L, CTX);
 
         verify(eventProducer).publishPaymentSucceeded(captured, "INV-2026-000001");
+    }
+
+    @Test
+    void reAuthorizingAnAlreadyAuthorizedPaymentReplaysItWithoutTouchingTheGateway() {
+        // IDEMPOTENCY §3.5: a lost response makes the client retry authorize
+        // on money that was already authorized. The intent ("be authorized")
+        // is satisfied, so answer with the payment - do NOT re-hit the
+        // gateway, do NOT report a conflict on a success.
+        when(paymentService.getById(1L)).thenReturn(payment(PaymentStatus.AUTHORIZED));
+
+        PaymentResponse response = facade.authorize(1L, CTX);
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.AUTHORIZED);
+        verify(paymentService, never()).beginAuthorize(any());
+        verifyNoInteractions(gateway);
+    }
+
+    @Test
+    void reCapturingAnAlreadyCapturedPaymentReplaysItWithoutTouchingTheGateway() {
+        when(paymentService.getById(1L)).thenReturn(payment(PaymentStatus.CAPTURED));
+
+        PaymentResponse response = facade.capture(1L, CTX);
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.CAPTURED);
+        verify(paymentService, never()).beginCapture(any());
+        verifyNoInteractions(gateway);
+        // Crucially no second PAYMENT_SUCCEEDED event - booking-service would
+        // otherwise confirm twice.
+        verifyNoInteractions(eventProducer);
     }
 
     @Test

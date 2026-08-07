@@ -94,6 +94,19 @@ public class Booking extends Auditable {
     @Column(name = "owner_subject", updatable = false)
     private String ownerSubject;
 
+    /**
+     * Client-supplied Idempotency-Key (IDEMPOTENCY_MODULE.md §3.3), unique when
+     * present. A retry of a lost booking POST carries the same key, so the
+     * facade replays this booking instead of minting a second one - the fix
+     * for one press producing two bookings, two seat holds and two charges.
+     */
+    @Column(name = "idempotency_key", updatable = false, length = 64)
+    private String idempotencyKey;
+
+    /** SHA-256 of the request's deciding fields; a key reused with a different body 409s (§3.2). */
+    @Column(name = "idempotency_fingerprint", updatable = false, length = 64)
+    private String idempotencyFingerprint;
+
     // id ASC = insertion order = segment-major (ROUND_TRIP_MODULE.md §5):
     // the facade's row<->request-detail correlation relies on a reloaded
     // booking listing rows in exactly the order the draft created them.

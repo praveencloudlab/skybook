@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Flight } from '../../api/flights';
 import type { Booking } from '../../api/bookings';
 import { bookingsApi } from '../../api/bookings';
+import { bookingIntentKey, clearBookingIntent } from '../../lib/bookingIntent';
 import { paymentsApi, PAYMENT_METHOD_LABELS, type Payment, type PaymentMethod } from '../../api/payments';
 import type { FareType, TravelClass } from '../../api/quotes';
 import type { AircraftSeat } from '../../api/seats';
@@ -113,7 +114,7 @@ export function PaymentPage({
           contactEmail: contactEmail.trim(),
           ...(contactPhone.trim() ? { contactPhone: contactPhone.trim() } : {}),
         },
-      });
+      }, bookingIntentKey());
 
       // The payment row is created by payment-service consuming the booking
       // event, so it does not exist yet. Poll rather than assume.
@@ -124,6 +125,8 @@ export function PaymentPage({
       const authorized = await paymentsApi.authorize(payment.id);
       const captured = await paymentsApi.capture(authorized.id);
 
+      // Booked and paid - this intent is spent; the next booking mints a fresh key.
+      clearBookingIntent();
       onBooked(booking, captured);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : null);

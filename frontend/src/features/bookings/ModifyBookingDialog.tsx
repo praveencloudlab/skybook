@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { bookingsApi, type Booking, type BookingPassenger, type CancellationPreview, type PassengerDetail } from '../../api/bookings';
 import { flightsApi, type Flight } from '../../api/flights';
 import { paymentsApi, type Payment } from '../../api/payments';
@@ -53,6 +53,12 @@ export function ModifyBookingDialog({
   // for something their fare gives away.
   const allPremium =
     activePassengers.length > 0 && activePassengers.every((p) => p.fareType === 'PREMIUM');
+
+  // One idempotency key for this rebook attempt, stable across retries so a
+  // lost response replays the new booking instead of making a second one
+  // (IDEMPOTENCY_MODULE.md §3.1). A ref, not state: it must not trigger a
+  // re-render, and it lives exactly as long as the dialog is open.
+  const rebookKey = useRef(crypto.randomUUID());
 
   const [date, setDate] = useState(
     () => currentFlight?.departureTime.slice(0, 10) ?? addDaysIso(todayIso(), 1),
@@ -200,7 +206,10 @@ export function ModifyBookingDialog({
         fareType: p.fareType,
         ...(bags[i] > 0 ? { extraBags: bags[i] } : {}),
       }));
-      const created = await bookingsApi.create({
+      // A rebook is create + pay + cancel-old; a retry after a lost response
+      // must not create a SECOND new booking. The key is stable for this
+      // dialog session (rebookKey), so the retry replays the first one.
+      const created = newBooking ?? await bookingsApi.create({
         flightId: chosen.id,
         passengers,
         contact: {
@@ -210,7 +219,7 @@ export function ModifyBookingDialog({
           contactEmail: booking.contact?.contactEmail ?? '',
           contactPhone: phone.trim(),
         },
-      });
+      }, rebookKey.current);
       setNewBooking(created);
 
       setStage('paying');

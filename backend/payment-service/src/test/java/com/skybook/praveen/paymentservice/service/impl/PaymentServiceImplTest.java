@@ -114,19 +114,70 @@ class PaymentServiceImplTest {
         @Test
         void createsPendingPaymentWithSerializedFareBreakdown() {
             when(paymentRepository.existsByBookingId(42L)).thenReturn(false);
+            when(paymentRepository.saveAndFlush(any())).thenAnswer(inv -> inv.getArgument(0));
 
             PaymentService.CreationResult result = paymentService.create(request, "idem-1");
 
             assertThat(result.replay()).isFalse();
             ArgumentCaptor<Payment> captor = ArgumentCaptor.forClass(Payment.class);
-            verify(paymentRepository).save(captor.capture());
+            verify(paymentRepository).saveAndFlush(captor.capture());
             Payment saved = captor.getValue();
             assertThat(saved.getPaymentReference()).matches("PAY-\\d{4}-[A-Z2-9]{6}");
             assertThat(saved.getFareBreakdown()).isEqualTo("FLEXI:100.00;SAVER:160.00");
             assertThat(saved.getIdempotencyKey()).isEqualTo("idem-1");
+            // The fingerprint is stored beside the key (IDEMPOTENCY §3.2) so a
+            // replay can be checked against WHAT was requested.
+            assertThat(saved.getIdempotencyFingerprint()).isNotBlank();
             assertThat(saved.getHistory()).extracting("historyType")
                     .containsExactly(PaymentHistoryType.PAYMENT_CREATED);
             assertThat(saved.getHistory().getFirst().getActor()).isEqualTo("USER");
+        }
+
+        @Test
+        void theSameKeyWithADifferentBodyIsRefusedNotSilentlyAnswered() {
+            // IDEMPOTENCY §3.2: replaying a key with a different request is a
+            // client bug. Answering it with the ORIGINAL payment would hide
+            // that bug behind a 200; the fingerprint turns it into a 409.
+            Payment existing = payment(PaymentStatus.PENDING);
+            existing.setIdempotencyFingerprint("not-the-same-fingerprint");
+            when(paymentRepository.findByIdempotencyKey("idem-1")).thenReturn(Optional.of(existing));
+
+            assertThatThrownBy(() -> paymentService.create(request, "idem-1"))
+                    .isInstanceOf(PaymentConflictException.class)
+                    .hasMessageContaining("different request");
+            verify(paymentRepository, never()).saveAndFlush(any());
+        }
+
+        @Test
+        void twoConcurrentIdenticalRequestsProduceOnePaymentAndOneReplay() {
+            // IDEMPOTENCY §3.4 - the race. Both pass the SELECT (no row yet);
+            // the loser's INSERT dies on the unique key constraint. The old
+            // behaviour surfaced that as a raw 500 - the exact answer that
+            // provokes a THIRD attempt. It must instead re-read the winner and
+            // replay it, which only works because create() is deliberately not
+            // wrapped in a transaction (a violation would mark it
+            // rollback-only and the re-read would explode at commit).
+            when(paymentRepository.existsByBookingId(42L)).thenReturn(false);
+            when(paymentRepository.saveAndFlush(any()))
+                    .thenThrow(new org.springframework.dao.DataIntegrityViolationException("payments_idempotency_key"));
+            Payment winner = payment(PaymentStatus.PENDING);
+            // First lookup: before the insert, no row yet (that is WHY both
+            // requests try to insert). Second lookup: the race arm re-reads
+            // and finds the winner, carrying the SAME fingerprint because the
+            // requests were identical.
+            ArgumentCaptor<Payment> attempted = ArgumentCaptor.forClass(Payment.class);
+            when(paymentRepository.findByIdempotencyKey("idem-1"))
+                    .thenReturn(Optional.empty())
+                    .thenAnswer(inv -> {
+                        verify(paymentRepository).saveAndFlush(attempted.capture());
+                        winner.setIdempotencyFingerprint(attempted.getValue().getIdempotencyFingerprint());
+                        return Optional.of(winner);
+                    });
+
+            PaymentService.CreationResult result = paymentService.create(request, "idem-1");
+
+            assertThat(result.replay()).isTrue();
+            assertThat(result.payment().paymentReference()).isEqualTo("PAY-2026-TESTAA");
         }
 
         @Test

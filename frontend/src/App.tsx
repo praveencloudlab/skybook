@@ -42,6 +42,7 @@ import type { Payment } from './api/payments';
 import type { FareType, TravelClass } from './api/quotes';
 import type { Flight } from './api/flights';
 import { session } from './lib/session';
+import { clearBookingIntent } from './lib/bookingIntent';
 import { t, LANGUAGES, currentLanguage, setLanguage, useLocale, type LanguageCode } from './lib/i18n';
 import { DISPLAY_CURRENCIES, displayCurrency, setDisplayCurrency } from './lib/format';
 
@@ -611,6 +612,10 @@ function BookingJourney() {
   useEffect(() => {
     if (step === 'search' || step === 'confirmed' || !flight) {
       sessionStorage.removeItem(JOURNEY_KEY);
+      // Starting over at search is a NEW booking intent - drop any key held
+      // from a previous one so it gets a fresh one (IDEMPOTENCY §3.1).
+      // ('confirmed' already cleared it on the successful pay.)
+      if (step === 'search') clearBookingIntent();
       return;
     }
     const persisted: JourneyDraft = {

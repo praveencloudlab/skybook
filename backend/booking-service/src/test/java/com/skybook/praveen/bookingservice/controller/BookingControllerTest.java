@@ -150,7 +150,7 @@ class BookingControllerTest {
         @Test
         @DisplayName("creating a booking answers 201 and hands the whole request to the facade")
         void creatingABookingAnswers201() throws Exception {
-            when(bookingFacade.createBooking(any())).thenReturn(bookingResponse());
+            when(bookingFacade.createBooking(any(), any())).thenReturn(bookingResponse());
 
             mockMvc.perform(post("/api/bookings")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -159,7 +159,7 @@ class BookingControllerTest {
                     .andExpect(jsonPath("$.bookingReference").value("SB1234"))
                     .andExpect(jsonPath("$.id").value(77));
 
-            verify(bookingFacade).createBooking(createCaptor.capture());
+            verify(bookingFacade).createBooking(createCaptor.capture(), any());
             assertThat(createCaptor.getValue().flightId()).isEqualTo(9L);
             assertThat(createCaptor.getValue().passengers()).singleElement()
                     .satisfies(p -> assertThat(p.seatNumber()).isEqualTo("12A"));

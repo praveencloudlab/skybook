@@ -70,6 +70,7 @@ public class RefundServiceImpl implements RefundService {
                 .amount(computation.refundAmount())
                 .cancellationFee(computation.cancellationFee())
                 .reason(request.reason())
+                .sourceReference(request.sourceReference())
                 .build();
 
         stateMachine.recordHistory(payment, PaymentHistoryType.REFUND_REQUESTED,

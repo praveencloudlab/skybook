@@ -96,9 +96,37 @@ public class BookingEventConsumer {
                                 line.fareType(), line.amount()))
                         .toList();
 
-        paymentFacade.refund(payment.id(),
-                new RefundRequest(lines, tierPercent, premiumPercent,
-                        "Partial cancellation on booking " + event.getBookingReference()), ctx);
+        // The refund's CAUSE, derived deterministically from the event so a
+        // redelivery names the same cause and the V3 unique index refuses the
+        // second row (IDEMPOTENCY_MODULE.md §3.6). The old status guard could
+        // not do this job: the first partial refund leaves the payment in
+        // exactly the PARTIALLY_REFUNDED state the guard accepts, and this
+        // consumer rethrows on failure, so DLT retries made redelivery routine.
+        String cause = "partial:" + event.getBookingId() + ":" + cancelledRowsKey(event);
+        try {
+            paymentFacade.refund(payment.id(),
+                    new RefundRequest(lines, tierPercent, premiumPercent,
+                            "Partial cancellation on booking " + event.getBookingReference(), cause), ctx);
+        } catch (org.springframework.dao.DataIntegrityViolationException alreadyRefunded) {
+            log.info("Booking {} partial cancellation {} already refunded - redelivery, nothing to do",
+                    event.getBookingReference(), cause);
+        }
+    }
+
+    /**
+     * A stable key for WHICH rows a partial cancellation covers: the cancelled
+     * passenger-row ids, sorted. Two different partial cancellations on the
+     * same booking (say rows 12+14, then row 15) produce different causes and
+     * both refund; the SAME cancellation redelivered produces the same cause
+     * and only the first insert survives.
+     */
+    private static String cancelledRowsKey(BookingEvent event) {
+        java.util.List<Long> ids = event.getCancelledBookingPassengerIds();
+        if (ids == null || ids.isEmpty()) {
+            return "all";
+        }
+        return ids.stream().sorted().map(String::valueOf)
+                .collect(java.util.stream.Collectors.joining(","));
     }
 
     private void handleBookingCancelled(BookingEvent event, ActionContext ctx) {
@@ -138,9 +166,17 @@ public class BookingEventConsumer {
                                             line.fareType(), line.amount()))
                                     .toList()
                             : null;
-            paymentFacade.refund(payment.id(),
-                    new RefundRequest(lines, tierPercent, premiumPercent,
-                            "Booking " + event.getBookingReference() + " cancelled"), ctx);
+            // One cause per whole-booking cancel: a booking cancels once, so a
+            // second CANCELLED delivery is by definition a redelivery.
+            String cause = "cancel:" + event.getBookingId();
+            try {
+                paymentFacade.refund(payment.id(),
+                        new RefundRequest(lines, tierPercent, premiumPercent,
+                                "Booking " + event.getBookingReference() + " cancelled", cause), ctx);
+            } catch (org.springframework.dao.DataIntegrityViolationException alreadyRefunded) {
+                log.info("Booking {} cancellation already refunded - redelivery, nothing to do",
+                        event.getBookingReference());
+            }
         } else if (status == PaymentStatus.PENDING || status == PaymentStatus.AUTHORIZED
                 || status == PaymentStatus.AUTHORIZATION_FAILED || status == PaymentStatus.CAPTURE_FAILED) {
             paymentFacade.cancel(payment.id(), ctx);
