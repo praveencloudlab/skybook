@@ -526,7 +526,7 @@ function BookingAuthGate({
           New to SkyBook?{' '}
           <Link
             to="/register"
-            className="inline-flex min-h-11 items-center font-medium text-brand-700 hover:underline sm:min-h-0"
+            className="inline-flex min-h-11 items-center font-medium text-brand-700 hover:underline lg:min-h-0"
           >
             Create an account
           </Link>

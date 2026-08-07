@@ -376,7 +376,11 @@ function PersonalAndDocuments({ profile, onSaved }: { profile: Profile; onSaved:
       {/* A sticky action bar so saving is never missed - the previous single
           button lived at the bottom of the third section and people edited then
           navigated away without pressing it, so their changes looked "not saved". */}
-      <div className="sticky top-14 z-10 -mx-6 mb-4 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-6 py-2.5 backdrop-blur">
+      {/* -mx-6/px-6 bleeds this bar to the card's edges - but the card's own
+          padding is 16 px on a phone, so a 24 px bleed overhung the layout by
+          8 px and gave the whole page a horizontal scroll. The bleed now
+          matches the padding at each size. */}
+      <div className="sticky top-14 z-10 -mx-4 mb-4 flex items-center justify-between gap-3 border-b border-slate-200 bg-white/90 px-4 py-2.5 backdrop-blur sm:-mx-6 sm:px-6">
         <span className="text-sm text-slate-500">
           {dirty ? 'You have unsaved changes' : saved ? 'All changes saved ✓' : 'Your saved details'}
         </span>

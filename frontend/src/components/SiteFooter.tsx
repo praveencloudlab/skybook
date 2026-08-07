@@ -43,7 +43,7 @@ export function SiteFooter() {
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Operations</h3>
             <ul className="mt-1 sm:mt-3 sm:space-y-2">
               <li>
-                <Link to="/admin" className="inline-flex min-h-11 items-center text-sm text-slate-600 transition hover:text-brand-700 sm:min-h-0">
+                <Link to="/admin" className="inline-flex min-h-11 items-center text-sm text-slate-600 transition hover:text-brand-700 lg:min-h-0">
                   Admin console
                 </Link>
               </li>
@@ -54,12 +54,12 @@ export function SiteFooter() {
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Book</h3>
             <ul className="mt-1 sm:mt-3 sm:space-y-2">
               <li>
-                <Link to="/search" className="inline-flex min-h-11 items-center text-sm text-slate-600 transition hover:text-brand-700 sm:min-h-0">
+                <Link to="/search" className="inline-flex min-h-11 items-center text-sm text-slate-600 transition hover:text-brand-700 lg:min-h-0">
                   Search flights
                 </Link>
               </li>
               <li>
-                <Link to="/bookings" className="inline-flex min-h-11 items-center text-sm text-slate-600 transition hover:text-brand-700 sm:min-h-0">
+                <Link to="/bookings" className="inline-flex min-h-11 items-center text-sm text-slate-600 transition hover:text-brand-700 lg:min-h-0">
                   My trips
                 </Link>
               </li>
@@ -86,19 +86,19 @@ export function SiteFooter() {
           ) : (
             <ul className="mt-1 sm:mt-3 sm:space-y-2">
               <li>
-                <Link to="/sign-in" className="inline-flex min-h-11 items-center text-sm text-slate-600 transition hover:text-brand-700 sm:min-h-0">
+                <Link to="/sign-in" className="inline-flex min-h-11 items-center text-sm text-slate-600 transition hover:text-brand-700 lg:min-h-0">
                   Log in
                 </Link>
               </li>
               <li>
-                <Link to="/register" className="inline-flex min-h-11 items-center text-sm text-slate-600 transition hover:text-brand-700 sm:min-h-0">
+                <Link to="/register" className="inline-flex min-h-11 items-center text-sm text-slate-600 transition hover:text-brand-700 lg:min-h-0">
                   Create account
                 </Link>
               </li>
               <li>
                 <Link
                   to="/forgot-password"
-                  className="inline-flex min-h-11 items-center text-sm text-slate-600 transition hover:text-brand-700 sm:min-h-0"
+                  className="inline-flex min-h-11 items-center text-sm text-slate-600 transition hover:text-brand-700 lg:min-h-0"
                 >
                   Reset password
                 </Link>

@@ -88,7 +88,14 @@ body {
  * iOS Safari zooms the viewport when you focus a field under 16 px, which is
  * why forms on so many sites lurch sideways on an iPhone.
  */
-@media (max-width: 640px) {
+@media (max-width: 640px), (pointer: coarse) {
+  /*
+    Width was the wrong question. A tablet at 768 px is still a finger, and
+    it was still being handed 20 px links; a narrow desktop window is still
+    a mouse. `pointer: coarse` asks the thing that actually matters - is the
+    pointing device imprecise - so every touch device gets thumb-sized
+    controls and no desktop is inflated for a browser someone resized.
+  */
   button,
   a[role='button'],
   [type='button'],

@@ -89,7 +89,7 @@ export function SignInForm({ onSignedIn, showSso = false }: { onSignedIn: () => 
           />
           Keep me signed in
         </label>
-        <Link to="/forgot-password" className="inline-flex min-h-11 items-center text-sm font-medium text-brand-700 hover:underline sm:min-h-0">
+        <Link to="/forgot-password" className="inline-flex min-h-11 items-center text-sm font-medium text-brand-700 hover:underline lg:min-h-0">
           Forgot password?
         </Link>
       </div>

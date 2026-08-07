@@ -64,12 +64,20 @@ export function AdminPage() {
 
       {/* Content */}
       <div className="min-w-0 flex-1 px-4 py-8 sm:px-0">
-        {/* Mobile section picker */}
-        <div className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1 sm:hidden">
+        {/*
+          Mobile section picker. Was a horizontally scrolling strip: six
+          sections needing 454 px inside a 358 px screen, so Gate ops and
+          Fleet sat off the right edge with nothing to suggest they existed -
+          a menu you have to discover by swiping is a menu most people never
+          find. A two-column grid shows all six at once at thumb size, and
+          the current one is marked for assistive tech as well as visually.
+        */}
+        <div className="mb-4 grid grid-cols-2 gap-1.5 rounded-xl bg-slate-100 p-1.5 sm:hidden">
           {SECTIONS.map((s) => (
             <button key={s.id} type="button" onClick={() => setSection(s.id)}
-              className={'shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium ' +
-                (section === s.id ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-500')}>
+              aria-current={section === s.id ? 'page' : undefined}
+              className={'flex min-h-11 items-center justify-center gap-1.5 rounded-lg px-2 text-sm font-medium transition ' +
+                (section === s.id ? 'bg-white text-brand-700 shadow-sm' : 'text-slate-600')}>
               {s.label}
             </button>
           ))}
