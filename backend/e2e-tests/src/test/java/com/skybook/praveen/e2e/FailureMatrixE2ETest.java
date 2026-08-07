@@ -138,9 +138,20 @@ class FailureMatrixE2ETest {
         // a trip before any account exists, the way every travel site works
         // (the gateway's PUBLIC_PATHS carries /api/flights/**). This assertion
         // used to demand 401 here, which quietly became wrong the day public
-        // search shipped - and left this suite red for four nights. It now
-        // pins the boundary as designed rather than as it once was.
-        assertThat(RestAssured.given().when().get("/api/flights").statusCode())
+        // search shipped - and left this suite red for four nights.
+        //
+        // SEARCH, not the bare list. /api/flights is an unpaginated list-ALL
+        // that answers 200 on a laptop's dataset and 401 on production's
+        // ~400k rows - a masked failure, not an authorization decision (the
+        // body carries "path":"/error", Spring's error forward, which is
+        // itself behind auth). Asserting it here made this test a scale probe
+        // wearing a security test's clothes. The search endpoint is what the
+        // frontend actually calls to shop, so it is the honest subject.
+        assertThat(RestAssured.given()
+                .queryParam("originAirportCode", "LHR")
+                .queryParam("destinationAirportCode", "DXB")
+                .queryParam("departureDate", java.time.LocalDate.now().plusDays(14).toString())
+                .when().get("/api/flights/search").statusCode())
                 .as("public shopping data must remain reachable without an account")
                 .isEqualTo(200);
     }
