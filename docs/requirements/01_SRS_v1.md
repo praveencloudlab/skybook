@@ -1,3 +1,5 @@
+> **SUPERSEDED** by [SKB-DOC-01](../enterprise/01_SRS.md) (SRS v2, 2026-08-01). Retained for history only.
+
 SkyBook SRS v1.0 — Part 1
 1. Project Vision
 SkyBook is an enterprise-style airline reservation platform where users can search flights, register, book tickets, check in online, choose seats, and generate boarding passes.

@@ -361,10 +361,19 @@ skybook/
 
 The [`docs/`](docs/) tree is written as the project's real engineering record
 — frozen design documents per increment, decisions with reasons, and test
-reports. Start with:
+reports.
+
+**The governed documentation set** lives in
+[`docs/enterprise/`](docs/enterprise/00_DOCUMENT_INDEX.md) — twelve
+change-controlled documents (SRS with numbered requirements, HLD, interface
+control, data & security architecture, engineering handbook, QA plan,
+release policy, operations runbook, and a full requirements-traceability
+matrix). [`SKB-DOC-00`](docs/enterprise/00_DOCUMENT_INDEX.md) is the entry
+point and defines precedence over everything below. Start with:
 
 | Doc | What it covers |
 |---|---|
+| [`enterprise/00_DOCUMENT_INDEX.md`](docs/enterprise/00_DOCUMENT_INDEX.md) | The controlled document set — start here |
 | [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) | The system at a glance |
 | [`ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) | The promotion ladder, gate by gate |
 | [`DR_RUNBOOK.md`](docs/DR_RUNBOOK.md) | Backup, restore, and the weekly drill |
