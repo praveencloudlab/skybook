@@ -55,6 +55,18 @@ public class BookingEventPassenger {
      */
     private BigDecimal seatSurcharge;
 
+    /**
+     * Fare breakdown for the emailed ticket's FARE CALCULATION ledger:
+     * {@code fare = baseFare + seatSurcharge + baggageFee}. Nullable on
+     * legacy events - consumers fall back to the all-in {@code fare}.
+     */
+    private BigDecimal baseFare;
+
+    private BigDecimal baggageFee;
+
+    /** Extra checked bags bought at booking (the ledger's BAGS count). */
+    private Integer extraBags;
+
     /** ISO-4217 of fare/seatSurcharge ("USD" in v1). Nullable on legacy events. */
     private String currency;
 

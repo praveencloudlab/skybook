@@ -256,6 +256,10 @@ public class BookingEventProducer {
                 // §9: check-in snapshots the surcharge actually
                 // PAID as its free-change entitlement ceiling.
                 .seatSurcharge(p.seatSurcharge())
+                // Fare breakdown for the emailed ticket's ledger.
+                .baseFare(p.baseFare())
+                .baggageFee(p.baggageFee())
+                .extraBags(p.extraBags())
                 .currency(p.currency())
                 .checkInStatus(p.checkInStatus() != null ? p.checkInStatus().name() : null)
                 .build();

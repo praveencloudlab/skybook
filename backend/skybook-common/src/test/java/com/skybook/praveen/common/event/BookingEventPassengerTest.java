@@ -54,7 +54,8 @@ class BookingEventPassengerTest {
     void allArgsConstructorMatchesFieldOrder() {
         BookingEventPassenger passenger = new BookingEventPassenger(
                 42L, 0, "1251234567890", "Praveen S", "12A",
-                "ECONOMY", "SAVER", new BigDecimal("120.00"), BigDecimal.ZERO, "USD", "NOT_OPEN");
+                "ECONOMY", "SAVER", new BigDecimal("120.00"), BigDecimal.ZERO,
+                new BigDecimal("100.00"), new BigDecimal("20.00"), 1, "USD", "NOT_OPEN");
 
         assertThat(passenger.getBookingPassengerId()).isEqualTo(42L);
         assertThat(passenger.getSegmentIndex()).isZero();

@@ -58,6 +58,7 @@ final class AirportCityLookup {
             Map.entry("BLR", "Bengaluru"),
             Map.entry("MAA", "Chennai"),
             Map.entry("HYD", "Hyderabad"),
+            Map.entry("VTZ", "Visakhapatnam"),
             Map.entry("CCU", "Kolkata"),
             Map.entry("PEK", "Beijing"),
             Map.entry("PVG", "Shanghai"),
