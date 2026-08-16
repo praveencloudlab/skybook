@@ -1,5 +1,5 @@
 import type { Booking } from '../../api/bookings';
-import { AIRPORTS, type Flight } from '../../api/flights';
+import { AIRPORTS, airlineNameFor, type Flight } from '../../api/flights';
 import type { BoardingPass, CheckIn } from '../../api/checkin';
 import { TRAVEL_CLASS_LABELS, type TravelClass } from '../../api/quotes';
 import { dayMonthYear, money, time, timeShift } from '../../lib/format';
@@ -331,7 +331,17 @@ export function printETicket(
     ? booking.segments
     : [{ id: 0, segmentIndex: 0, flightId: booking.flightId, status: 'UPCOMING' as const }];
 
-  const legLabel = (i: number) => (i === 0 ? 'OUTBOUND' : i === 1 ? 'RETURN' : `LEG ${i + 1}`);
+  // RETURN only when the leg lands back at the journey origin - a through-
+  // ticket connection (LHR-DXB-HYD) is LEG 2, same rule as the trip page.
+  const journeyOrigin = flightsById[segs[0]?.flightId ?? -1]?.originAirportCode;
+  const legLabel = (i: number) => {
+    if (i === 0) return 'OUTBOUND';
+    const legFlight = flightsById[segs.find((s) => s.segmentIndex === i)?.flightId ?? -1];
+    if (legFlight && journeyOrigin && legFlight.destinationAirportCode === journeyOrigin) {
+      return 'RETURN';
+    }
+    return `LEG ${i + 1}`;
+  };
   const segmentRows = (flight: Flight, index: number, cancelled: boolean) => `
       ${multi ? `
       <tr>
@@ -349,7 +359,7 @@ export function printETicket(
           <div><b style="font-size:15px;">${flight.destinationAirportCode}</b> ${cityFor(flight.destinationAirportCode).toUpperCase()}</div>
           ${flight.arrivalTerminal ? `<div style="color:#333;">Terminal: <b>${flight.arrivalTerminal}</b></div>` : ''}
         </td>
-        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">${flight.airlineCode}${flight.flightNumber.replace(/\D/g, '') || flight.flightNumber}</td>
+        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;"><b>${flight.flightNumber}</b><br><span style="font-size:11px;color:#555;">${airlineNameFor(flight.airlineCode ?? flight.flightNumber)}</span></td>
         <td style="padding:14px 14px;vertical-align:top;line-height:1.85;"><b>${time(flight.departureTime)}</b><br>${ddMon(flight.departureTime)}</td>
         <td style="padding:14px 14px;vertical-align:top;line-height:1.85;"><b>${time(flight.arrivalTime)}</b><br>${ddMon(flight.arrivalTime)}</td>
         <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">${timeShift(flight.departureTime, -60)}</td>
@@ -362,8 +372,8 @@ export function printETicket(
           <div>Fare basis: ${fareBasis}</div>
         </td>
         <td colspan="2" style="padding:14px 14px;vertical-align:top;line-height:1.85;">
-          <div>Operated by: SKYBOOK</div>
-          <div>Marketed by: SKYBOOK</div>
+          <div>Operated by: <b>${airlineNameFor(flight.airlineCode ?? flight.flightNumber).toUpperCase()}</b></div>
+          <div>Marketed by: <b>${airlineNameFor(flight.airlineCode ?? flight.flightNumber).toUpperCase()}</b></div>
           <div>Booking status (1): ${cancelled ? 'CANCELLED' : 'OK'}</div>
           <div>Seat${booking.passengers.filter((p) => (p.segmentIndex ?? 0) === index && !p.cancelled && p.seatNumber).length === 1 ? '' : 's'}:
             ${booking.passengers

@@ -27,6 +27,8 @@ final class AirlineLookup {
             Map.entry("BA", new AirlineBrand("BA", "British Airways", "#075AAA", "#EB2226")),
             Map.entry("CX", new AirlineBrand("CX", "Cathay Pacific", "#00615A", "#BFA46F")),
             Map.entry("EK", new AirlineBrand("EK", "Emirates", "#D71921", "#C8A96A")),
+            Map.entry("6E", new AirlineBrand("6E", "IndiGo", "#001B94", "#FFFFFF")),
+            Map.entry("IX", new AirlineBrand("IX", "Air India Express", "#F04E23", "#1B1B1B")),
             Map.entry("EY", new AirlineBrand("EY", "Etihad Airways", "#A98249", "#3C2E1E")),
             Map.entry("LH", new AirlineBrand("LH", "Lufthansa", "#05164D", "#FDB913")),
             Map.entry("QF", new AirlineBrand("QF", "Qantas", "#E40000", "#1D1D1B")),

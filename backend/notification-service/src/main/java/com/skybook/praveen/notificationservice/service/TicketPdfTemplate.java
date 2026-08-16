@@ -124,7 +124,8 @@ public class TicketPdfTemplate {
         StringBuilder itinerary = new StringBuilder();
         int segIdx = 0;
         for (BookingEventSegment segment : segments) {
-            itinerary.append(segmentRows(segment, segIdx, multi, cabinLabel, classCode, fareBasis));
+            itinerary.append(segmentRows(segment, segIdx, multi, cabinLabel, classCode, fareBasis,
+                    segments.get(0).getOriginAirportCode()));
             segIdx++;
         }
 
@@ -335,7 +336,8 @@ public class TicketPdfTemplate {
     // ------------------------------------------------------------------
 
     private String segmentRows(BookingEventSegment s, int index, boolean multi,
-                               String cabinLabel, String classCode, String fareBasis) {
+                               String cabinLabel, String classCode, String fareBasis,
+                               String journeyOrigin) {
         String from = nvl(s.getOriginAirportCode(), "?");
         String to = nvl(s.getDestinationAirportCode(), "?");
         LocalDateTime dep = parseEventTime(s.getDepartureTime());
@@ -347,7 +349,7 @@ public class TicketPdfTemplate {
                     <tr>
                       <td colspan="6" style="padding:9px 11px;background-color:#f3eef1;color:%s;font-weight:bold;font-size:10px;letter-spacing:1px;">%s &#183; %s - %s</td>
                     </tr>
-                    """.formatted(MAROON, legLabel(index), escape(from), escape(to)));
+                    """.formatted(MAROON, legLabel(index, to, journeyOrigin), escape(from), escape(to)));
         }
         String seats = s.getPassengers() == null ? "-"
                 : s.getPassengers().stream()
@@ -357,7 +359,7 @@ public class TicketPdfTemplate {
                 <tr>
                   <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b style="font-size:13px;">%s</b> %s%s</td>
                   <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b style="font-size:13px;">%s</b> %s%s</td>
-                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;">%s</td>
+                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/><span style="font-size:9px;color:#555555;">%s</span></td>
                   <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/><b>%s</b></td>
                   <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/><b>%s</b></td>
                   <td style="padding:11px 11px;vertical-align:top;line-height:1.8;">%s</td>
@@ -370,8 +372,8 @@ public class TicketPdfTemplate {
                     <div>Fare basis: %s</div>
                   </td>
                   <td colspan="2" style="padding:11px 11px;vertical-align:top;line-height:1.85;">
-                    <div>Operated by: SKYBOOK</div>
-                    <div>Marketed by: SKYBOOK</div>
+                    <div>Operated by: <b>%s</b></div>
+                    <div>Marketed by: <b>%s</b></div>
                     <div>Booking status (1): OK</div>
                     <div>Seats: %s</div>
                   </td>
@@ -387,10 +389,13 @@ public class TicketPdfTemplate {
                 escape(to), escape(city(to)),
                 s.getArrivalTerminal() != null ? "<div style=\"color:#333333;\">Terminal: <b>" + escape(s.getArrivalTerminal()) + "</b></div>" : "",
                 escape(nvl(s.getFlightNumber(), "-")),
+                escape(airlineName(s.getFlightNumber())),
                 dep != null ? HHMM.format(dep) : "-", dep != null ? ddMon(dep) : "-",
                 arr != null ? HHMM.format(arr) : "-", arr != null ? ddMon(arr) : "-",
                 dep != null ? HHMM.format(dep.minusMinutes(60)) : "-",
                 escape(classCode), escape(cabinLabel), baggageFor(firstClass(s)), escape(fareBasis),
+                escape(airlineName(s.getFlightNumber()).toUpperCase()),
+                escape(airlineName(s.getFlightNumber()).toUpperCase()),
                 escape(seats),
                 dep != null ? ddMon(dep) : "-",
                 dep != null ? ddMon(dep.plusDays(120)) : "-",
@@ -418,8 +423,24 @@ public class TicketPdfTemplate {
                 ? s.getPassengers().get(0).getTravelClass() : null;
     }
 
-    private static String legLabel(int index) {
-        return index == 0 ? "OUTBOUND" : index == 1 ? "RETURN" : "LEG " + (index + 1);
+    /**
+     * OUTBOUND for leg 0; RETURN only when the leg actually lands back at the
+     * journey's origin; otherwise LEG N. A through-ticket's connection leg
+     * (LHR-DXB-HYD) is LEG 2, not a return - the same rule the trip page uses.
+     */
+    private static String legLabel(int index, String destination, String journeyOrigin) {
+        if (index == 0) {
+            return "OUTBOUND";
+        }
+        if (destination != null && destination.equalsIgnoreCase(journeyOrigin)) {
+            return "RETURN";
+        }
+        return "LEG " + (index + 1);
+    }
+
+    /** Airline display name from the code embedded in the flight number. */
+    private static String airlineName(String flightNumber) {
+        return AirlineLookup.forFlightNumber(flightNumber).displayName();
     }
 
     // ------------------------------------------------------------------

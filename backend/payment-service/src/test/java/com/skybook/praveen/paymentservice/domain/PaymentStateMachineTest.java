@@ -41,7 +41,10 @@ class PaymentStateMachineTest {
             PaymentStatus.CAPTURE_FAILED, Set.of(PaymentStatus.CAPTURED, PaymentStatus.CANCELLED),
             PaymentStatus.CAPTURED, Set.of(PaymentStatus.PARTIALLY_REFUNDED, PaymentStatus.REFUNDED),
             PaymentStatus.PARTIALLY_REFUNDED, Set.of(PaymentStatus.PARTIALLY_REFUNDED, PaymentStatus.REFUNDED),
-            PaymentStatus.REFUNDED, Set.of(),
+            // Self-loop: a fee-withheld cancellation ends REFUNDED with the fee
+            // still captured; the desk returning it as goodwill completes as
+            // another refund on the REFUNDED payment.
+            PaymentStatus.REFUNDED, Set.of(PaymentStatus.REFUNDED),
             PaymentStatus.CANCELLED, Set.of()
     );
 
@@ -103,11 +106,14 @@ class PaymentStateMachineTest {
 
     @Test
     void terminalStatesHaveNoExits() {
+        // REFUNDED keeps exactly one edge - its goodwill self-loop; CANCELLED
+        // has none. Neither can ever reach a DIFFERENT state.
         for (PaymentStatus terminal : Set.of(PaymentStatus.REFUNDED, PaymentStatus.CANCELLED)) {
             for (PaymentStatus to : PaymentStatus.values()) {
+                boolean allowed = terminal == PaymentStatus.REFUNDED && to == PaymentStatus.REFUNDED;
                 assertThat(stateMachine.canTransition(terminal, to))
-                        .as("%s -> %s must be illegal", terminal, to)
-                        .isFalse();
+                        .as("%s -> %s must be %s", terminal, to, allowed ? "legal" : "illegal")
+                        .isEqualTo(allowed);
             }
         }
     }

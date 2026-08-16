@@ -125,6 +125,33 @@ export const POPULAR_ROUTES: Array<{ origin: string; destination: string; label:
 ];
 
 /** Airports the seed actually serves, for the origin/destination pickers. */
+/** Airline display names by IATA code - mirrors notification-service's AirlineLookup. */
+export const AIRLINE_NAMES: Record<string, string> = {
+  SB: 'SkyBook Airways',
+  AF: 'Air France',
+  AI: 'Air India',
+  BA: 'British Airways',
+  CX: 'Cathay Pacific',
+  EK: 'Emirates',
+  EY: 'Etihad Airways',
+  LH: 'Lufthansa',
+  QF: 'Qantas',
+  QR: 'Qatar Airways',
+  SQ: 'Singapore Airlines',
+  TK: 'Turkish Airlines',
+  VS: 'Virgin Atlantic',
+  '6E': 'IndiGo',
+  IX: 'Air India Express',
+};
+
+export function airlineNameFor(codeOrFlightNumber: string | undefined): string {
+  if (!codeOrFlightNumber) return 'SkyBook Airways';
+  const code = /^\d/.test(codeOrFlightNumber.charAt(1) ?? '')
+    ? codeOrFlightNumber.slice(0, 2)
+    : codeOrFlightNumber.slice(0, 2);
+  return AIRLINE_NAMES[code] ?? AIRLINE_NAMES[codeOrFlightNumber] ?? 'SkyBook Airways';
+}
+
 export const AIRPORTS: Array<{ code: string; city: string }> = [
   { code: 'LHR', city: 'London Heathrow' },
   { code: 'MAN', city: 'Manchester' },

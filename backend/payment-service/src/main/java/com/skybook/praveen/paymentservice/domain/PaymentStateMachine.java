@@ -38,7 +38,11 @@ public class PaymentStateMachine {
         // Self-loop: multiple partial refunds are legal (design doc section 4.1).
         TRANSITIONS.put(PaymentStatus.PARTIALLY_REFUNDED,
                 EnumSet.of(PaymentStatus.PARTIALLY_REFUNDED, PaymentStatus.REFUNDED));
-        TRANSITIONS.put(PaymentStatus.REFUNDED, EnumSet.noneOf(PaymentStatus.class));
+        // Self-loop only: a fee-withheld cancellation ends REFUNDED with money
+        // still captured (the fee); the desk returning that residual as
+        // goodwill completes as another refund on a REFUNDED payment. No
+        // other state is reachable from REFUNDED.
+        TRANSITIONS.put(PaymentStatus.REFUNDED, EnumSet.of(PaymentStatus.REFUNDED));
         TRANSITIONS.put(PaymentStatus.CANCELLED, EnumSet.noneOf(PaymentStatus.class));
     }
 

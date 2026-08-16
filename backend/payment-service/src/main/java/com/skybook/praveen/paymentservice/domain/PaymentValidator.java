@@ -60,13 +60,21 @@ public class PaymentValidator {
     }
 
     public void validateRefundable(Payment payment, BigDecimal refundAmount) {
+        BigDecimal remaining = payment.getCapturedAmount().subtract(payment.getRefundedAmount());
+
+        // A fee-withheld cancellation ends REFUNDED while money remains
+        // captured (the fee). That residual is still refundable - the desk
+        // waiving a Saver fee as goodwill - so REFUNDED blocks a refund only
+        // once nothing is left to return.
+        boolean refundedWithResidual = payment.getStatus() == PaymentStatus.REFUNDED
+                && remaining.signum() > 0;
         if (payment.getStatus() != PaymentStatus.CAPTURED
-                && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED) {
+                && payment.getStatus() != PaymentStatus.PARTIALLY_REFUNDED
+                && !refundedWithResidual) {
             throw new PaymentConflictException("Payment " + payment.getPaymentReference()
                     + " is " + payment.getStatus() + " - only captured payments can be refunded");
         }
 
-        BigDecimal remaining = payment.getCapturedAmount().subtract(payment.getRefundedAmount());
         // Invariant: refundedAmount <= capturedAmount (design doc section 3.1.1).
         if (refundAmount.compareTo(remaining) > 0) {
             throw new PaymentConflictException("Refund of " + refundAmount
