@@ -130,6 +130,7 @@ class BookingEventProducerTest {
                 BookingStatus.CONFIRMED,
                 BOOKED_AT,
                 new BigDecimal("142.00"),
+                null, null,
                 "window preferred",
                 "auth|owner-1",
                 passengers,
@@ -229,7 +230,7 @@ class BookingEventProducerTest {
         void aBookingWithoutAContactPublishesNothing() {
             BookingResponse noContact = new BookingResponse(
                     77L, "SB1234", 500L, 9L, List.of(), BookingStatus.CREATED, BOOKED_AT,
-                    new BigDecimal("142.00"), null, "auth|owner-1", List.of(),
+                    new BigDecimal("142.00"), null, null, null, "auth|owner-1", List.of(),
                     null, null, List.of(), "system", "system", 1L, BOOKED_AT, BOOKED_AT);
 
             producer.publishBookingCreated(noContact, List.of(outboundFlight()));
@@ -533,7 +534,7 @@ class BookingEventProducerTest {
             BookingResponse unpaid = new BookingResponse(
                     77L, "SB1234", 500L, 9L,
                     List.of(new BookingSegmentResponse(1L, 0, 9L, "UPCOMING")),
-                    null, null, new BigDecimal("142.00"), null, null,
+                    null, null, new BigDecimal("142.00"), null, null, null, null,
                     null,
                     new BookingContactResponse("Praveen S", "praveen@example.com", null),
                     null, null, "system", "system", 1L, BOOKED_AT, BOOKED_AT);

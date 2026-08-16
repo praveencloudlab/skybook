@@ -10,6 +10,7 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 import { authApi } from './api/auth';
+import { computeTaxes } from './lib/taxes';
 import { setUnauthenticatedHandler } from './api/client';
 import { useSession } from './features/auth/useSession';
 import { RegisterPage } from './features/auth/RegisterPage';
@@ -703,7 +704,22 @@ function BookingJourney() {
   const bagTotal =
     (bags.reduce((sum, b) => sum + b, 0) +
       (returnFlight ? returnBags.reduce((sum, b) => sum + b, 0) : 0)) * EXTRA_BAG_FEE;
-  const total = (choice ? choice.baseFare * paxCount : 0) + seatTotal + bagTotal;
+  // Government/airport taxes - the client mirror of the server TaxPolicy, so
+  // the summary total equals the booked total to the penny.
+  const taxLines =
+    flight && choice
+      ? computeTaxes(
+          [
+            flight.originAirportCode,
+            ...connection.map((leg) => leg.originAirportCode),
+            ...(returnFlight ? [returnFlight.originAirportCode] : []),
+          ],
+          choice.cabin,
+          paxCount,
+        )
+      : [];
+  const taxTotal = taxLines.reduce((sum, line) => sum + line.amount, 0);
+  const total = (choice ? choice.baseFare * paxCount : 0) + seatTotal + bagTotal + taxTotal;
   const guestLabel = (index: number) =>
     `${guests[index]?.firstName ?? ''} ${guests[index]?.lastName ?? ''}`.trim() || `Guest ${index + 1}`;
   const extras = [
@@ -737,6 +753,8 @@ function BookingJourney() {
             : [],
         )
       : []),
+    // Taxes itemised in the summary exactly as the ticket will print them.
+    ...taxLines.map((line) => ({ label: line.label, amount: line.amount })),
   ];
 
   // Any in-progress step carries an explicit exit: restart() clears the

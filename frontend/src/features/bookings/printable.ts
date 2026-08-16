@@ -3,6 +3,7 @@ import { AIRPORTS, airlineNameFor, type Flight } from '../../api/flights';
 import type { BoardingPass, CheckIn } from '../../api/checkin';
 import { TRAVEL_CLASS_LABELS, type TravelClass } from '../../api/quotes';
 import { dayMonthYear, money, time, timeShift } from '../../lib/format';
+import { TAX_LABELS } from '../../lib/taxes';
 import { qrSvg } from '../../lib/qr';
 
 /**
@@ -516,8 +517,13 @@ export function printETicket(
         <div style="font-family:'Courier New',monospace;font-size:13px;line-height:2.3;white-space:pre;overflow-x:auto;color:#1f2328;">${[
           fareLines,
           ledgerLine('SEATS', `${seatList}${seatsWaived ? ' (WAIVED)' : ''}`, usd(seatCharges)),
-          ledgerLine('BAGS', bagCount > 0 ? `${bagCount} EXTRA${multi ? ' X 2 LEGS' : ''}` : 'NONE', usd(bagCharges)),
-          ledgerLine('TAX', 'INCLUDED', usd(0)),
+          ledgerLine('BAGS', bagCount > 0 ? `${bagCount} EXTRA${multi ? ' X 2 FLIGHTS' : ''}` : 'NONE', usd(bagCharges)),
+          ...(booking.taxBreakdown
+            ? booking.taxBreakdown.split(';').map((part, i) => {
+                const [code, amount] = part.split(':');
+                return ledgerLine(i === 0 ? 'TAXES' : '', (TAX_LABELS[code] ?? code).toUpperCase(), usd(Number(amount) || 0));
+              })
+            : [ledgerLine('TAX', 'INCLUDED', usd(0))]),
         ].filter(Boolean).join('\n')}</div>
         <div style="border-top:2px solid ${MAROON};margin-top:10px;padding-top:10px;font-family:'Courier New',monospace;font-size:13px;white-space:pre;overflow-x:auto;">${ledgerLine(
           'TOTAL',
@@ -599,6 +605,15 @@ export function printETicket(
       <div style="font-size:12px;color:#555;margin-top:14px;padding:12px 6px 0;border-top:1px solid #e2e8f0;line-height:1.8;">
         Total paid: <b>${money(booking.totalFare, _currency)}</b> &nbsp;·&nbsp; Status: ${booking.bookingStatus}
         ${booking.contact ? ' &nbsp;·&nbsp; Contact: ' + booking.contact.contactEmail : ''}
+      </div>
+
+      <!-- Carrier contact block (fictional airline - reserved .example
+           domain and Ofcom drama-range number). -->
+      <div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:11px;color:#475569;line-height:1.9;">
+        <b style="color:#1a1a1a;">SkyBook Airways · Contact</b><br>
+        Reservations &amp; support (24/7): <b>+44 20 7946 0958</b> &nbsp;·&nbsp;
+        <b>support@skybook.example</b> &nbsp;·&nbsp; skybook.example<br>
+        Registered office: SkyBook Airways Ltd, One Skyway House, 100 Aviation Way, London EC2X 9SB, United Kingdom &nbsp;·&nbsp; Company No. 01234567
       </div>
     </div>`;
   open(`E-ticket ${booking.bookingReference}`, body);

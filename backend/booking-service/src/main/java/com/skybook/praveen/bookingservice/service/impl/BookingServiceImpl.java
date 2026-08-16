@@ -2,6 +2,7 @@ package com.skybook.praveen.bookingservice.service.impl;
 
 import com.skybook.praveen.bookingservice.domain.BookingStateMachine;
 import com.skybook.praveen.bookingservice.domain.CancellationPolicy;
+import com.skybook.praveen.bookingservice.domain.TaxPolicy;
 import com.skybook.praveen.bookingservice.domain.BookingValidator;
 import com.skybook.praveen.bookingservice.domain.FareCalculator;
 import com.skybook.praveen.bookingservice.domain.PnrGenerator;
@@ -70,6 +71,7 @@ public class BookingServiceImpl implements BookingService {
     private final BookingValidator bookingValidator;
     private final FareCalculator fareCalculator;
     private final CancellationPolicy cancellationPolicy;
+    private final TaxPolicy taxPolicy;
 
     /**
      * Ops/backdating switch (default OFF): when true the bookable-cutoff
@@ -89,6 +91,7 @@ public class BookingServiceImpl implements BookingService {
                               BookingValidator bookingValidator,
                               FareCalculator fareCalculator,
                               CancellationPolicy cancellationPolicy,
+                              TaxPolicy taxPolicy,
                               @Value("${booking.allow-past-bookings:false}") boolean allowPastBookings,
                               @Value("${booking.draft.ttl-minutes:15}") long draftTtlMinutes) {
         this.bookingRepository = bookingRepository;
@@ -98,6 +101,7 @@ public class BookingServiceImpl implements BookingService {
         this.bookingValidator = bookingValidator;
         this.fareCalculator = fareCalculator;
         this.cancellationPolicy = cancellationPolicy;
+        this.taxPolicy = taxPolicy;
         this.allowPastBookings = allowPastBookings;
         this.draftTtlMinutes = draftTtlMinutes;
     }
@@ -215,7 +219,23 @@ public class BookingServiceImpl implements BookingService {
         }
 
         booking.setPassengers(bookingPassengers);
-        booking.setTotalFare(totalFare);
+
+        // Government/airport taxes: per passenger, per departure (TaxPolicy) -
+        // a through-ticket via DXB genuinely pays the UAE charge. Merged by
+        // code, stored on the booking, included in totalFare and the payment.
+        List<TaxPolicy.TaxLine> taxLines = new ArrayList<>();
+        for (JourneyLeg leg : journey) {
+            for (PassengerBookingDetail detail : request.passengers()) {
+                taxLines.addAll(taxPolicy.linesFor(leg.originAirportCode(),
+                        detail.travelClass() != null ? detail.travelClass().name() : null));
+            }
+        }
+        Map<String, BigDecimal> mergedTaxes = TaxPolicy.merge(taxLines);
+        BigDecimal taxTotal = mergedTaxes.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        booking.setTaxTotal(taxTotal.signum() > 0 ? taxTotal : null);
+        booking.setTaxBreakdown(TaxPolicy.serialize(mergedTaxes));
+
+        booking.setTotalFare(totalFare.add(taxTotal));
 
         BookingContact contact = BookingContact.builder()
                 .booking(booking)
@@ -274,10 +294,14 @@ public class BookingServiceImpl implements BookingService {
         for (BookingPassenger passenger : booking.getPassengers()) {
             totalFare = totalFare.add(passenger.getFare());
         }
+        // Taxes assessed at draft ride into the final total and the payment.
+        if (booking.getTaxTotal() != null) {
+            totalFare = totalFare.add(booking.getTaxTotal());
+        }
         booking.setTotalFare(totalFare);
 
         // Payment snapshot created HERE, with the final total (round 4).
-        // Invariant: sum(passenger.fare) = totalFare = payment.amount.
+        // Invariant: sum(passenger.fare) + taxTotal = totalFare = payment.amount.
         BookingPayment payment = BookingPayment.builder()
                 .booking(booking)
                 .paymentStatus(PaymentStatus.PENDING)

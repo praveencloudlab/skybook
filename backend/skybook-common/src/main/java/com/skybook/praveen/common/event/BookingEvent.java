@@ -90,6 +90,12 @@ public class BookingEvent {
 
     private BigDecimal totalFare;
 
+    /** Taxes included in totalFare (booking TaxPolicy); null pre-taxation. */
+    private BigDecimal taxTotal;
+
+    /** Compact per-code tax breakdown, e.g. "GB:216.00;UB:29.10;AE:16.30". */
+    private String taxBreakdown;
+
     /**
      * CANCELLED events only: the time-tier refund percent quoted at
      * cancellation (booking-service CancellationPolicy) - 100 = fare rules

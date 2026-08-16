@@ -321,7 +321,23 @@ public class BookingFacade {
                 .map(p -> (p.fareType() != null ? p.fareType().name() : "FLEXI")
                         + ":" + p.fare().toPlainString())
                 .collect(java.util.stream.Collectors.joining(";"));
-        return breakdown.isEmpty() ? null : breakdown;
+        if (breakdown.isEmpty()) {
+            return null;
+        }
+        // Government/airport taxes refund with the fare - as a TAX line
+        // (no fare-family fee applies to a tax). Only while the whole
+        // journey is unflown; a partially-flown booking's taxes were used.
+        boolean anyDeparted = preCancel.passengers().stream()
+                .filter(p -> !p.cancelled())
+                .anyMatch(p -> {
+                    FlightDetails f = flightsById.computeIfAbsent(p.flightId(), this::flightOrNull);
+                    return f == null || f.departureTime() == null || !f.departureTime().isAfter(
+                            com.skybook.praveen.common.time.AirportTimeZones.nowAt(f.originAirportCode()));
+                });
+        if (!anyDeparted && preCancel.taxTotal() != null && preCancel.taxTotal().signum() > 0) {
+            breakdown = breakdown + ";TAX:" + preCancel.taxTotal().toPlainString();
+        }
+        return breakdown;
     }
 
     /**

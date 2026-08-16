@@ -91,6 +91,7 @@ class BookingServiceImplTest {
                 bookingRepository, bookingPassengerRepository,
                 pnrGenerator, bookingStateMachine, bookingValidator, fareCalculator,
                 new com.skybook.praveen.bookingservice.domain.CancellationPolicy(new java.math.BigDecimal("30"), 72, 24, 2, 6),
+                new com.skybook.praveen.bookingservice.domain.TaxPolicy(false),
                 false, DRAFT_TTL_MINUTES);
     }
 
@@ -400,6 +401,7 @@ class BookingServiceImplTest {
                     bookingRepository, bookingPassengerRepository,
                     mockPnrGenerator, bookingStateMachine, bookingValidator, fareCalculator,
                     new com.skybook.praveen.bookingservice.domain.CancellationPolicy(new java.math.BigDecimal("30"), 72, 24, 2, 6),
+                    new com.skybook.praveen.bookingservice.domain.TaxPolicy(false),
                     false, DRAFT_TTL_MINUTES);
 
             CreateBookingRequest request = createRequest(

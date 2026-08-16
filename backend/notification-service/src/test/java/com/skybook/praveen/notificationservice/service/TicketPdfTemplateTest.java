@@ -90,6 +90,16 @@ class TicketPdfTemplateTest {
         }
 
         @Test
+        void theCarrierContactBlockIsAlwaysPresent() {
+            String xhtml = template.render(ticket().build(), null);
+
+            assertThat(xhtml).contains("SkyBook Airways &#183; Contact");
+            assertThat(xhtml).contains("+44 20 7946 0958");
+            assertThat(xhtml).contains("support@skybook.example");
+            assertThat(xhtml).contains("Registered office: SkyBook Airways Ltd");
+        }
+
+        @Test
         void fareLinesUseDotLeadersRouteAndPoundAmounts() {
             String xhtml = template.render(ticket().build(), null);
 
@@ -133,6 +143,29 @@ class TicketPdfTemplateTest {
 
             assertThat(xhtml).contains("2 EXTRA");
             assertThat(xhtml).contains("£80.00");
+        }
+
+        @Test
+        void taxesItemisePerCodeWhenTheBookingCarriesABreakdown() {
+            String xhtml = template.render(ticket()
+                    .taxTotal(new BigDecimal("261.40"))
+                    .taxBreakdown("GB:216.00;UB:29.10;AE:16.30")
+                    .build(), null);
+
+            assertThat(xhtml).contains("TAXES");
+            assertThat(xhtml).contains("UK AIR PASSENGER DUTY");
+            assertThat(xhtml).contains("£216.00");
+            assertThat(xhtml).contains("UK PASSENGER SERVICE CHARGE");
+            assertThat(xhtml).contains("UAE PASSENGER FACILITY CHARGE");
+            assertThat(xhtml).contains("£16.30");
+            assertThat(xhtml).doesNotContain("INCLUDED");
+        }
+
+        @Test
+        void preTaxationBookingsKeepTheLegacyTaxLine() {
+            String xhtml = template.render(ticket().build(), null);
+
+            assertThat(xhtml).contains("INCLUDED");
         }
 
         @Test

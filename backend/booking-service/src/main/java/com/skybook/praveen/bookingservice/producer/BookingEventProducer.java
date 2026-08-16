@@ -187,6 +187,8 @@ public class BookingEventProducer {
                                 })
                                 .toList())
                 .totalFare(booking.totalFare())
+                .taxTotal(booking.taxTotal())
+                .taxBreakdown(booking.taxBreakdown())
                 .refundTierPercent(refundTierPercent)
                 .premiumTierPercent(premiumTierPercent)
                 .refundBreakdown(refundBreakdown)

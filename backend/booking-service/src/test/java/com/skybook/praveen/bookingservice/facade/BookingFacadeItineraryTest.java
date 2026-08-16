@@ -126,7 +126,7 @@ class BookingFacadeItineraryTest {
     private BookingResponse booking(BookingStatus status, List<BookingSegmentResponse> segments,
                                     List<BookingPassengerResponse> passengers) {
         return new BookingResponse(7L, "SBITIN", 1L, 10L, segments, status, LocalDateTime.now(),
-                new BigDecimal("100.00"), null, "pax@example.com", passengers, null, null,
+                new BigDecimal("100.00"), null, null, null, "pax@example.com", passengers, null, null,
                 List.of(), "system", "system", 0L, LocalDateTime.now(), LocalDateTime.now());
     }
 

@@ -147,7 +147,7 @@ class BookingFacadeCancellationTest {
                                     List<BookingSegmentResponse> segments,
                                     List<BookingPassengerResponse> passengers) {
         return new BookingResponse(7L, "SBCANC", 1L, 10L, segments, status, LocalDateTime.now(),
-                new BigDecimal("200.00"), null, "pax@example.com", passengers, null, payment,
+                new BigDecimal("200.00"), null, null, null, "pax@example.com", passengers, null, payment,
                 List.of(), "system", "system", 0L, LocalDateTime.now(), LocalDateTime.now());
     }
 

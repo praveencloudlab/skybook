@@ -122,7 +122,7 @@ class BookingControllerTest {
     private static BookingResponse bookingResponse() {
         return new BookingResponse(
                 77L, "SB1234", 500L, 9L, List.of(), BookingStatus.CONFIRMED,
-                LocalDateTime.now(), new BigDecimal("142.00"), null, "auth|owner-1",
+                LocalDateTime.now(), new BigDecimal("142.00"), null, null, null, "auth|owner-1",
                 List.of(), new BookingContactResponse("Praveen S", "praveen@example.com", null),
                 null, List.of(), "system", "system", 1L, LocalDateTime.now(), LocalDateTime.now());
     }

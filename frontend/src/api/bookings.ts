@@ -184,6 +184,10 @@ export interface Booking {
   bookingStatus: BookingStatus;
   bookingDate: string;
   totalFare: string | number;
+  /** Taxes included in totalFare (server TaxPolicy); absent pre-taxation. */
+  taxTotal?: string | number;
+  /** Compact per-code breakdown, e.g. "GB:216.00;UB:29.10;AE:16.30". */
+  taxBreakdown?: string;
   ownerSubject: string | null;
   /** The journey's legs in order (single-PNR round trips have two). */
   segments?: BookingSegment[];

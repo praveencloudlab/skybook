@@ -84,6 +84,15 @@ public class Booking extends Auditable {
     @Column(nullable = false)
     private BigDecimal totalFare;
 
+    // Government/airport taxes charged at booking (TaxPolicy), included in
+    // totalFare. Null on pre-taxation bookings - absent, not zero-assessed.
+    @Column(name = "tax_total")
+    private BigDecimal taxTotal;
+
+    /** Compact per-code breakdown, e.g. "GB:216.00;UB:29.10;AE:16.30". */
+    @Column(name = "tax_breakdown", length = 255)
+    private String taxBreakdown;
+
     @Column(length = 500)
     private String remarks;
 

@@ -33,6 +33,8 @@ public final class BookingMapper {
                 booking.getBookingStatus(),
                 booking.getBookingDate(),
                 booking.getTotalFare(),
+                booking.getTaxTotal(),
+                booking.getTaxBreakdown(),
                 booking.getRemarks(),
                 booking.getOwnerSubject(),
                 booking.getPassengers().stream().map(BookingMapper::toPassengerResponse).toList(),

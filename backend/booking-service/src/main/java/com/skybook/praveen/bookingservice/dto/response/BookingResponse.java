@@ -26,6 +26,12 @@ public record BookingResponse(
 
         BigDecimal totalFare,
 
+        /** Taxes included in totalFare (TaxPolicy); null on pre-taxation bookings. */
+        BigDecimal taxTotal,
+
+        /** Compact per-code breakdown, e.g. "GB:216.00;UB:29.10;AE:16.30". */
+        String taxBreakdown,
+
         String remarks,
 
         String ownerSubject,

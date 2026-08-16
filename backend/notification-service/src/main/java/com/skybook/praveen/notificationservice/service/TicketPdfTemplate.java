@@ -45,6 +45,14 @@ public class TicketPdfTemplate {
     private static final String INK = "#1a1a1a";
     private static final String LABEL = "#8a93a3";
     private static final String[] MONTHS = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+
+    /** Ticketing labels for the booking TaxPolicy's codes. */
+    private static final Map<String, String> TAX_LABELS = Map.of(
+            "GB", "UK AIR PASSENGER DUTY",
+            "UB", "UK PASSENGER SERVICE CHARGE",
+            "AE", "UAE PASSENGER FACILITY CHARGE",
+            "IN", "INDIA UDF & K3",
+            "XT", "INTL AIRPORT CHARGES");
     private static final DateTimeFormatter HHMM = DateTimeFormatter.ofPattern("HH:mm");
     private static final int LEDGER_DESC_WIDTH = 40;
 
@@ -208,9 +216,26 @@ public class TicketPdfTemplate {
         BigDecimal bagCharges = allRows.stream().map(p -> nz(p.getBaggageFee()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         ledger.add(ledgerLine("BAGS",
-                bagCount > 0 ? bagCount + " EXTRA" + (multi ? " X " + segments.size() + " LEGS" : "") : "NONE",
+                bagCount > 0 ? bagCount + " EXTRA" + (multi ? " X " + segments.size() + " FLIGHTS" : "") : "NONE",
                 money(symbol, bagCharges), false));
-        ledger.add(ledgerLine("TAX", "INCLUDED", money(symbol, BigDecimal.ZERO), false));
+        // Government/airport taxes, itemised per code the way tickets price
+        // them. Pre-taxation bookings (no breakdown) keep the legacy line.
+        if (event.getTaxBreakdown() != null && !event.getTaxBreakdown().isBlank()) {
+            boolean firstTax = true;
+            for (String part : event.getTaxBreakdown().split(";")) {
+                String[] pieces = part.split(":");
+                if (pieces.length != 2) {
+                    continue;
+                }
+                String label = TAX_LABELS.getOrDefault(pieces[0].trim().toUpperCase(),
+                        pieces[0].trim().toUpperCase());
+                ledger.add(ledgerLine(firstTax ? "TAXES" : "", label,
+                        money(symbol, new BigDecimal(pieces[1].trim())), false));
+                firstTax = false;
+            }
+        } else {
+            ledger.add(ledgerLine("TAX", "INCLUDED", money(symbol, BigDecimal.ZERO), false));
+        }
         String totalLine = ledgerLine("TOTAL", "PAID (INCL. ALL TAXES)",
                 money(symbol, nz(event.getTotalFare())), true);
 
@@ -318,6 +343,17 @@ public class TicketPdfTemplate {
                   <div style="font-size:10px;color:#555555;margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0;line-height:1.8;">
                     Total paid: <b>%s</b> &#160;&#183;&#160; Status: %s
                   </div>
+
+                  <!-- Carrier contact block (fictional airline - reserved
+                       .example domain and Ofcom drama-range number). -->
+                  <table width="100%%" style="margin-top:14px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;">
+                    <tr><td style="padding:10px 14px;font-size:9px;color:#475569;line-height:1.9;">
+                      <b style="color:#1a1a1a;">SkyBook Airways &#183; Contact</b><br/>
+                      Reservations &amp; support (24/7): <b>+44 20 7946 0958</b> &#160;&#183;&#160;
+                      <b>support@skybook.example</b> &#160;&#183;&#160; skybook.example<br/>
+                      Registered office: SkyBook Airways Ltd, One Skyway House, 100 Aviation Way, London EC2X 9SB, United Kingdom &#160;&#183;&#160; Company No. 01234567
+                    </td></tr>
+                  </table>
 
                 </body>
                 </html>
