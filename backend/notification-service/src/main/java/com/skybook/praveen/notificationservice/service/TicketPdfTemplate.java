@@ -41,7 +41,7 @@ public class TicketPdfTemplate {
     /** The app's brand plane mark, white on the header maroon (SVG rasterized
      * once - openhtmltopdf renders no inline SVG, and base-14 fonts carry no
      * plane glyph). */
-    private static final String PLANE_PNG = "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";
+    private static final String PLANE_PNG = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAABHNCSVQICAgIfAhkiAAAAAFzUkdCAK7OHOkAAAPpSURBVHic7Zy/ixVXFMe/V2Jgkdi6gqUQt7NKUhps3AhhQ1IEMZCAhU2w9j+wE6y229ZGVsSsEiLZIs0GQSt/oJ0xsUyyoGiEj80deRl8vnff3DvnvnnnA69Z7j3n3PPdud+ZN/NGchzHcRzHcRzHqRjgO+AK8DR+rgCnresaPMAycIvx/AwcsK5zsAC/vaf5Db9Y1zlIgDNTNL/he+t6U9ljXcAUfJMw9uuCdSwmwN8JR8BT63pTCdYFTAIgZXwIofo1jTIPW9CgcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMcQGMqVYA4BCwOcO8TeBQmaoWAGAPcA7YTXgeqM1ujFHtP1iVAEeBOx0a3+YOcNR6XdUD7AMuAq8zNr/hdYy9z3qdVQKcBJ4UaHybJ8BJ6/VWQ2OyPTS+zWKbdCaT7cpimnQBk+3KYph0YZPtyrBNukeT7cqwTNrQZLsy3yZdicl2pTeTzvprkmhoG5KGYmx3Jf0QQrhbKkEWhRuTlXR7QM1XXMvtkibd+QiIxrUuaX73zen4Q9LZEMJPOYPOfASMfF18fQGar7jG67lNOlmAxmQl3Ze0lquQOWJN0v1cJp20BQ3QZLvS2aSnUrBnk0XSjqTzklZmmL8S5+7EWCUpbtJ9Xcm+BG4CZ4HlVv4kWnOXY8ybMUdJZrqSnrgFtReVkV1JNyRtStoKIfybI/+4X8oD+yV9IekrSauSPpq18Fnyjx0/aUBmAf6SdE3SVUm3Qgj/5c4/TQOAvZKOR0P9UtLBlBxd8/9v/KQBGQR4GBt+VdJOCCEpXgkBWvGDpE+jGGuSPk6Z3zV/CQGQ9HvT9BDCg8T5nfJ3fVkHcGREjE9SzxStBHgl6deRpj9LKSJD/rfkfFtKPCFoxPhc0od95m+KGMc/wGXg22hwRUg9FSlYx/641stx7f3kb8X/E1gHTkQjK04tArRq2ht7sB57UlSAB8AF4LNoWL1SowCt+kLszQUg2e+qf7tUalP9jVlOEi6AMS6AMS6AMS6AMS6AMS6AMS6AMS6AMS6AMS6AMdUKACwBGzPM2wCWylS1IAArwL3Ub0JHuAfM8kiLA5wCnndofsNz4JT1euaGZsvJ0Pg2viVNIsOWMwnfksaRccuZRJVbkvndI3q+jVjbHbNqT0MXhQ+sC0jghaTt+Dzpjfi31fg5Jmkujdb8cJywBT0eafh2COHFmBhLUYRGkMPjAta2BZnzDqPcAn4ExjZxipiHY4yttsHnrX4AAI+AS8BqifP1eH2xGnM8yh3fcRzHcRzHcRwnlTfCZNtPx6UvfQAAAABJRU5ErkJggg==";
     private static final String INK = "#1a1a1a";
     private static final String LABEL = "#8a93a3";
     private static final String[] MONTHS = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
@@ -243,11 +243,14 @@ public class TicketPdfTemplate {
                 <html xmlns="http://www.w3.org/1999/xhtml">
                 <head>
                 <style>
-                  @page { size: A4; margin: 26px 30px; }
-                  body { font-family: Helvetica, Arial, sans-serif; color: %s; font-size: 11px; margin: 0; }
+                  @page { size: A4; margin: 20px 28px; }
+                  body { font-family: Helvetica, Arial, sans-serif; color: %s; font-size: 10.5px; margin: 0; }
                   table { border-collapse: collapse; }
-                  .band { background-color: %s; color: #ffffff; font-weight: bold; font-size: 15px;
-                          letter-spacing: 0.5px; padding: 11px 16px; margin-top: 20px; border-radius: 5px; }
+                  .band { background-color: %s; color: #ffffff; font-weight: bold; font-size: 12.5px;
+                          letter-spacing: 0.5px; padding: 7px 14px; margin-top: 10px; border-radius: 5px; }
+                  .rule-h { font-size: 10px; font-weight: bold; letter-spacing: 1px; color: %s;
+                            margin-top: 12px; padding-bottom: 3px; border-bottom: 1px solid #d8ccc0; }
+                  .rule-p { font-size: 9px; color: #333333; line-height: 1.75; margin-top: 5px; }
                   .lbl { font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase; color: %s; }
                   .mono { font-family: Courier, monospace; }
                 </style>
@@ -257,8 +260,8 @@ public class TicketPdfTemplate {
                   <!-- Maroon header band -->
                   <table width="100%%" style="background-color:%s;">
                     <tr>
-                      <td style="padding:22px 18px;color:#ffffff;font-style:italic;font-weight:bold;font-size:16px;">Going places together</td>
-                      <td style="padding:16px 18px;text-align:right;color:#ffffff;">
+                      <td style="padding:14px 16px;color:#ffffff;font-style:italic;font-weight:bold;font-size:15px;">Going places together</td>
+                      <td style="padding:10px 16px;text-align:right;color:#ffffff;">
                         <table style="border-collapse:collapse;margin-left:auto;"><tr>
                           <td style="vertical-align:middle;padding-right:12px;">
                             <table style="width:38px;height:38px;background-color:#7a3a58;border-radius:19px;border-collapse:collapse;"><tr>
@@ -275,21 +278,21 @@ public class TicketPdfTemplate {
                   </table>
 
                   <!-- Passenger + barcode block -->
-                  <table width="100%%" style="margin-top:20px;">
+                  <table width="100%%" style="margin-top:12px;">
                     <tr>
                       <td style="vertical-align:top;padding:0 14px;width:54%%;">
                         <div class="lbl">Passenger</div>
-                        <div style="font-size:13px;font-weight:bold;line-height:1.6;margin-bottom:11px;">%s</div>
+                        <div style="font-size:12px;font-weight:bold;line-height:1.5;margin-bottom:7px;">%s</div>
                         <div class="lbl">Booking reference</div>
-                        <div class="mono" style="font-size:16px;font-weight:bold;letter-spacing:3px;color:%s;margin-bottom:11px;">%s</div>
+                        <div class="mono" style="font-size:15px;font-weight:bold;letter-spacing:3px;color:%s;margin-bottom:7px;">%s</div>
                         <div class="lbl">E-ticket number(s)</div>
-                        <div class="mono" style="font-size:12px;font-weight:bold;line-height:1.7;">%s</div>
+                        <div class="mono" style="font-size:11px;font-weight:bold;line-height:1.6;">%s</div>
                       </td>
                       <td style="vertical-align:top;padding:0 14px;width:46%%;">
                         <table width="100%%" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
-                          <tr><td style="padding:14px 16px 10px;text-align:center;">%s</td></tr>
+                          <tr><td style="padding:9px 14px 6px;text-align:center;">%s</td></tr>
                         </table>
-                        <div style="margin-top:10px;font-size:10px;color:#475569;line-height:1.8;">
+                        <div style="margin-top:6px;font-size:9.5px;color:#475569;line-height:1.6;">
                           <div><b style="color:%s;">Itinerary Printing Office</b></div>
                           <div>SKYBOOK DIGITAL, DIGITAL OFFICE</div>
                           <div><b style="color:%s;">Date of issue:</b> <b>%s</b></div>
@@ -303,12 +306,12 @@ public class TicketPdfTemplate {
                   <!-- Itinerary -->
                   <table width="100%%" style="margin-top:12px;font-size:11px;">
                     <tr style="background-color:#d9d9d9;color:#333333;text-align:left;font-size:10px;">
-                      <th style="padding:9px 11px;">From</th>
-                      <th style="padding:9px 11px;">To</th>
-                      <th style="padding:9px 11px;">Flight</th>
-                      <th style="padding:9px 11px;">Departure</th>
-                      <th style="padding:9px 11px;">Arrival</th>
-                      <th style="padding:9px 11px;">Last check-in</th>
+                      <th style="padding:6px 10px;">From</th>
+                      <th style="padding:6px 10px;">To</th>
+                      <th style="padding:6px 10px;">Flight</th>
+                      <th style="padding:6px 10px;">Departure</th>
+                      <th style="padding:6px 10px;">Arrival</th>
+                      <th style="padding:6px 10px;">Last check-in</th>
                     </tr>
                     %s
                   </table>
@@ -317,35 +320,92 @@ public class TicketPdfTemplate {
                   <div class="band">PASSENGER(S)</div>
                   <table width="100%%" style="margin-top:8px;font-size:11px;">
                     <tr style="font-size:8px;letter-spacing:1px;color:%s;text-align:left;">
-                      <th style="padding:7px 10px;border-bottom:2px solid %s;">NAME</th>
-                      <th style="padding:7px 10px;border-bottom:2px solid %s;">E-TICKET</th>
-                      <th style="padding:7px 10px;border-bottom:2px solid %s;">%s</th>
-                      <th style="padding:7px 10px;border-bottom:2px solid %s;">CABIN &#183; FARE</th>
-                      <th style="padding:7px 10px;border-bottom:2px solid %s;text-align:right;">FARE PAID</th>
+                      <th style="padding:5px 9px;border-bottom:2px solid %s;">NAME</th>
+                      <th style="padding:5px 9px;border-bottom:2px solid %s;">E-TICKET</th>
+                      <th style="padding:5px 9px;border-bottom:2px solid %s;">%s</th>
+                      <th style="padding:5px 9px;border-bottom:2px solid %s;">CABIN &#183; FARE</th>
+                      <th style="padding:5px 9px;border-bottom:2px solid %s;text-align:right;">FARE PAID</th>
                     </tr>
                     %s
                   </table>
 
                   <div class="band">FARE CALCULATION</div>
-                  <table width="100%%" style="margin-top:10px;background-color:#fbfaf7;border:1px solid #e7e2d8;border-radius:7px;">
-                    <tr><td style="padding:14px 18px;">
-                      <div class="mono" style="font-size:11px;line-height:2.1;white-space:pre;">%s</div>
-                      <div class="mono" style="border-top:2px solid %s;margin-top:8px;padding-top:8px;font-size:11px;white-space:pre;color:%s;font-weight:bold;">%s</div>
+                  <table width="100%%" style="margin-top:8px;background-color:#fbfaf7;border:1px solid #e7e2d8;border-radius:7px;">
+                    <tr><td style="padding:9px 14px;">
+                      <div class="mono" style="font-size:10.5px;line-height:1.75;white-space:pre;">%s</div>
+                      <div class="mono" style="border-top:2px solid %s;margin-top:6px;padding-top:6px;font-size:10.5px;white-space:pre;color:%s;font-weight:bold;">%s</div>
                     </td></tr>
                   </table>
-
-                  <!-- Footnotes -->
-                  <div style="font-size:9.5px;color:#333333;margin-top:16px;line-height:1.9;">
-                    <b>(1)</b> OK = Confirmed &#160; <b>(2)</b> NVB = Not valid before &#160; <b>(3)</b> NVA = Not valid after &#160;
-                    <b>(4)</b> Each passenger can check in a specific amount of baggage at no extra cost as indicated in the
-                    column baggage. For more information on baggage rules and restrictions, please visit flyskybook.com/baggage.
-                  </div>
-                  <div style="font-size:10px;color:#555555;margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0;line-height:1.8;">
-                    Total paid: <b>%s</b> &#160;&#183;&#160; Status: %s
+                  <div style="font-size:9.5px;color:#555555;margin-top:8px;line-height:1.6;">
+                    Total paid: <b>%s</b> &#160;&#183;&#160; Status: %s &#160;&#183;&#160;
+                    <span style="color:#888888;">Notices, baggage and fare rules: see page 2 of this receipt.</span>
                   </div>
 
-                  <!-- Carrier contact block (fictional airline - reserved
-                       .example domain and Ofcom drama-range number). -->
+                  <!-- Page 2: notices and airline rules (conditions-of-carriage
+                       small print, two columns, like carriers print them). -->
+                  <div style="page-break-before:always;"></div>
+                  <div style="font-size:12px;font-weight:bold;letter-spacing:2px;color:#555555;border-bottom:2px solid %s;padding-bottom:6px;">
+                    IMPORTANT NOTICES &#183; CONDITIONS OF CARRIAGE
+                  </div>
+                  <table width="100%%" style="margin-top:10px;">
+                    <tr>
+                      <td style="width:50%%;vertical-align:top;padding-right:14px;">
+                        <div class="rule-h" style="margin-top:0;">TICKET KEY</div>
+                        <div class="rule-p">
+                          <b>(1)</b> OK = Confirmed &#160; <b>(2)</b> NVB = Not valid before &#160; <b>(3)</b> NVA = Not valid after &#160;
+                          <b>(4)</b> Each passenger can check in a specific amount of baggage at no extra cost as indicated in the
+                          column baggage. For more information on baggage rules and restrictions, please visit flyskybook.com/baggage.
+                        </div>
+                        <div class="rule-h">CHECK-IN AND BOARDING</div>
+                        <div class="rule-p">
+                          Online check-in opens 48 hours and closes 60 minutes before departure; your boarding pass is emailed and
+                          available in Manage my trips. Airport counters close at the time shown in the Last check-in column.
+                          The boarding gate closes 20 minutes before departure - passengers arriving after gate closure are
+                          recorded as no-shows and the fare is not refundable. Carry the passport used at booking; it must be
+                          valid for the whole journey and match the name on this ticket exactly.
+                        </div>
+                        <div class="rule-h">BAGGAGE</div>
+                        <div class="rule-p">
+                          Your free allowance is printed against each flight on page 1. Extra checked bags purchased for this
+                          booking appear on the BAGS line of the fare calculation and apply to every flight in the same
+                          direction. On connecting flights issued on one ticket, bags are checked through to the final
+                          destination - collect them only there. Dangerous goods (lithium batteries in checked bags, aerosols,
+                          flammables, corrosives) must not be packed; full list at flyskybook.com/baggage.
+                        </div>
+                      </td>
+                      <td style="width:50%%;vertical-align:top;padding-left:14px;border-left:1px solid #e2e8f0;">
+                        <div class="rule-h" style="margin-top:0;">FARES, CHANGES AND CANCELLATION</div>
+                        <div class="rule-p">
+                          Cancellation refunds follow the time of cancellation: more than 72 hours before departure 100%% of the
+                          time-tier value, 24-72 hours 50%%, under 24 hours no refund; online cancellation closes 2 hours before
+                          departure. Fare rules then apply per passenger: SAVER fares carry a 30%% cancellation fee, FLEXI fares
+                          are fully refundable, and PREMIUM fares include free date changes plus refunds up to 6 hours before
+                          departure. Taxes are refunded in full whenever no flight has been flown. Name changes are not
+                          permitted - contact reservations to rebook.
+                        </div>
+                        <div class="rule-h">TAXES, FEES AND CHARGES</div>
+                        <div class="rule-p">
+                          Taxes itemised on page 1 are levied per departure airport and remitted to the relevant authority:
+                          UK Air Passenger Duty and Passenger Service Charge (London departures), UAE Passenger Facility
+                          Charge (Dubai), India User Development Fee and K3 (Indian airports), and an international service
+                          charge elsewhere. Government-imposed amounts may change between booking and travel; any difference
+                          is collected or refunded before departure.
+                        </div>
+                        <div class="rule-h">CONDITIONS OF CARRIAGE AND LIABILITY</div>
+                        <div class="rule-p">
+                          Carriage is subject to the SkyBook Airways Conditions of Carriage, available at
+                          flyskybook.com/conditions. For international carriage, liability for death or bodily injury, baggage
+                          destruction, loss or damage, and delay is governed by the Montreal Convention (1999). Baggage claims
+                          must be filed in writing within 7 days of receipt of the bags (21 days for delay). This receipt is
+                          your ticket record - keep it available throughout the journey; authorities may require proof of
+                          onward or return travel.
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <!-- Carrier contact block (fictional airline - drama-range
+                       phone number and invented address). -->
                   <table width="100%%" style="margin-top:14px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;">
                     <tr><td style="padding:10px 14px;font-size:9px;color:#475569;line-height:1.9;">
                       <b style="color:#1a1a1a;">SkyBook Airways &#183; Contact</b><br/>
@@ -358,7 +418,7 @@ public class TicketPdfTemplate {
                 </body>
                 </html>
                 """.formatted(
-                INK, MAROON, LABEL,
+                INK, MAROON, LABEL, MAROON,
                 MAROON, PLANE_PNG,
                 paxNames.toString(), MAROON, escape(pnr), ticketNos.toString(),
                 barcode(pnr),
@@ -367,7 +427,7 @@ public class TicketPdfTemplate {
                 LABEL, MAROON, MAROON, MAROON, multi ? "SEATS OUT / RET" : "SEAT", MAROON, MAROON,
                 passengerRows.toString(),
                 String.join("\n", ledger), MAROON, MAROON, totalLine,
-                money(symbol, nz(event.getTotalFare())), escape(nvl(event.getBookingStatus(), "CONFIRMED")));
+                money(symbol, nz(event.getTotalFare())), escape(nvl(event.getBookingStatus(), "CONFIRMED")), MAROON);
     }
 
     // ------------------------------------------------------------------
@@ -396,27 +456,27 @@ public class TicketPdfTemplate {
                         .reduce((a, b) -> a + ", " + b).orElse("-");
         sb.append("""
                 <tr>
-                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b style="font-size:13px;">%s</b> - %s%s</td>
-                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b style="font-size:13px;">%s</b> - %s%s</td>
-                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/><span style="font-size:9px;color:#555555;">%s</span></td>
-                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/><b>%s</b></td>
-                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/><b>%s</b></td>
-                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;">%s</td>
+                  <td style="padding:6px 10px;vertical-align:top;line-height:1.5;"><b style="font-size:13px;">%s</b> - %s%s</td>
+                  <td style="padding:6px 10px;vertical-align:top;line-height:1.5;"><b style="font-size:13px;">%s</b> - %s%s</td>
+                  <td style="padding:6px 10px;vertical-align:top;line-height:1.5;"><b>%s</b><br/><span style="font-size:9px;color:#555555;">%s</span></td>
+                  <td style="padding:6px 10px;vertical-align:top;line-height:1.5;"><b>%s</b><br/><b>%s</b></td>
+                  <td style="padding:6px 10px;vertical-align:top;line-height:1.5;"><b>%s</b><br/><b>%s</b></td>
+                  <td style="padding:6px 10px;vertical-align:top;line-height:1.5;">%s</td>
                 </tr>
                 <tr style="background-color:#ececec;font-size:10px;color:#222222;">
-                  <td colspan="2" style="padding:11px 11px;vertical-align:top;line-height:1.85;">
+                  <td colspan="2" style="padding:6px 10px;vertical-align:top;line-height:1.55;">
                     <div>Class: <b>%s</b></div>
                     <div>Cabin: %s</div>
                     <div>Max baggage (4): %s</div>
                     <div>Fare basis: %s</div>
                   </td>
-                  <td colspan="2" style="padding:11px 11px;vertical-align:top;line-height:1.85;">
+                  <td colspan="2" style="padding:6px 10px;vertical-align:top;line-height:1.55;">
                     <div>Operated by: <b>%s</b></div>
                     <div>Marketed by: <b>%s</b></div>
                     <div>Booking status (1): OK</div>
                     <div>Seats: %s</div>
                   </td>
-                  <td colspan="2" style="padding:11px 11px;vertical-align:top;line-height:1.85;">
+                  <td colspan="2" style="padding:6px 10px;vertical-align:top;line-height:1.55;">
                     <div>NVB (2): <b>%s</b></div>
                     <div>NVA (3): <b>%s</b></div>
                     <div>Duration: <b>%s</b></div>

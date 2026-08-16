@@ -353,27 +353,27 @@ export function printETicket(
         </td>
       </tr>` : ''}
       <tr${cancelled ? ' style="opacity:.55;"' : ''}>
-        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">
+        <td style="padding:8px 12px;vertical-align:top;line-height:1.6;">
           <div><b style="font-size:15px;">${flight.originAirportCode}</b> - ${cityFor(flight.originAirportCode).toUpperCase()}</div>
           ${flight.departureTerminal ? `<div style="color:#333;">Terminal: <b>${flight.departureTerminal}</b></div>` : ''}
         </td>
-        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">
+        <td style="padding:8px 12px;vertical-align:top;line-height:1.6;">
           <div><b style="font-size:15px;">${flight.destinationAirportCode}</b> - ${cityFor(flight.destinationAirportCode).toUpperCase()}</div>
           ${flight.arrivalTerminal ? `<div style="color:#333;">Terminal: <b>${flight.arrivalTerminal}</b></div>` : ''}
         </td>
-        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;"><b>${flight.flightNumber}</b><br><span style="font-size:11px;color:#555;">${airlineNameFor(flight.airlineCode ?? flight.flightNumber)}</span></td>
-        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;"><b>${time(flight.departureTime)}</b><br>${ddMon(flight.departureTime)}</td>
-        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;"><b>${time(flight.arrivalTime)}</b><br>${ddMon(flight.arrivalTime)}</td>
-        <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">${timeShift(flight.departureTime, -60)}</td>
+        <td style="padding:8px 12px;vertical-align:top;line-height:1.6;"><b>${flight.flightNumber}</b><br><span style="font-size:11px;color:#555;">${airlineNameFor(flight.airlineCode ?? flight.flightNumber)}</span></td>
+        <td style="padding:8px 12px;vertical-align:top;line-height:1.6;"><b>${time(flight.departureTime)}</b><br>${ddMon(flight.departureTime)}</td>
+        <td style="padding:8px 12px;vertical-align:top;line-height:1.6;"><b>${time(flight.arrivalTime)}</b><br>${ddMon(flight.arrivalTime)}</td>
+        <td style="padding:8px 12px;vertical-align:top;line-height:1.6;">${timeShift(flight.departureTime, -60)}</td>
       </tr>
       <tr style="background:#ececec;font-size:12px;color:#222;${cancelled ? 'opacity:.55;' : ''}">
-        <td colspan="2" style="padding:14px 14px;vertical-align:top;line-height:1.85;">
+        <td colspan="2" style="padding:8px 12px;vertical-align:top;line-height:1.6;">
           <div>Class: <b>${classCode}</b></div>
           <div>Cabin: ${cabin}</div>
           <div>Max baggage (4): ${baggage}</div>
           <div>Fare basis: ${fareBasis}</div>
         </td>
-        <td colspan="2" style="padding:14px 14px;vertical-align:top;line-height:1.85;">
+        <td colspan="2" style="padding:8px 12px;vertical-align:top;line-height:1.6;">
           <div>Operated by: <b>${airlineNameFor(flight.airlineCode ?? flight.flightNumber).toUpperCase()}</b></div>
           <div>Marketed by: <b>${airlineNameFor(flight.airlineCode ?? flight.flightNumber).toUpperCase()}</b></div>
           <div>Booking status (1): ${cancelled ? 'CANCELLED' : 'OK'}</div>
@@ -383,7 +383,7 @@ export function printETicket(
               .map((p) => p.seatNumber ?? '&mdash;')
               .join(', ') || '&mdash;'}</div>
         </td>
-        <td colspan="2" style="padding:14px 14px;vertical-align:top;line-height:1.85;">
+        <td colspan="2" style="padding:8px 12px;vertical-align:top;line-height:1.6;">
           <div>NVB (2): ${ddMon(flight.departureTime)}</div>
           <div>NVA (3): ${addDaysMon(flight.departureTime, 120)}</div>
           <div>Duration: ${durationHM(flight.departureTime, flight.arrivalTime)}</div>
@@ -452,24 +452,24 @@ export function printETicket(
         : '&mdash;';
       return `
         <tr${i % 2 === 1 ? ' style="background:#f6f2f4;"' : ''}>
-          <td style="padding:13px 12px;"><b>${t.lastName.toUpperCase()}/${t.firstName.toUpperCase()} ${titleOf(t)}</b> <span style="color:#64748b;">(${typeCode(t.passengerType)})</span></td>
-          <td style="padding:13px 12px;font-family:'Courier New',monospace;"><b>${ticketText}</b></td>
-          <td style="padding:13px 12px;font-family:'Courier New',monospace;"><b>${seatText}</b></td>
-          <td style="padding:13px 12px;">${t.travelClass[0]} &middot; <b>${t.fareType}</b>${active.length === 0 ? ' &middot; <b style="color:#b42318;">CANCELLED</b>' : ''}</td>
-          <td style="padding:13px 12px;text-align:right;font-family:'Courier New',monospace;"><b>${usd(farePaid)}</b></td>
+          <td style="padding:8px 11px;"><b>${t.lastName.toUpperCase()}/${t.firstName.toUpperCase()} ${titleOf(t)}</b> <span style="color:#64748b;">(${typeCode(t.passengerType)})</span></td>
+          <td style="padding:8px 11px;font-family:'Courier New',monospace;"><b>${ticketText}</b></td>
+          <td style="padding:8px 11px;font-family:'Courier New',monospace;"><b>${seatText}</b></td>
+          <td style="padding:8px 11px;">${t.travelClass[0]} &middot; <b>${t.fareType}</b>${active.length === 0 ? ' &middot; <b style="color:#b42318;">CANCELLED</b>' : ''}</td>
+          <td style="padding:8px 11px;text-align:right;font-family:'Courier New',monospace;"><b>${usd(farePaid)}</b></td>
         </tr>`;
     })
     .join('');
 
   const passengersBlock = `
-      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:18px;letter-spacing:.5px;padding:14px 20px;margin-top:24px;border-radius:6px;">PASSENGER(S)</div>
+      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:15px;letter-spacing:.5px;padding:9px 16px;margin-top:12px;border-radius:6px;">PASSENGER(S)</div>
       <table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:13px;">
         <tr style="font-size:10px;letter-spacing:1px;color:#8a93a3;text-align:left;">
-          <th style="padding:9px 12px;border-bottom:2px solid ${MAROON};font-weight:800;">NAME</th>
-          <th style="padding:9px 12px;border-bottom:2px solid ${MAROON};font-weight:800;">E-TICKET</th>
-          <th style="padding:9px 12px;border-bottom:2px solid ${MAROON};font-weight:800;">${multi ? 'SEATS OUT / RET' : 'SEAT'}</th>
-          <th style="padding:9px 12px;border-bottom:2px solid ${MAROON};font-weight:800;">CABIN &middot; FARE</th>
-          <th style="padding:9px 12px;border-bottom:2px solid ${MAROON};font-weight:800;text-align:right;">FARE PAID</th>
+          <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;">NAME</th>
+          <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;">E-TICKET</th>
+          <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;">${multi ? 'SEATS OUT / RET' : 'SEAT'}</th>
+          <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;">CABIN &middot; FARE</th>
+          <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;text-align:right;">FARE PAID</th>
         </tr>
         ${passengerRows}
       </table>`;
@@ -512,9 +512,9 @@ export function printETicket(
   const paymentRef = booking.payment?.externalPaymentReference;
 
   const fareCalcBlock = `
-      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:18px;letter-spacing:.5px;padding:14px 20px;margin-top:24px;border-radius:6px;">FARE CALCULATION</div>
-      <div style="margin-top:12px;background:#fbfaf7;border:1px solid #e7e2d8;border-radius:8px;padding:18px 22px;">
-        <div style="font-family:'Courier New',monospace;font-size:13px;line-height:2.3;white-space:pre;overflow-x:auto;color:#1f2328;">${[
+      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:15px;letter-spacing:.5px;padding:9px 16px;margin-top:12px;border-radius:6px;">FARE CALCULATION</div>
+      <div style="margin-top:8px;background:#fbfaf7;border:1px solid #e7e2d8;border-radius:8px;padding:11px 16px;">
+        <div style="font-family:'Courier New',monospace;font-size:13px;line-height:1.8;white-space:pre;overflow-x:auto;color:#1f2328;">${[
           fareLines,
           ledgerLine('SEATS', `${seatList}${seatsWaived ? ' (WAIVED)' : ''}`, usd(seatCharges)),
           ledgerLine('BAGS', bagCount > 0 ? `${bagCount} EXTRA${multi ? ' X 2 FLIGHTS' : ''}` : 'NONE', usd(bagCharges)),
@@ -525,13 +525,18 @@ export function printETicket(
               })
             : [ledgerLine('TAX', 'INCLUDED', usd(0))]),
         ].filter(Boolean).join('\n')}</div>
-        <div style="border-top:2px solid ${MAROON};margin-top:10px;padding-top:10px;font-family:'Courier New',monospace;font-size:13px;white-space:pre;overflow-x:auto;">${ledgerLine(
+        <div style="border-top:2px solid ${MAROON};margin-top:8px;padding-top:8px;font-family:'Courier New',monospace;font-size:13px;white-space:pre;overflow-x:auto;">${ledgerLine(
           'TOTAL',
           paymentRef ? `PAID ${paymentRef}` : 'PAID (INCL. ALL TAXES)',
           usd(Number(booking.totalFare) || 0),
           { bold: true },
         )}</div>
       </div>`;
+
+  // Page-2 small-print section: grey caps heading + dense paragraph.
+  const ruleSection = (title: string, text: string, first = false): string => `
+      <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#8a93a3;margin-top:${first ? 0 : 12}px;padding-bottom:3px;border-bottom:1px solid #d8ccc0;">${title}</div>
+      <div style="font-size:10.5px;color:#333;line-height:1.75;margin-top:5px;">${text}</div>`;
 
   const body = `
     <div style="font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;font-size:13px;">
@@ -549,21 +554,21 @@ export function printETicket(
       </div>
 
       <!-- Passenger + barcode block: labelled rows with real breathing room. -->
-      <table style="width:100%;border-collapse:collapse;margin-top:26px;">
+      <table style="width:100%;border-collapse:collapse;margin-top:14px;">
         <tr>
           <td style="vertical-align:top;padding:0 20px;">
             <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#8a93a3;margin-bottom:4px;">Passenger</div>
-            <div style="font-size:16px;font-weight:700;line-height:1.6;margin-bottom:14px;">${paxLines}</div>
+            <div style="font-size:15px;font-weight:700;line-height:1.5;margin-bottom:8px;">${paxLines}</div>
             <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#8a93a3;margin-bottom:4px;">Booking reference</div>
-            <div style="font-family:'Courier New',monospace;font-size:18px;font-weight:700;letter-spacing:3px;color:${MAROON};margin-bottom:14px;">${booking.bookingReference}</div>
+            <div style="font-family:'Courier New',monospace;font-size:17px;font-weight:700;letter-spacing:3px;color:${MAROON};margin-bottom:8px;">${booking.bookingReference}</div>
             <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#8a93a3;margin-bottom:4px;">E-ticket number${(booking.tickets?.length ?? 0) > 1 ? 's' : ''}</div>
             <div style="font-family:'Courier New',monospace;font-size:14px;font-weight:700;line-height:1.7;">${ticketNo}</div>
           </td>
           <td style="vertical-align:top;padding:0 20px;width:46%;">
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px 12px;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:11px 14px 8px;">
               ${barcodeSvg(booking.bookingReference)}
             </div>
-            <div style="margin-top:12px;font-size:12px;color:#475569;line-height:1.8;">
+            <div style="margin-top:8px;font-size:12px;color:#475569;line-height:1.6;">
               <div><b style="color:#1a1a1a;">Itinerary Printing Office</b></div>
               <div>SKYBOOK DIGITAL, DIGITAL OFFICE</div>
               <div><b style="color:#1a1a1a;">Date of issue:</b> ${ddMon(booking.bookingDate)}</div>
@@ -573,18 +578,18 @@ export function printETicket(
       </table>
 
       <!-- ETR band -->
-      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:18px;letter-spacing:.5px;padding:14px 20px;margin-top:24px;border-radius:6px;">ELECTRONIC TICKET RECEIPT</div>
+      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:15px;letter-spacing:.5px;padding:9px 16px;margin-top:12px;border-radius:6px;">ELECTRONIC TICKET RECEIPT</div>
 
       <!-- Itinerary -->
-      <table style="width:100%;border-collapse:collapse;margin-top:16px;font-size:13px;">
+      <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;">
         <thead>
           <tr style="background:#d9d9d9;color:#333;text-align:left;font-size:12px;">
-            <th style="padding:11px 14px;font-weight:700;">From</th>
-            <th style="padding:11px 14px;font-weight:700;">To</th>
-            <th style="padding:11px 14px;font-weight:700;">Flight</th>
-            <th style="padding:11px 14px;font-weight:700;">Departure</th>
-            <th style="padding:11px 14px;font-weight:700;">Arrival</th>
-            <th style="padding:11px 14px;font-weight:700;">Last check-in</th>
+            <th style="padding:7px 12px;font-weight:700;">From</th>
+            <th style="padding:7px 12px;font-weight:700;">To</th>
+            <th style="padding:7px 12px;font-weight:700;">Flight</th>
+            <th style="padding:7px 12px;font-weight:700;">Departure</th>
+            <th style="padding:7px 12px;font-weight:700;">Arrival</th>
+            <th style="padding:7px 12px;font-weight:700;">Last check-in</th>
           </tr>
         </thead>
         <tbody>${segment}</tbody>
@@ -595,25 +600,67 @@ export function printETicket(
 
       ${fareCalcBlock}
 
-      <!-- Footnotes -->
-      <div style="font-size:11.5px;color:#333;margin-top:20px;padding:0 6px;line-height:1.9;">
-        <b>(1)</b> OK = Confirmed &nbsp; <b>(2)</b> NVB = Not valid before &nbsp; <b>(3)</b> NVA = Not valid after &nbsp;
-        <b>(4)</b> Each passenger can check in a specific amount of baggage at no extra cost as indicated in the column baggage.
-        For more information on baggage rules and restrictions, please visit
-        <span style="color:#1d4ed8;text-decoration:underline;">flyskybook.com/baggage</span>.
-      </div>
-      <div style="font-size:12px;color:#555;margin-top:14px;padding:12px 6px 0;border-top:1px solid #e2e8f0;line-height:1.8;">
+      <div style="font-size:12px;color:#555;margin-top:10px;padding:8px 6px 0;border-top:1px solid #e2e8f0;line-height:1.7;">
         Total paid: <b>${money(booking.totalFare, _currency)}</b> &nbsp;·&nbsp; Status: ${booking.bookingStatus}
         ${booking.contact ? ' &nbsp;·&nbsp; Contact: ' + booking.contact.contactEmail : ''}
+        &nbsp;·&nbsp; <span style="color:#888;">Notices, baggage and fare rules: see page 2 of this receipt.</span>
       </div>
 
-      <!-- Carrier contact block (fictional airline - reserved .example
-           domain and Ofcom drama-range number). -->
-      <div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:11px;color:#475569;line-height:1.9;">
-        <b style="color:#1a1a1a;">SkyBook Airways · Contact</b><br>
-        Reservations &amp; support (24/7): <b>+44 20 7946 0958</b> &nbsp;·&nbsp;
-        <b>support@flyskybook.com</b> &nbsp;·&nbsp; flyskybook.com<br>
-        Registered office: SkyBook Airways Ltd, One Skyway House, 100 Aviation Way, London EC2X 9SB, United Kingdom &nbsp;·&nbsp; Company No. 01234567
+      <!-- Page 2: conditions-of-carriage small print, two columns, like
+           carriers print them (mirrors the emailed PDF page 2). -->
+      <div style="page-break-before:always;break-before:page;margin-top:26px;">
+        <div style="font-size:14px;font-weight:800;letter-spacing:2px;color:#555;border-bottom:2px solid ${MAROON};padding-bottom:6px;">
+          IMPORTANT NOTICES · CONDITIONS OF CARRIAGE
+        </div>
+        <table style="width:100%;border-collapse:collapse;margin-top:10px;">
+          <tr>
+            <td style="width:50%;vertical-align:top;padding-right:14px;">
+              ${ruleSection('TICKET KEY', `<b>(1)</b> OK = Confirmed &nbsp; <b>(2)</b> NVB = Not valid before &nbsp;
+                <b>(3)</b> NVA = Not valid after &nbsp; <b>(4)</b> Each passenger can check in a specific amount of
+                baggage at no extra cost as indicated in the column baggage. For more information on baggage rules
+                and restrictions, please visit flyskybook.com/baggage.`, true)}
+              ${ruleSection('CHECK-IN AND BOARDING', `Online check-in opens 48 hours and closes 60 minutes before
+                departure; your boarding pass is emailed and available in Manage my trips. Airport counters close at
+                the time shown in the Last check-in column. The boarding gate closes 20 minutes before departure -
+                passengers arriving after gate closure are recorded as no-shows and the fare is not refundable.
+                Carry the passport used at booking; it must be valid for the whole journey and match the name on
+                this ticket exactly.`)}
+              ${ruleSection('BAGGAGE', `Your free allowance is printed against each flight on page 1. Extra checked
+                bags purchased for this booking appear on the BAGS line of the fare calculation and apply to every
+                flight in the same direction. On connecting flights issued on one ticket, bags are checked through
+                to the final destination - collect them only there. Dangerous goods (lithium batteries in checked
+                bags, aerosols, flammables, corrosives) must not be packed; full list at flyskybook.com/baggage.`)}
+            </td>
+            <td style="width:50%;vertical-align:top;padding-left:14px;border-left:1px solid #e2e8f0;">
+              ${ruleSection('FARES, CHANGES AND CANCELLATION', `Cancellation refunds follow the time of cancellation:
+                more than 72 hours before departure 100% of the time-tier value, 24-72 hours 50%, under 24 hours no
+                refund; online cancellation closes 2 hours before departure. Fare rules then apply per passenger:
+                SAVER fares carry a 30% cancellation fee, FLEXI fares are fully refundable, and PREMIUM fares include
+                free date changes plus refunds up to 6 hours before departure. Taxes are refunded in full whenever no
+                flight has been flown. Name changes are not permitted - contact reservations to rebook.`, true)}
+              ${ruleSection('TAXES, FEES AND CHARGES', `Taxes itemised on page 1 are levied per departure airport and
+                remitted to the relevant authority: UK Air Passenger Duty and Passenger Service Charge (London
+                departures), UAE Passenger Facility Charge (Dubai), India User Development Fee and K3 (Indian
+                airports), and an international service charge elsewhere. Government-imposed amounts may change
+                between booking and travel; any difference is collected or refunded before departure.`)}
+              ${ruleSection('CONDITIONS OF CARRIAGE AND LIABILITY', `Carriage is subject to the SkyBook Airways
+                Conditions of Carriage, available at flyskybook.com/conditions. For international carriage, liability
+                for death or bodily injury, baggage destruction, loss or damage, and delay is governed by the
+                Montreal Convention (1999). Baggage claims must be filed in writing within 7 days of receipt of the
+                bags (21 days for delay). This receipt is your ticket record - keep it available throughout the
+                journey; authorities may require proof of onward or return travel.`)}
+            </td>
+          </tr>
+        </table>
+
+        <!-- Carrier contact block (fictional airline - drama-range phone
+             number and invented address). -->
+        <div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:11px;color:#475569;line-height:1.9;">
+          <b style="color:#1a1a1a;">SkyBook Airways · Contact</b><br>
+          Reservations &amp; support (24/7): <b>+44 20 7946 0958</b> &nbsp;·&nbsp;
+          <b>support@flyskybook.com</b> &nbsp;·&nbsp; flyskybook.com<br>
+          Registered office: SkyBook Airways Ltd, One Skyway House, 100 Aviation Way, London EC2X 9SB, United Kingdom &nbsp;·&nbsp; Company No. 01234567
+        </div>
       </div>
     </div>`;
   open(`E-ticket ${booking.bookingReference}`, body);
