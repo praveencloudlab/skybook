@@ -51,7 +51,7 @@ class FlightServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        flightService = new FlightServiceImpl(flightRepository);
+        flightService = new FlightServiceImpl(flightRepository, false);
     }
 
     private static final LocalDateTime DEPARTURE = LocalDateTime.of(2026, 9, 10, 10, 15);

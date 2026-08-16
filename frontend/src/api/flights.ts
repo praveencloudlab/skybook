@@ -139,6 +139,7 @@ export const AIRPORTS: Array<{ code: string; city: string }> = [
   { code: 'DFW', city: 'Dallas-Fort Worth' },
   { code: 'MIA', city: 'Miami' },
   { code: 'HYD', city: 'Hyderabad' },
+  { code: 'VTZ', city: 'Visakhapatnam' },
   { code: 'MAA', city: 'Chennai' },
   { code: 'BLR', city: 'Bengaluru' },
   { code: 'CCU', city: 'Kolkata' },

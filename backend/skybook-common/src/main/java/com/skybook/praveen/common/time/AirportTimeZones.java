@@ -41,6 +41,7 @@ public final class AirportTimeZones {
             Map.entry("SIN", ZoneId.of("Asia/Singapore")),
             Map.entry("SYD", ZoneId.of("Australia/Sydney")),
             Map.entry("HYD", ZoneId.of("Asia/Kolkata")),
+            Map.entry("VTZ", ZoneId.of("Asia/Kolkata")),
             Map.entry("MAA", ZoneId.of("Asia/Kolkata")),
             Map.entry("BLR", ZoneId.of("Asia/Kolkata")),
             Map.entry("CCU", ZoneId.of("Asia/Kolkata")),

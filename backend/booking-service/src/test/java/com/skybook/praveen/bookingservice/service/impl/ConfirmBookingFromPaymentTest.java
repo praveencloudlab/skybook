@@ -55,7 +55,7 @@ class ConfirmBookingFromPaymentTest {
                 bookingRepository, bookingPassengerRepository,
                 pnrGenerator, new BookingStateMachine(), bookingValidator, fareCalculator,
                 new com.skybook.praveen.bookingservice.domain.CancellationPolicy(
-                        new java.math.BigDecimal("30"), 72, 24, 2, 6), 15);
+                        new java.math.BigDecimal("30"), 72, 24, 2, 6), false, 15);
     }
 
     private Booking bookingWith(BookingStatus status, PaymentStatus paymentStatus) {

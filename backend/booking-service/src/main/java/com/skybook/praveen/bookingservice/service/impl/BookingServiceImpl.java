@@ -71,6 +71,14 @@ public class BookingServiceImpl implements BookingService {
     private final FareCalculator fareCalculator;
     private final CancellationPolicy cancellationPolicy;
 
+    /**
+     * Ops/backdating switch (default OFF): when true the bookable-cutoff
+     * guard stands down and a departed flight can be booked - the desk
+     * entering a booking after the fact. Pair with flight-service's
+     * {@code flight.show-past-flights}. Never enable on a public deployment.
+     */
+    private final boolean allowPastBookings;
+
     /** TTL for the stale-draft sweep (§5.1a) - matches inventory's hold TTL by default. */
     private final long draftTtlMinutes;
 
@@ -81,6 +89,7 @@ public class BookingServiceImpl implements BookingService {
                               BookingValidator bookingValidator,
                               FareCalculator fareCalculator,
                               CancellationPolicy cancellationPolicy,
+                              @Value("${booking.allow-past-bookings:false}") boolean allowPastBookings,
                               @Value("${booking.draft.ttl-minutes:15}") long draftTtlMinutes) {
         this.bookingRepository = bookingRepository;
         this.bookingPassengerRepository = bookingPassengerRepository;
@@ -89,6 +98,7 @@ public class BookingServiceImpl implements BookingService {
         this.bookingValidator = bookingValidator;
         this.fareCalculator = fareCalculator;
         this.cancellationPolicy = cancellationPolicy;
+        this.allowPastBookings = allowPastBookings;
         this.draftTtlMinutes = draftTtlMinutes;
     }
 
@@ -134,7 +144,7 @@ public class BookingServiceImpl implements BookingService {
             // client sent the request. Applies to every leg of the journey.
             // Departure times are AIRPORT-LOCAL, so the comparison clock is
             // that airport's, not the server's (AirportTimeZones).
-            if (leg.departureTime() != null
+            if (!allowPastBookings && leg.departureTime() != null
                     && !leg.departureTime().isAfter(
                             com.skybook.praveen.common.time.AirportTimeZones.nowAt(leg.originAirportCode())
                                     .plusMinutes(BOOKING_CLOSE_MINUTES))) {

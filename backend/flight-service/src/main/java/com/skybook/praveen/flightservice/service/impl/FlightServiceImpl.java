@@ -10,7 +10,6 @@ import com.skybook.praveen.flightservice.exception.FlightNotFoundException;
 import com.skybook.praveen.flightservice.mapper.FlightMapper;
 import com.skybook.praveen.flightservice.repository.FlightRepository;
 import com.skybook.praveen.flightservice.service.FlightService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -18,7 +17,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 public class FlightServiceImpl implements FlightService {
 
     // Public shopping cutoff: booking closes 60 minutes before scheduled
@@ -27,6 +25,21 @@ public class FlightServiceImpl implements FlightService {
     static final long BOOKING_CUTOFF_MINUTES = 60;
 
     private final FlightRepository flightRepository;
+
+    /**
+     * Ops/backdating switch (default OFF): when true, public shopping also
+     * lists flights that have already departed, so a backdated booking can be
+     * entered. Pair with booking-service's {@code booking.allow-past-bookings}
+     * - listing a past flight is pointless if checkout still refuses it.
+     * Never enable on a public deployment.
+     */
+    private final boolean showPastFlights;
+
+    public FlightServiceImpl(FlightRepository flightRepository,
+            @org.springframework.beans.factory.annotation.Value("${flight.show-past-flights:false}") boolean showPastFlights) {
+        this.flightRepository = flightRepository;
+        this.showPastFlights = showPastFlights;
+    }
 
     @Override
     public FlightResponse createFlight(CreateFlightRequest request) {
@@ -178,7 +191,9 @@ public class FlightServiceImpl implements FlightService {
         // closes 60 minutes before scheduled departure - check-in desks shut
         // at 45). Admin's /search stays unfiltered on purpose: back-office
         // needs to see today's departed flights to run them.
-        LocalDateTime bookableFrom = LocalDateTime.now().plusMinutes(BOOKING_CUTOFF_MINUTES);
+        LocalDateTime bookableFrom = showPastFlights
+                ? LocalDateTime.MIN
+                : LocalDateTime.now().plusMinutes(BOOKING_CUTOFF_MINUTES);
 
         // One window covers every possible leg: first legs depart on the
         // requested date; onward legs may run into the next day (overnight
@@ -291,7 +306,9 @@ public class FlightServiceImpl implements FlightService {
 
         // Same bookability cutoff as itineraries: the calendar must not price
         // a "today" whose remaining departures have already left.
-        LocalDateTime bookableFrom = LocalDateTime.now().plusMinutes(BOOKING_CUTOFF_MINUTES);
+        LocalDateTime bookableFrom = showPastFlights
+                ? LocalDateTime.MIN
+                : LocalDateTime.now().plusMinutes(BOOKING_CUTOFF_MINUTES);
 
         return flightRepository
                 .findByOriginAirportCodeAndDestinationAirportCodeAndDepartureTimeBetween(

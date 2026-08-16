@@ -79,7 +79,7 @@ class CheckInMirrorTest {
                 bookingRepository, bookingPassengerRepository,
                 pnrGenerator, new BookingStateMachine(), new BookingValidator(),
                 new FareCalculator(Clock.fixed(Instant.parse("2030-06-04T09:00:00Z"), ZoneOffset.UTC)),
-                new CancellationPolicy(new BigDecimal("30"), 72, 24, 2, 6), 15);
+                new CancellationPolicy(new BigDecimal("30"), 72, 24, 2, 6), false, 15);
         lenient().when(bookingRepository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
     }
 
