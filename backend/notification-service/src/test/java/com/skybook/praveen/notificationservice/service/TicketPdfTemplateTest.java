@@ -283,8 +283,12 @@ class TicketPdfTemplateTest {
                             .build()))
                     .build(), null);
 
+            // The header uppercases traveller names BEFORE escaping, so the
+            // escaped artefact appears uppercased there - what matters is
+            // that no raw tag survives in any casing.
             assertThat(xhtml).doesNotContain("<script>");
-            assertThat(xhtml).contains("&lt;script&gt;");
+            assertThat(xhtml).doesNotContain("<SCRIPT>");
+            assertThat(xhtml).contains("&lt;SCRIPT&gt;");
         }
 
         @Test

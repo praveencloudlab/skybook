@@ -122,7 +122,7 @@ public class TicketPdfTemplate {
                 paxNames.append("<br/>");
                 ticketNos.append("<br/>");
             }
-            paxNames.append(escape(nvl(p.getName(), "-"))).append(" (ADT)");
+            paxNames.append(escape(nvl(p.getName(), "-").toUpperCase())).append(" (ADT)");
             ticketNos.append(p.getTicketNumber() != null
                     ? escape(p.getTicketNumber().substring(0, 3) + "-" + p.getTicketNumber().substring(3))
                     : "-");
@@ -243,11 +243,11 @@ public class TicketPdfTemplate {
                 <html xmlns="http://www.w3.org/1999/xhtml">
                 <head>
                 <style>
-                  @page { size: A4; margin: 20px 28px; }
+                  @page { size: A4; margin: 56px 28px 16px; }
                   body { font-family: Helvetica, Arial, sans-serif; color: %s; font-size: 10.5px; margin: 0; }
                   table { border-collapse: collapse; }
                   .band { background-color: %s; color: #ffffff; font-weight: bold; font-size: 12.5px;
-                          letter-spacing: 0.5px; padding: 7px 14px; margin-top: 10px; border-radius: 5px; }
+                          letter-spacing: 0.5px; padding: 9px 14px; margin-top: 16px; border-radius: 5px; }
                   .rule-h { font-size: 10px; font-weight: bold; letter-spacing: 1px; color: %s;
                             margin-top: 12px; padding-bottom: 3px; border-bottom: 1px solid #d8ccc0; }
                   .rule-p { font-size: 9px; color: #333333; line-height: 1.75; margin-top: 5px; }
@@ -278,13 +278,13 @@ public class TicketPdfTemplate {
                   </table>
 
                   <!-- Passenger + barcode block -->
-                  <table width="100%%" style="margin-top:12px;">
+                  <table width="100%%" style="margin-top:16px;">
                     <tr>
                       <td style="vertical-align:top;padding:0 14px;width:54%%;">
                         <div class="lbl">Passenger</div>
-                        <div style="font-size:12px;font-weight:bold;line-height:1.5;margin-bottom:7px;">%s</div>
+                        <div style="font-size:12px;font-weight:bold;line-height:1.5;margin-bottom:10px;">%s</div>
                         <div class="lbl">Booking reference</div>
-                        <div class="mono" style="font-size:15px;font-weight:bold;letter-spacing:3px;color:%s;margin-bottom:7px;">%s</div>
+                        <div class="mono" style="font-size:15px;font-weight:bold;letter-spacing:3px;color:%s;margin-bottom:10px;">%s</div>
                         <div class="lbl">E-ticket number(s)</div>
                         <div class="mono" style="font-size:11px;font-weight:bold;line-height:1.6;">%s</div>
                       </td>
@@ -331,8 +331,8 @@ public class TicketPdfTemplate {
 
                   <div class="band">FARE CALCULATION</div>
                   <table width="100%%" style="margin-top:8px;background-color:#fbfaf7;border:1px solid #e7e2d8;border-radius:7px;">
-                    <tr><td style="padding:9px 14px;">
-                      <div class="mono" style="font-size:10.5px;line-height:1.75;white-space:pre;">%s</div>
+                    <tr><td style="padding:12px 16px;">
+                      <div class="mono" style="font-size:10.5px;line-height:1.95;white-space:pre;">%s</div>
                       <div class="mono" style="border-top:2px solid %s;margin-top:6px;padding-top:6px;font-size:10.5px;white-space:pre;color:%s;font-weight:bold;">%s</div>
                     </td></tr>
                   </table>
@@ -410,7 +410,7 @@ public class TicketPdfTemplate {
                     <tr><td style="padding:10px 14px;font-size:9px;color:#475569;line-height:1.9;">
                       <b style="color:#1a1a1a;">SkyBook Airways &#183; Contact</b><br/>
                       Reservations &amp; support (24/7): <b>+44 20 7946 0958</b> &#160;&#183;&#160;
-                      <b>support@flyskybook.com</b> &#160;&#183;&#160; flyskybook.com<br/>
+                      <b>support@flyskybook.com</b><br/>
                       Registered office: SkyBook Airways Ltd, One Skyway House, 100 Aviation Way, London EC2X 9SB, United Kingdom &#160;&#183;&#160; Company No. 01234567
                     </td></tr>
                   </table>
@@ -456,27 +456,27 @@ public class TicketPdfTemplate {
                         .reduce((a, b) -> a + ", " + b).orElse("-");
         sb.append("""
                 <tr>
-                  <td style="padding:6px 10px;vertical-align:top;line-height:1.5;"><b style="font-size:13px;">%s</b> - %s%s</td>
-                  <td style="padding:6px 10px;vertical-align:top;line-height:1.5;"><b style="font-size:13px;">%s</b> - %s%s</td>
-                  <td style="padding:6px 10px;vertical-align:top;line-height:1.5;"><b>%s</b><br/><span style="font-size:9px;color:#555555;">%s</span></td>
-                  <td style="padding:6px 10px;vertical-align:top;line-height:1.5;"><b>%s</b><br/><b>%s</b></td>
-                  <td style="padding:6px 10px;vertical-align:top;line-height:1.5;"><b>%s</b><br/><b>%s</b></td>
-                  <td style="padding:6px 10px;vertical-align:top;line-height:1.5;">%s</td>
+                  <td style="padding:8px 10px;vertical-align:top;line-height:1.6;"><b style="font-size:13px;">%s</b> - %s%s</td>
+                  <td style="padding:8px 10px;vertical-align:top;line-height:1.6;"><b style="font-size:13px;">%s</b> - %s%s</td>
+                  <td style="padding:8px 10px;vertical-align:top;line-height:1.6;"><b>%s</b><br/><span style="font-size:9px;color:#555555;">%s</span></td>
+                  <td style="padding:8px 10px;vertical-align:top;line-height:1.6;"><b>%s</b><br/><b>%s</b></td>
+                  <td style="padding:8px 10px;vertical-align:top;line-height:1.6;"><b>%s</b><br/><b>%s</b></td>
+                  <td style="padding:8px 10px;vertical-align:top;line-height:1.6;">%s</td>
                 </tr>
                 <tr style="background-color:#ececec;font-size:10px;color:#222222;">
-                  <td colspan="2" style="padding:6px 10px;vertical-align:top;line-height:1.55;">
+                  <td colspan="2" style="padding:8px 10px;vertical-align:top;line-height:1.7;">
                     <div>Class: <b>%s</b></div>
                     <div>Cabin: %s</div>
                     <div>Max baggage (4): %s</div>
                     <div>Fare basis: %s</div>
                   </td>
-                  <td colspan="2" style="padding:6px 10px;vertical-align:top;line-height:1.55;">
+                  <td colspan="2" style="padding:8px 10px;vertical-align:top;line-height:1.7;">
                     <div>Operated by: <b>%s</b></div>
                     <div>Marketed by: <b>%s</b></div>
                     <div>Booking status (1): OK</div>
-                    <div>Seats: %s</div>
+                    <div>Seats: <b>%s</b></div>
                   </td>
-                  <td colspan="2" style="padding:6px 10px;vertical-align:top;line-height:1.55;">
+                  <td colspan="2" style="padding:8px 10px;vertical-align:top;line-height:1.7;">
                     <div>NVB (2): <b>%s</b></div>
                     <div>NVA (3): <b>%s</b></div>
                     <div>Duration: <b>%s</b></div>

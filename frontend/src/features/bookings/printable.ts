@@ -20,6 +20,8 @@ import { qrSvg } from '../../lib/qr';
 const CSS = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #0f172a; padding: 32px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { margin: 18mm 12mm 8mm; }
+  @media print { body { padding: 0; } }
   .doc { max-width: 720px; margin: 0 auto; }
   .navy { background: #0d1633; color: #fff; }
   .pad { padding: 20px 24px; }
@@ -309,7 +311,7 @@ export function printETicket(
   const paxLines = booking.passengers
     // One line per TRAVELLER, not per per-segment row.
     .filter((p) => (p.segmentIndex ?? 0) === 0)
-    .map((p) => `${p.firstName} ${p.lastName} (ADT)`)
+    .map((p) => `${p.firstName.toUpperCase()} ${p.lastName.toUpperCase()} (ADT)`)
     .join('<br>');
   // Real e-ticket numbers once issued (125-XXXXXXXXXX, one per traveller);
   // the legacy derived number only for pre-ticketing bookings.
@@ -353,37 +355,37 @@ export function printETicket(
         </td>
       </tr>` : ''}
       <tr${cancelled ? ' style="opacity:.55;"' : ''}>
-        <td style="padding:8px 12px;vertical-align:top;line-height:1.6;">
+        <td style="padding:10px 12px;vertical-align:top;line-height:1.7;">
           <div><b style="font-size:15px;">${flight.originAirportCode}</b> - ${cityFor(flight.originAirportCode).toUpperCase()}</div>
           ${flight.departureTerminal ? `<div style="color:#333;">Terminal: <b>${flight.departureTerminal}</b></div>` : ''}
         </td>
-        <td style="padding:8px 12px;vertical-align:top;line-height:1.6;">
+        <td style="padding:10px 12px;vertical-align:top;line-height:1.7;">
           <div><b style="font-size:15px;">${flight.destinationAirportCode}</b> - ${cityFor(flight.destinationAirportCode).toUpperCase()}</div>
           ${flight.arrivalTerminal ? `<div style="color:#333;">Terminal: <b>${flight.arrivalTerminal}</b></div>` : ''}
         </td>
-        <td style="padding:8px 12px;vertical-align:top;line-height:1.6;"><b>${flight.flightNumber}</b><br><span style="font-size:11px;color:#555;">${airlineNameFor(flight.airlineCode ?? flight.flightNumber)}</span></td>
-        <td style="padding:8px 12px;vertical-align:top;line-height:1.6;"><b>${time(flight.departureTime)}</b><br>${ddMon(flight.departureTime)}</td>
-        <td style="padding:8px 12px;vertical-align:top;line-height:1.6;"><b>${time(flight.arrivalTime)}</b><br>${ddMon(flight.arrivalTime)}</td>
-        <td style="padding:8px 12px;vertical-align:top;line-height:1.6;">${timeShift(flight.departureTime, -60)}</td>
+        <td style="padding:10px 12px;vertical-align:top;line-height:1.7;"><b>${flight.flightNumber}</b><br><span style="font-size:11px;color:#555;">${airlineNameFor(flight.airlineCode ?? flight.flightNumber)}</span></td>
+        <td style="padding:10px 12px;vertical-align:top;line-height:1.7;"><b>${time(flight.departureTime)}</b><br>${ddMon(flight.departureTime)}</td>
+        <td style="padding:10px 12px;vertical-align:top;line-height:1.7;"><b>${time(flight.arrivalTime)}</b><br>${ddMon(flight.arrivalTime)}</td>
+        <td style="padding:10px 12px;vertical-align:top;line-height:1.7;">${timeShift(flight.departureTime, -60)}</td>
       </tr>
       <tr style="background:#ececec;font-size:12px;color:#222;${cancelled ? 'opacity:.55;' : ''}">
-        <td colspan="2" style="padding:8px 12px;vertical-align:top;line-height:1.6;">
+        <td colspan="2" style="padding:10px 12px;vertical-align:top;line-height:1.7;">
           <div>Class: <b>${classCode}</b></div>
           <div>Cabin: ${cabin}</div>
           <div>Max baggage (4): ${baggage}</div>
           <div>Fare basis: ${fareBasis}</div>
         </td>
-        <td colspan="2" style="padding:8px 12px;vertical-align:top;line-height:1.6;">
+        <td colspan="2" style="padding:10px 12px;vertical-align:top;line-height:1.7;">
           <div>Operated by: <b>${airlineNameFor(flight.airlineCode ?? flight.flightNumber).toUpperCase()}</b></div>
           <div>Marketed by: <b>${airlineNameFor(flight.airlineCode ?? flight.flightNumber).toUpperCase()}</b></div>
           <div>Booking status (1): ${cancelled ? 'CANCELLED' : 'OK'}</div>
           <div>Seat${booking.passengers.filter((p) => (p.segmentIndex ?? 0) === index && !p.cancelled && p.seatNumber).length === 1 ? '' : 's'}:
-            ${booking.passengers
+            <b>${booking.passengers
               .filter((p) => (p.segmentIndex ?? 0) === index && !p.cancelled)
               .map((p) => p.seatNumber ?? '&mdash;')
-              .join(', ') || '&mdash;'}</div>
+              .join(', ') || '&mdash;'}</b></div>
         </td>
-        <td colspan="2" style="padding:8px 12px;vertical-align:top;line-height:1.6;">
+        <td colspan="2" style="padding:10px 12px;vertical-align:top;line-height:1.7;">
           <div>NVB (2): ${ddMon(flight.departureTime)}</div>
           <div>NVA (3): ${addDaysMon(flight.departureTime, 120)}</div>
           <div>Duration: ${durationHM(flight.departureTime, flight.arrivalTime)}</div>
@@ -462,7 +464,7 @@ export function printETicket(
     .join('');
 
   const passengersBlock = `
-      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:15px;letter-spacing:.5px;padding:9px 16px;margin-top:12px;border-radius:6px;">PASSENGER(S)</div>
+      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:15px;letter-spacing:.5px;padding:10px 16px;margin-top:16px;border-radius:6px;">PASSENGER(S)</div>
       <table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:13px;">
         <tr style="font-size:10px;letter-spacing:1px;color:#8a93a3;text-align:left;">
           <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;">NAME</th>
@@ -512,9 +514,9 @@ export function printETicket(
   const paymentRef = booking.payment?.externalPaymentReference;
 
   const fareCalcBlock = `
-      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:15px;letter-spacing:.5px;padding:9px 16px;margin-top:12px;border-radius:6px;">FARE CALCULATION</div>
+      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:15px;letter-spacing:.5px;padding:10px 16px;margin-top:16px;border-radius:6px;">FARE CALCULATION</div>
       <div style="margin-top:8px;background:#fbfaf7;border:1px solid #e7e2d8;border-radius:8px;padding:11px 16px;">
-        <div style="font-family:'Courier New',monospace;font-size:13px;line-height:1.8;white-space:pre;overflow-x:auto;color:#1f2328;">${[
+        <div style="font-family:'Courier New',monospace;font-size:13px;line-height:2.0;white-space:pre;overflow-x:auto;color:#1f2328;">${[
           fareLines,
           ledgerLine('SEATS', `${seatList}${seatsWaived ? ' (WAIVED)' : ''}`, usd(seatCharges)),
           ledgerLine('BAGS', bagCount > 0 ? `${bagCount} EXTRA${multi ? ' X 2 FLIGHTS' : ''}` : 'NONE', usd(bagCharges)),
@@ -578,7 +580,7 @@ export function printETicket(
       </table>
 
       <!-- ETR band -->
-      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:15px;letter-spacing:.5px;padding:9px 16px;margin-top:12px;border-radius:6px;">ELECTRONIC TICKET RECEIPT</div>
+      <div style="background:${MAROON};color:#fff;font-weight:800;font-size:15px;letter-spacing:.5px;padding:10px 16px;margin-top:16px;border-radius:6px;">ELECTRONIC TICKET RECEIPT</div>
 
       <!-- Itinerary -->
       <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:13px;">
@@ -658,7 +660,7 @@ export function printETicket(
         <div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:11px;color:#475569;line-height:1.9;">
           <b style="color:#1a1a1a;">SkyBook Airways · Contact</b><br>
           Reservations &amp; support (24/7): <b>+44 20 7946 0958</b> &nbsp;·&nbsp;
-          <b>support@flyskybook.com</b> &nbsp;·&nbsp; flyskybook.com<br>
+          <b>support@flyskybook.com</b><br>
           Registered office: SkyBook Airways Ltd, One Skyway House, 100 Aviation Way, London EC2X 9SB, United Kingdom &nbsp;·&nbsp; Company No. 01234567
         </div>
       </div>
