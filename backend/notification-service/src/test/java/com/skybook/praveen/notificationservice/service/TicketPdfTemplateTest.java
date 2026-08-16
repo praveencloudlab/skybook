@@ -180,6 +180,31 @@ class TicketPdfTemplateTest {
         }
 
         @Test
+        void chainedLegsPrintTheirConnectionTimeButAReturnDaysLaterDoesNot() {
+            // Through-ticket: LHR-DXB lands 19:05, DXB-HYD leaves 21:45 - a
+            // 2h40 connection band. The ROUND TRIP fixture's 13-day gap to the
+            // return must print nothing.
+            String through = template.render(ticket()
+                    .segments(List.of(
+                            segment(0, "EK030", "LHR", "DXB")
+                                    .departureTime("2026-08-22 08:45").arrivalTime("2026-08-22 19:05")
+                                    .passengers(List.of(passenger("Praveenreddy Somireddy", "1250000027001", "1B", "833.00").build()))
+                                    .build(),
+                            segment(1, "EK526", "DXB", "HYD")
+                                    .departureTime("2026-08-22 21:45").arrivalTime("2026-08-23 03:05")
+                                    .passengers(List.of(passenger("Praveenreddy Somireddy", "1250000027001", "1B", "833.00")
+                                            .segmentIndex(1).build()))
+                                    .build()))
+                    .build(), null);
+
+            assertThat(through).contains("CONNECTION IN DUBAI (DXB)");
+            assertThat(through).contains("2h 40m");
+            assertThat(through).contains("CONNECTING FLIGHT");
+
+            assertThat(template.render(roundTrip(), null)).doesNotContain("CONNECTION IN");
+        }
+
+        @Test
         void terminalsRideTheItineraryRows() {
             String xhtml = template.render(roundTrip(), null);
 

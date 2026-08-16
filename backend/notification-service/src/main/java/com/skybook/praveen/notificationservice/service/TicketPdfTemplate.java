@@ -126,6 +126,9 @@ public class TicketPdfTemplate {
         for (BookingEventSegment segment : segments) {
             itinerary.append(segmentRows(segment, segIdx, multi, cabinLabel, classCode, fareBasis,
                     segments.get(0).getOriginAirportCode()));
+            if (segIdx + 1 < segments.size()) {
+                itinerary.append(connectionRow(segment, segments.get(segIdx + 1)));
+            }
             segIdx++;
         }
 
@@ -403,6 +406,34 @@ public class TicketPdfTemplate {
         return sb.toString();
     }
 
+    /**
+     * The ground time between two CHAINED legs: next leg leaves the airport
+     * this one lands at, within 24 hours. Anything else (a return days later,
+     * a broken chain) is not a connection and prints nothing.
+     */
+    private String connectionRow(BookingEventSegment leg, BookingEventSegment next) {
+        String at = leg.getDestinationAirportCode();
+        if (at == null || !at.equalsIgnoreCase(next.getOriginAirportCode())) {
+            return "";
+        }
+        LocalDateTime arr = parseEventTime(leg.getArrivalTime());
+        LocalDateTime dep = parseEventTime(next.getDepartureTime());
+        if (arr == null || dep == null || !dep.isAfter(arr)) {
+            return "";
+        }
+        long mins = Duration.between(arr, dep).toMinutes();
+        if (mins > 24 * 60) {
+            return "";
+        }
+        return """
+                <tr>
+                  <td colspan="6" style="padding:8px 11px;background-color:#fdf6ee;border-top:1px dashed #d8c9b8;border-bottom:1px dashed #d8c9b8;font-size:10px;color:#7a5c3e;">
+                    CONNECTION IN %s (%s) &#183; <b>%dh %02dm</b> &#183; protected transfer, bags checked through
+                  </td>
+                </tr>
+                """.formatted(escape(city(at)), escape(at), mins / 60, mins % 60);
+    }
+
     private String duration(String from, LocalDateTime dep, String to, LocalDateTime arr) {
         if (dep == null || arr == null) {
             return "-";
@@ -424,9 +455,9 @@ public class TicketPdfTemplate {
     }
 
     /**
-     * OUTBOUND for leg 0; RETURN only when the leg actually lands back at the
-     * journey's origin; otherwise LEG N. A through-ticket's connection leg
-     * (LHR-DXB-HYD) is LEG 2, not a return - the same rule the trip page uses.
+     * Airline wording: the first flight is OUTBOUND, a flight landing back at
+     * the journey's origin is the RETURN, and anything chained in between is
+     * a CONNECTING FLIGHT (LHR-DXB-HYD prints OUTBOUND + CONNECTING FLIGHT).
      */
     private static String legLabel(int index, String destination, String journeyOrigin) {
         if (index == 0) {
@@ -435,7 +466,7 @@ public class TicketPdfTemplate {
         if (destination != null && destination.equalsIgnoreCase(journeyOrigin)) {
             return "RETURN";
         }
-        return "LEG " + (index + 1);
+        return "CONNECTING FLIGHT";
     }
 
     /** Airline display name from the code embedded in the flight number. */

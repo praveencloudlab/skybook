@@ -331,8 +331,9 @@ export function printETicket(
     ? booking.segments
     : [{ id: 0, segmentIndex: 0, flightId: booking.flightId, status: 'UPCOMING' as const }];
 
-  // RETURN only when the leg lands back at the journey origin - a through-
-  // ticket connection (LHR-DXB-HYD) is LEG 2, same rule as the trip page.
+  // Airline wording: OUTBOUND first, RETURN only when the flight lands back
+  // at the journey origin, CONNECTING FLIGHT for anything chained between
+  // (LHR-DXB-HYD prints OUTBOUND + CONNECTING FLIGHT).
   const journeyOrigin = flightsById[segs[0]?.flightId ?? -1]?.originAirportCode;
   const legLabel = (i: number) => {
     if (i === 0) return 'OUTBOUND';
@@ -340,7 +341,7 @@ export function printETicket(
     if (legFlight && journeyOrigin && legFlight.destinationAirportCode === journeyOrigin) {
       return 'RETURN';
     }
-    return `LEG ${i + 1}`;
+    return 'CONNECTING FLIGHT';
   };
   const segmentRows = (flight: Flight, index: number, cancelled: boolean) => `
       ${multi ? `
@@ -388,10 +389,31 @@ export function printETicket(
         </td>
       </tr>`;
 
+  // Ground time between CHAINED legs (next leg leaves where this one lands,
+  // within 24h) - a return days later is not a connection and prints nothing.
+  const connectionRow = (flight: Flight, next: Flight): string => {
+    if (next.originAirportCode !== flight.destinationAirportCode) return '';
+    const mins = (Date.parse(`${next.departureTime}Z`) - Date.parse(`${flight.arrivalTime}Z`)) / 60_000;
+    if (!Number.isFinite(mins) || mins <= 0 || mins > 24 * 60) return '';
+    return `
+      <tr>
+        <td colspan="6" style="padding:8px 14px;background:#fdf6ee;border-top:1px dashed #d8c9b8;border-bottom:1px dashed #d8c9b8;font-size:11px;color:#7a5c3e;">
+          CONNECTION IN ${cityFor(flight.destinationAirportCode).toUpperCase()} (${flight.destinationAirportCode})
+          &middot; <b>${Math.floor(mins / 60)}h ${String(Math.round(mins % 60)).padStart(2, '0')}m</b>
+          &middot; protected transfer, bags checked through
+        </td>
+      </tr>`;
+  };
+
   const segment = segs
-    .map((seg) => {
+    .map((seg, i) => {
       const flight = flightsById[seg.flightId];
-      return flight ? segmentRows(flight, seg.segmentIndex, seg.status === 'CANCELLED') : '';
+      if (!flight) return '';
+      const next = i + 1 < segs.length ? flightsById[segs[i + 1].flightId] : undefined;
+      return (
+        segmentRows(flight, seg.segmentIndex, seg.status === 'CANCELLED') +
+        (next ? connectionRow(flight, next) : '')
+      );
     })
     .join('');
 
