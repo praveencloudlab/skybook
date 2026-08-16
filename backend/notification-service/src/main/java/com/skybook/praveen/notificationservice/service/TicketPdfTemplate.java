@@ -37,9 +37,14 @@ import java.util.Map;
 public class TicketPdfTemplate {
 
     private static final String MAROON = "#5a1836";
+
+    /** The app's brand plane mark, white on the header maroon (SVG rasterized
+     * once - openhtmltopdf renders no inline SVG, and base-14 fonts carry no
+     * plane glyph). */
+    private static final String PLANE_PNG = "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";
     private static final String INK = "#1a1a1a";
     private static final String LABEL = "#8a93a3";
-    private static final DateTimeFormatter DDMON = DateTimeFormatter.ofPattern("ddMMMyyyy");
+    private static final String[] MONTHS = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
     private static final DateTimeFormatter HHMM = DateTimeFormatter.ofPattern("HH:mm");
     private static final int LEDGER_DESC_WIDTH = 40;
 
@@ -224,9 +229,18 @@ public class TicketPdfTemplate {
                   <table width="100%%" style="background-color:%s;">
                     <tr>
                       <td style="padding:22px 18px;color:#ffffff;font-style:italic;font-weight:bold;font-size:16px;">Going places together</td>
-                      <td style="padding:22px 18px;text-align:right;color:#ffffff;">
-                        <span style="background-color:#7a3a58;border-radius:10px;padding:5px 9px;font-size:8px;font-weight:bold;">SKY ALLIANCE</span>
-                        <span style="font-size:22px;font-weight:bold;letter-spacing:1px;padding-left:10px;">SkyBook</span>
+                      <td style="padding:16px 18px;text-align:right;color:#ffffff;">
+                        <table style="border-collapse:collapse;margin-left:auto;"><tr>
+                          <td style="vertical-align:middle;padding-right:12px;">
+                            <table style="width:38px;height:38px;background-color:#7a3a58;border-radius:19px;border-collapse:collapse;"><tr>
+                              <td style="text-align:center;vertical-align:middle;font-size:7px;font-weight:bold;color:#ffffff;line-height:1.2;">SKY<br/>ALLIANCE</td>
+                            </tr></table>
+                          </td>
+                          <td style="vertical-align:middle;font-size:22px;font-weight:bold;letter-spacing:1px;color:#ffffff;">SkyBook</td>
+                          <td style="vertical-align:middle;padding-left:8px;">
+                            <img src="data:image/png;base64,%s" width="26" height="26" alt="SkyBook plane"/>
+                          </td>
+                        </tr></table>
                       </td>
                     </tr>
                   </table>
@@ -249,7 +263,7 @@ public class TicketPdfTemplate {
                         <div style="margin-top:10px;font-size:10px;color:#475569;line-height:1.8;">
                           <div><b style="color:%s;">Itinerary Printing Office</b></div>
                           <div>SKYBOOK DIGITAL, DIGITAL OFFICE</div>
-                          <div><b style="color:%s;">Date of issue:</b> %s</div>
+                          <div><b style="color:%s;">Date of issue:</b> <b>%s</b></div>
                         </div>
                       </td>
                     </tr>
@@ -305,7 +319,7 @@ public class TicketPdfTemplate {
                 </html>
                 """.formatted(
                 INK, MAROON, LABEL,
-                MAROON,
+                MAROON, PLANE_PNG,
                 paxNames.toString(), MAROON, escape(pnr), ticketNos.toString(),
                 barcode(pnr),
                 INK, INK, escape(issueDate(event)),
@@ -344,8 +358,8 @@ public class TicketPdfTemplate {
                   <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b style="font-size:13px;">%s</b> %s%s</td>
                   <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b style="font-size:13px;">%s</b> %s%s</td>
                   <td style="padding:11px 11px;vertical-align:top;line-height:1.8;">%s</td>
-                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/>%s</td>
-                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/>%s</td>
+                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/><b>%s</b></td>
+                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/><b>%s</b></td>
                   <td style="padding:11px 11px;vertical-align:top;line-height:1.8;">%s</td>
                 </tr>
                 <tr style="background-color:#ececec;font-size:10px;color:#222222;">
@@ -362,9 +376,9 @@ public class TicketPdfTemplate {
                     <div>Seats: %s</div>
                   </td>
                   <td colspan="2" style="padding:11px 11px;vertical-align:top;line-height:1.85;">
-                    <div>NVB (2): %s</div>
-                    <div>NVA (3): %s</div>
-                    <div>Duration: %s</div>
+                    <div>NVB (2): <b>%s</b></div>
+                    <div>NVA (3): <b>%s</b></div>
+                    <div>Duration: <b>%s</b></div>
                   </td>
                 </tr>
                 """.formatted(
@@ -373,13 +387,13 @@ public class TicketPdfTemplate {
                 escape(to), escape(city(to)),
                 s.getArrivalTerminal() != null ? "<div style=\"color:#333333;\">Terminal: <b>" + escape(s.getArrivalTerminal()) + "</b></div>" : "",
                 escape(nvl(s.getFlightNumber(), "-")),
-                dep != null ? HHMM.format(dep) : "-", dep != null ? DDMON.format(dep) : "-",
-                arr != null ? HHMM.format(arr) : "-", arr != null ? DDMON.format(arr) : "-",
+                dep != null ? HHMM.format(dep) : "-", dep != null ? ddMon(dep) : "-",
+                arr != null ? HHMM.format(arr) : "-", arr != null ? ddMon(arr) : "-",
                 dep != null ? HHMM.format(dep.minusMinutes(60)) : "-",
                 escape(classCode), escape(cabinLabel), baggageFor(firstClass(s)), escape(fareBasis),
                 escape(seats),
-                dep != null ? DDMON.format(dep) : "-",
-                dep != null ? DDMON.format(dep.plusDays(120)) : "-",
+                dep != null ? ddMon(dep) : "-",
+                dep != null ? ddMon(dep.plusDays(120)) : "-",
                 duration(from, dep, to, arr)));
         return sb.toString();
     }
@@ -483,7 +497,7 @@ public class TicketPdfTemplate {
 
     private String issueDate(BookingEvent event) {
         LocalDateTime booked = parseEventTime(event.getBookingDate());
-        return booked != null ? DDMON.format(booked) : "-";
+        return booked != null ? ddMon(booked) : "-";
     }
 
     /** Producer stamps event times as "yyyy-MM-dd HH:mm" (BookingEventProducer.EVENT_TIME). */
@@ -515,6 +529,11 @@ public class TicketPdfTemplate {
                 .arrivalTime(event.getArrivalTime())
                 .passengers(event.getPassengers())
                 .build();
+    }
+
+    /** ddMonYYYY with the frontend's month array - locale-proof ("Sep", never "Sept"). */
+    private static String ddMon(LocalDateTime value) {
+        return "%02d%s%d".formatted(value.getDayOfMonth(), MONTHS[value.getMonthValue() - 1], value.getYear());
     }
 
     private static String cabin(String travelClass) {
