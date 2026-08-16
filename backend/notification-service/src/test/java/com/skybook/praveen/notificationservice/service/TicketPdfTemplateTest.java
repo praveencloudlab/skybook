@@ -95,7 +95,7 @@ class TicketPdfTemplateTest {
 
             assertThat(xhtml).contains("SkyBook Airways &#183; Contact");
             assertThat(xhtml).contains("+44 20 7946 0958");
-            assertThat(xhtml).contains("support@skybook.example");
+            assertThat(xhtml).contains("support@flyskybook.com");
             assertThat(xhtml).contains("Registered office: SkyBook Airways Ltd");
         }
 

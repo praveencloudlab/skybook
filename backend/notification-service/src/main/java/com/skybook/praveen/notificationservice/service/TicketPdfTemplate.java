@@ -338,7 +338,7 @@ public class TicketPdfTemplate {
                   <div style="font-size:9.5px;color:#333333;margin-top:16px;line-height:1.9;">
                     <b>(1)</b> OK = Confirmed &#160; <b>(2)</b> NVB = Not valid before &#160; <b>(3)</b> NVA = Not valid after &#160;
                     <b>(4)</b> Each passenger can check in a specific amount of baggage at no extra cost as indicated in the
-                    column baggage. For more information on baggage rules and restrictions, please visit skybook.example/baggage.
+                    column baggage. For more information on baggage rules and restrictions, please visit flyskybook.com/baggage.
                   </div>
                   <div style="font-size:10px;color:#555555;margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0;line-height:1.8;">
                     Total paid: <b>%s</b> &#160;&#183;&#160; Status: %s
@@ -350,7 +350,7 @@ public class TicketPdfTemplate {
                     <tr><td style="padding:10px 14px;font-size:9px;color:#475569;line-height:1.9;">
                       <b style="color:#1a1a1a;">SkyBook Airways &#183; Contact</b><br/>
                       Reservations &amp; support (24/7): <b>+44 20 7946 0958</b> &#160;&#183;&#160;
-                      <b>support@skybook.example</b> &#160;&#183;&#160; skybook.example<br/>
+                      <b>support@flyskybook.com</b> &#160;&#183;&#160; flyskybook.com<br/>
                       Registered office: SkyBook Airways Ltd, One Skyway House, 100 Aviation Way, London EC2X 9SB, United Kingdom &#160;&#183;&#160; Company No. 01234567
                     </td></tr>
                   </table>
@@ -396,8 +396,8 @@ public class TicketPdfTemplate {
                         .reduce((a, b) -> a + ", " + b).orElse("-");
         sb.append("""
                 <tr>
-                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b style="font-size:13px;">%s</b> %s%s</td>
-                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b style="font-size:13px;">%s</b> %s%s</td>
+                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b style="font-size:13px;">%s</b> - %s%s</td>
+                  <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b style="font-size:13px;">%s</b> - %s%s</td>
                   <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/><span style="font-size:9px;color:#555555;">%s</span></td>
                   <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/><b>%s</b></td>
                   <td style="padding:11px 11px;vertical-align:top;line-height:1.8;"><b>%s</b><br/><b>%s</b></td>

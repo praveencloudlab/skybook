@@ -354,11 +354,11 @@ export function printETicket(
       </tr>` : ''}
       <tr${cancelled ? ' style="opacity:.55;"' : ''}>
         <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">
-          <div><b style="font-size:15px;">${flight.originAirportCode}</b> ${cityFor(flight.originAirportCode).toUpperCase()}</div>
+          <div><b style="font-size:15px;">${flight.originAirportCode}</b> - ${cityFor(flight.originAirportCode).toUpperCase()}</div>
           ${flight.departureTerminal ? `<div style="color:#333;">Terminal: <b>${flight.departureTerminal}</b></div>` : ''}
         </td>
         <td style="padding:14px 14px;vertical-align:top;line-height:1.85;">
-          <div><b style="font-size:15px;">${flight.destinationAirportCode}</b> ${cityFor(flight.destinationAirportCode).toUpperCase()}</div>
+          <div><b style="font-size:15px;">${flight.destinationAirportCode}</b> - ${cityFor(flight.destinationAirportCode).toUpperCase()}</div>
           ${flight.arrivalTerminal ? `<div style="color:#333;">Terminal: <b>${flight.arrivalTerminal}</b></div>` : ''}
         </td>
         <td style="padding:14px 14px;vertical-align:top;line-height:1.85;"><b>${flight.flightNumber}</b><br><span style="font-size:11px;color:#555;">${airlineNameFor(flight.airlineCode ?? flight.flightNumber)}</span></td>
@@ -600,7 +600,7 @@ export function printETicket(
         <b>(1)</b> OK = Confirmed &nbsp; <b>(2)</b> NVB = Not valid before &nbsp; <b>(3)</b> NVA = Not valid after &nbsp;
         <b>(4)</b> Each passenger can check in a specific amount of baggage at no extra cost as indicated in the column baggage.
         For more information on baggage rules and restrictions, please visit
-        <span style="color:#1d4ed8;text-decoration:underline;">skybook.example/baggage</span>.
+        <span style="color:#1d4ed8;text-decoration:underline;">flyskybook.com/baggage</span>.
       </div>
       <div style="font-size:12px;color:#555;margin-top:14px;padding:12px 6px 0;border-top:1px solid #e2e8f0;line-height:1.8;">
         Total paid: <b>${money(booking.totalFare, _currency)}</b> &nbsp;·&nbsp; Status: ${booking.bookingStatus}
@@ -612,7 +612,7 @@ export function printETicket(
       <div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:11px;color:#475569;line-height:1.9;">
         <b style="color:#1a1a1a;">SkyBook Airways · Contact</b><br>
         Reservations &amp; support (24/7): <b>+44 20 7946 0958</b> &nbsp;·&nbsp;
-        <b>support@skybook.example</b> &nbsp;·&nbsp; skybook.example<br>
+        <b>support@flyskybook.com</b> &nbsp;·&nbsp; flyskybook.com<br>
         Registered office: SkyBook Airways Ltd, One Skyway House, 100 Aviation Way, London EC2X 9SB, United Kingdom &nbsp;·&nbsp; Company No. 01234567
       </div>
     </div>`;
