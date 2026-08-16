@@ -268,7 +268,9 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 function ddMon(iso: string): string {
   const [d] = iso.split('T');
   const [y, m, day] = d.split('-');
-  return `${day}${MONTHS[Number(m) - 1] ?? m}${y}`;
+  // Spaced day-month-year (user preference over the run-together
+  // airline-receipt form) - the emailed ticket's ddMon matches.
+  return `${day} ${MONTHS[Number(m) - 1] ?? m} ${y}`;
 }
 function durationHM(dep: string, arr: string): string {
   const mins = (Date.parse(`${arr}Z`) - Date.parse(`${dep}Z`)) / 60_000;

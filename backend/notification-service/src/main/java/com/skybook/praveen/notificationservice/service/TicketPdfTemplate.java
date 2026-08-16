@@ -533,7 +533,8 @@ public class TicketPdfTemplate {
 
     /** ddMonYYYY with the frontend's month array - locale-proof ("Sep", never "Sept"). */
     private static String ddMon(LocalDateTime value) {
-        return "%02d%s%d".formatted(value.getDayOfMonth(), MONTHS[value.getMonthValue() - 1], value.getYear());
+        // Spaced day-month-year, matching the frontend download's ddMon.
+        return "%02d %s %d".formatted(value.getDayOfMonth(), MONTHS[value.getMonthValue() - 1], value.getYear());
     }
 
     private static String cabin(String travelClass) {
