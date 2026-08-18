@@ -44,7 +44,12 @@ public interface BookingService {
      * through-ticket checks bags through its connection.
      */
     record JourneyLeg(Long flightId, String originAirportCode, LocalDateTime departureTime,
-                      int direction, boolean directionStart) {
+                      int direction, boolean directionStart, String flightNumber) {
+        /** Legacy shape - callers that don't know the flight number. */
+        public JourneyLeg(Long flightId, String originAirportCode, LocalDateTime departureTime,
+                          int direction, boolean directionStart) {
+            this(flightId, originAirportCode, departureTime, direction, directionStart, null);
+        }
     }
 
     /**

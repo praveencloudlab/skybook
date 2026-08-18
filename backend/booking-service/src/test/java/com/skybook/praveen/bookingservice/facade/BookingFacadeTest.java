@@ -502,21 +502,26 @@ class BookingFacadeTest {
             assertThat(economy.baseFares().get(FareType.FLEXI)).isEqualByComparingTo("100.00");
             assertThat(economy.baseFares().get(FareType.PREMIUM)).isEqualByComparingTo("125.00");
             assertThat(economy.fromFare()).isEqualByComparingTo("85.00");   // "Economy from 85"
-            assertThat(quote.cabins().get(1).fromFare()).isEqualByComparingTo("297.50"); // "Business from 297.50"
+            // Business sells FLEXI/PREMIUM only (no Saver in premium cabins),
+            // so "from" is the FLEXI fare, and SAVER is genuinely absent.
+            assertThat(quote.cabins().get(1).fromFare()).isEqualByComparingTo("350.00"); // "Business from 350"
+            assertThat(quote.cabins().get(1).baseFares()).doesNotContainKey(FareType.SAVER);
         }
 
         @Test
-        void flightWithoutInventoryQuotesAllCabinsWithUnknownAvailability() {
+        void flightWithoutInventoryQuotesEconomyOnlyWithUnknownAvailability() {
+            // No inventory record = the hull is unknown. Every aircraft sells
+            // Economy; quoting the premium cabins too once sold BUSINESS on a
+            // regional turboprop that has no such seat.
             stubFlightOk();
             when(inventoryServiceClient.getCabins(10L)).thenReturn(Optional.empty());
 
             var quote = facade.quoteFares(10L);
 
-            assertThat(quote.cabins()).hasSize(TravelClass.values().length);
-            assertThat(quote.cabins()).allSatisfy(cabin -> {
-                assertThat(cabin.availableSeats()).isNull();
-                assertThat(cabin.fromFare()).isNotNull();
-            });
+            assertThat(quote.cabins()).hasSize(1);
+            assertThat(quote.cabins().get(0).travelClass()).isEqualTo(TravelClass.ECONOMY);
+            assertThat(quote.cabins().get(0).availableSeats()).isNull();
+            assertThat(quote.cabins().get(0).fromFare()).isNotNull();
         }
 
         @Test

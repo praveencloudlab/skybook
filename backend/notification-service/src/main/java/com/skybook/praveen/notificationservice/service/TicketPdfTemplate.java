@@ -56,16 +56,41 @@ public class TicketPdfTemplate {
     private static final DateTimeFormatter HHMM = DateTimeFormatter.ofPattern("HH:mm");
     private static final int LEDGER_DESC_WIDTH = 40;
 
-    /** Default max baggage allowance per cabin - mirrors printable.ts BAGGAGE. */
+    /**
+     * Default max baggage allowance per cabin - mirrors the frontend
+     * BAGGAGE_ALLOWANCES. Premium cabins carry TWO cabin pieces (carry-on +
+     * briefcase/garment bag, 7 kg each), the way full-service carriers state
+     * it - "10 kg cabin" was nobody's real allowance.
+     */
     private static String baggageFor(String travelClass) {
         if (travelClass == null) {
             return "25 kg checked + 7 kg cabin";
         }
         return switch (travelClass) {
             case "PREMIUM_ECONOMY" -> "30 kg checked + 7 kg cabin";
-            case "BUSINESS" -> "40 kg checked + 10 kg cabin";
-            case "FIRST" -> "50 kg checked + 10 kg cabin";
+            case "BUSINESS" -> "40 kg checked + 2 cabin pieces (7 kg each)";
+            case "FIRST" -> "50 kg checked + 2 cabin pieces (7 kg each)";
             default -> "25 kg checked + 7 kg cabin";
+        };
+    }
+
+    /**
+     * Booking class (RBD) by cabin + fare brand. A real system takes this
+     * from airline/GDS inventory; until SkyBook has a class feed, the letter
+     * at least stays inside the right cabin's range.
+     */
+    private static String rbd(String travelClass, String fareType) {
+        String cls = travelClass != null ? travelClass : "ECONOMY";
+        String fare = fareType != null ? fareType : "FLEXI";
+        return switch (cls) {
+            case "FIRST" -> "PREMIUM".equals(fare) ? "A" : "F";
+            case "BUSINESS" -> "PREMIUM".equals(fare) ? "C" : "J";
+            case "PREMIUM_ECONOMY" -> "PREMIUM".equals(fare) ? "E" : "W";
+            default -> switch (fare) {
+                case "SAVER" -> "S";
+                case "PREMIUM" -> "Y";
+                default -> "B";
+            };
         };
     }
 
@@ -108,10 +133,13 @@ public class TicketPdfTemplate {
 
         BookingEventPassenger first = allRows.isEmpty() ? null : allRows.get(0);
         String cabinLabel = first != null ? cabin(first.getTravelClass()) : "Economy";
+        // Booking class (RBD) follows the CABIN, qualified by fare brand -
+        // never the fare brand alone: "S" on a First itinerary was Economy
+        // Saver's letter leaking into a premium cabin.
+        String classCode = first != null ? rbd(first.getTravelClass(), first.getFareType()) : "";
         String fareBasis = first != null && first.getTravelClass() != null && first.getFareType() != null
-                ? (first.getTravelClass().charAt(0) + first.getFareType().substring(0, Math.min(3, first.getFareType().length())) + pnr).toUpperCase()
+                ? (classCode + first.getFareType().substring(0, Math.min(3, first.getFareType().length())) + pnr).toUpperCase()
                 : "";
-        String classCode = first != null && first.getFareType() != null ? first.getFareType().substring(0, 1) : "";
 
         // ---- header names / ticket numbers ------------------------------
         StringBuilder paxNames = new StringBuilder();
@@ -131,9 +159,20 @@ public class TicketPdfTemplate {
         // ---- itinerary rows ----------------------------------------------
         StringBuilder itinerary = new StringBuilder();
         int segIdx = 0;
+        int carriedBags = 0;
         for (BookingEventSegment segment : segments) {
+            // Purchased extra baggage rides the whole DIRECTION: rows carry
+            // it on the direction's first leg, and a chained connection
+            // inherits it (bags are checked through).
+            int ownBags = segment.getPassengers() == null ? 0
+                    : segment.getPassengers().stream()
+                            .map(p -> p.getExtraBags() != null ? p.getExtraBags() : 0)
+                            .reduce(0, Integer::sum);
+            boolean chained = segIdx > 0 && isChainedConnection(segments.get(segIdx - 1), segment);
+            int effectiveBags = ownBags > 0 ? ownBags : (chained ? carriedBags : 0);
+            carriedBags = effectiveBags;
             itinerary.append(segmentRows(segment, segIdx, multi, cabinLabel, classCode, fareBasis,
-                    segments.get(0).getOriginAirportCode()));
+                    segments.get(0).getOriginAirportCode(), effectiveBags));
             if (segIdx + 1 < segments.size()) {
                 itinerary.append(connectionRow(segment, segments.get(segIdx + 1)));
             }
@@ -157,19 +196,22 @@ public class TicketPdfTemplate {
                     : "-";
             passengerRows.append("""
                     <tr%s>
-                      <td style="padding:10px 10px;"><b>%s</b> <span style="color:#64748b;">(ADT)</span></td>
-                      <td style="padding:10px 10px;font-family:Courier,monospace;"><b>%s</b></td>
-                      <td style="padding:10px 10px;font-family:Courier,monospace;"><b>%s</b></td>
-                      <td style="padding:10px 10px;">%s &#183; <b>%s</b></td>
-                      <td style="padding:10px 10px;text-align:right;font-family:Courier,monospace;"><b>%s</b></td>
+                      <td style="padding:8px 10px;"><b>%s</b> <span style="color:#64748b;">(ADT)</span></td>
+                      <td style="padding:8px 10px;font-family:Courier,monospace;"><b>%s</b></td>
+                      <td style="padding:8px 10px;font-family:Courier,monospace;"><b>%s</b></td>
+                      <td style="padding:8px 10px;">%s &#183; <b>%s</b></td>
+                      <td style="padding:8px 10px;text-align:right;font-family:Courier,monospace;"><b>%s</b></td>
                     </tr>
                     """.formatted(
                     rowIdx % 2 == 1 ? " style=\"background-color:#f6f2f4;\"" : "",
                     escape(ledgerName(p)),
                     escape(ticket),
                     escape(seats),
-                    escape(p.getTravelClass() != null ? p.getTravelClass().substring(0, 1) : "-"),
-                    escape(nvl(p.getFareType(), "-")),
+                    // Carrier data: the cabin and its booking class. The
+                    // SkyBook package (FLEXI...) prints in the flight detail
+                    // box, labelled as SkyBook's - not as an airline fare.
+                    escape(p.getTravelClass() != null ? p.getTravelClass().replace('_', ' ') : "-"),
+                    escape(rbd(p.getTravelClass(), p.getFareType())),
                     money(symbol, farePaid)));
             rowIdx++;
         }
@@ -215,8 +257,17 @@ public class TicketPdfTemplate {
                 .reduce(0, Integer::sum);
         BigDecimal bagCharges = allRows.stream().map(p -> nz(p.getBaggageFee()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Weight-concept carriers (Emirates) sell extra baggage as KILOS, not
+        // pieces - each purchased unit is a 5 kg step. Piece-concept carriers
+        // keep the bag count.
+        boolean weightConcept = segments.get(0).getFlightNumber() != null
+                && segments.get(0).getFlightNumber().startsWith("EK");
         ledger.add(ledgerLine("BAGS",
-                bagCount > 0 ? bagCount + " EXTRA" + (multi ? " X " + segments.size() + " FLIGHTS" : "") : "NONE",
+                bagCount > 0
+                        ? (weightConcept
+                            ? "EXTRA BAGGAGE " + (bagCount * 5) + " KG"
+                            : bagCount + " EXTRA" + (multi ? " X " + segments.size() + " FLIGHTS" : ""))
+                        : "NONE",
                 money(symbol, bagCharges), false));
         // Government/airport taxes, itemised per code the way tickets price
         // them. Pre-taxation bookings (no breakdown) keep the legacy line.
@@ -243,7 +294,7 @@ public class TicketPdfTemplate {
                 <html xmlns="http://www.w3.org/1999/xhtml">
                 <head>
                 <style>
-                  @page { size: A4; margin: 56px 28px 16px; }
+                  @page { size: A4; margin: 46px 28px 14px; }
                   body { font-family: Helvetica, Arial, sans-serif; color: %s; font-size: 10.5px; margin: 0; }
                   table { border-collapse: collapse; }
                   .band { background-color: %s; color: #ffffff; font-weight: bold; font-size: 12.5px;
@@ -260,12 +311,12 @@ public class TicketPdfTemplate {
                   <!-- Maroon header band -->
                   <table width="100%%" style="background-color:%s;">
                     <tr>
-                      <td style="padding:14px 16px;color:#ffffff;font-style:italic;font-weight:bold;font-size:15px;">Going places together</td>
+                      <td style="padding:14px 16px;color:#ffffff;font-style:italic;font-weight:bold;font-size:15px;">Electronic Ticket &amp; Itinerary Receipt</td>
                       <td style="padding:10px 16px;text-align:right;color:#ffffff;">
                         <table style="border-collapse:collapse;margin-left:auto;"><tr>
                           <td style="vertical-align:middle;padding-right:12px;">
                             <table style="width:38px;height:38px;background-color:#7a3a58;border-radius:19px;border-collapse:collapse;"><tr>
-                              <td style="text-align:center;vertical-align:middle;font-size:7px;font-weight:bold;color:#ffffff;line-height:1.2;">SKY<br/>ALLIANCE</td>
+                              <td style="text-align:center;vertical-align:middle;font-size:6px;font-weight:bold;color:#ffffff;line-height:1.2;">PARTNER<br/>NETWORK</td>
                             </tr></table>
                           </td>
                           <td style="vertical-align:middle;font-size:22px;font-weight:bold;letter-spacing:1px;color:#ffffff;">SkyBook</td>
@@ -323,20 +374,23 @@ public class TicketPdfTemplate {
                       <th style="padding:5px 9px;border-bottom:2px solid %s;">NAME</th>
                       <th style="padding:5px 9px;border-bottom:2px solid %s;">E-TICKET</th>
                       <th style="padding:5px 9px;border-bottom:2px solid %s;">%s</th>
-                      <th style="padding:5px 9px;border-bottom:2px solid %s;">CABIN &#183; FARE</th>
-                      <th style="padding:5px 9px;border-bottom:2px solid %s;text-align:right;">FARE PAID</th>
+                      <th style="padding:5px 9px;border-bottom:2px solid %s;">CABIN &#183; CLASS</th>
+                      <th style="padding:5px 9px;border-bottom:2px solid %s;text-align:right;">FARE + ADD-ONS</th>
                     </tr>
                     %s
                   </table>
 
-                  <div class="band">FARE CALCULATION</div>
-                  <table width="100%%" style="margin-top:8px;background-color:#fbfaf7;border:1px solid #e7e2d8;border-radius:7px;">
+                  <div class="band" style="page-break-inside:avoid;">FARE CALCULATION</div>
+                  <!-- page-break-inside avoid: SB7CV4 once split this ledger
+                       after the BAGS line, stranding TAXES and TOTAL on a
+                       nearly-empty page 2. The ledger moves as one block. -->
+                  <table width="100%%" style="margin-top:8px;background-color:#fbfaf7;border:1px solid #e7e2d8;border-radius:7px;page-break-inside:avoid;">
                     <tr><td style="padding:12px 16px;">
-                      <div class="mono" style="font-size:10.5px;line-height:1.95;white-space:pre;">%s</div>
+                      <div class="mono" style="font-size:10.5px;line-height:1.75;white-space:pre;">%s</div>
                       <div class="mono" style="border-top:2px solid %s;margin-top:6px;padding-top:6px;font-size:10.5px;white-space:pre;color:%s;font-weight:bold;">%s</div>
                     </td></tr>
                   </table>
-                  <div style="font-size:9.5px;color:#555555;margin-top:8px;line-height:1.6;">
+                  <div style="font-size:9.5px;color:#555555;margin-top:5px;line-height:1.5;">
                     Total paid: <b>%s</b> &#160;&#183;&#160; Status: %s &#160;&#183;&#160;
                     <span style="color:#888888;">Notices, baggage and fare rules: see page 2 of this receipt.</span>
                   </div>
@@ -358,7 +412,9 @@ public class TicketPdfTemplate {
                         </div>
                         <div class="rule-h">CHECK-IN AND BOARDING</div>
                         <div class="rule-p">
-                          Online check-in opens 48 hours and closes 60 minutes before departure; your boarding pass is emailed and
+                          Online check-in opens 48 hours before departure and closes 60-90 minutes before
+                          departure depending on the operating carrier (Emirates: 90 minutes) - the exact cut-off
+                          is the Last check-in column on page 1. Your boarding pass is emailed and
                           available in Manage my trips. Airport counters close at the time shown in the Last check-in column.
                           The boarding gate closes 20 minutes before departure - passengers arriving after gate closure are
                           recorded as no-shows and the fare is not refundable. Carry the passport used at booking; it must be
@@ -366,8 +422,8 @@ public class TicketPdfTemplate {
                         </div>
                         <div class="rule-h">BAGGAGE</div>
                         <div class="rule-p">
-                          Your free allowance is printed against each flight on page 1. Extra checked bags purchased for this
-                          booking appear on the BAGS line of the fare calculation and apply to every flight in the same
+                          Your free allowance is printed against each flight on page 1. Extra checked baggage purchased for this
+                          booking appears on the BAGS line of the fare calculation and applies to every flight in the same
                           direction. On connecting flights issued on one ticket, bags are checked through to the final
                           destination - collect them only there. Dangerous goods (lithium batteries in checked bags, aerosols,
                           flammables, corrosives) must not be packed; full list at flyskybook.com/baggage.
@@ -393,8 +449,8 @@ public class TicketPdfTemplate {
                         </div>
                         <div class="rule-h">CONDITIONS OF CARRIAGE AND LIABILITY</div>
                         <div class="rule-p">
-                          Carriage is subject to the SkyBook Airways Conditions of Carriage, available at
-                          flyskybook.com/conditions. For international carriage, liability for death or bodily injury, baggage
+                          Carriage is subject to the OPERATING CARRIER'S Conditions of Carriage; SkyBook provides the
+                          booking service (terms at flyskybook.com/conditions). For international carriage, liability for death or bodily injury, baggage
                           destruction, loss or damage, and delay is governed by the Montreal Convention (1999). Baggage claims
                           must be filed in writing within 7 days of receipt of the bags (21 days for delay). This receipt is
                           your ticket record - keep it available throughout the journey; authorities may require proof of
@@ -408,10 +464,10 @@ public class TicketPdfTemplate {
                        phone number and invented address). -->
                   <table width="100%%" style="margin-top:14px;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;">
                     <tr><td style="padding:10px 14px;font-size:9px;color:#475569;line-height:1.9;">
-                      <b style="color:#1a1a1a;">SkyBook Airways &#183; Contact</b><br/>
+                      <b style="color:#1a1a1a;">SkyBook &#183; Contact</b><br/>
                       Reservations &amp; support (24/7): <b>+44 20 7946 0958</b> &#160;&#183;&#160;
                       <b>support@flyskybook.com</b><br/>
-                      Registered office: SkyBook Airways Ltd, One Skyway House, 100 Aviation Way, London EC2X 9SB, United Kingdom &#160;&#183;&#160; Company No. 01234567
+                      Registered office: SkyBook Ltd, One Skyway House, 100 Aviation Way, London EC2X 9SB, United Kingdom &#160;&#183;&#160; Company No. 03481976
                     </td></tr>
                   </table>
 
@@ -434,9 +490,19 @@ public class TicketPdfTemplate {
     // itinerary
     // ------------------------------------------------------------------
 
+    /** Online/desk check-in close, minutes before departure - Emirates uses 90. */
+    private static int checkinCloseMins(String flightNumber) {
+        return flightNumber != null && flightNumber.startsWith("EK") ? 90 : 60;
+    }
+
+    private static String firstFareType(BookingEventSegment s) {
+        return s.getPassengers() != null && !s.getPassengers().isEmpty()
+                ? s.getPassengers().get(0).getFareType() : null;
+    }
+
     private String segmentRows(BookingEventSegment s, int index, boolean multi,
                                String cabinLabel, String classCode, String fareBasis,
-                               String journeyOrigin) {
+                               String journeyOrigin, int purchasedBags) {
         String from = nvl(s.getOriginAirportCode(), "?");
         String to = nvl(s.getDestinationAirportCode(), "?");
         LocalDateTime dep = parseEventTime(s.getDepartureTime());
@@ -456,27 +522,28 @@ public class TicketPdfTemplate {
                         .reduce((a, b) -> a + ", " + b).orElse("-");
         sb.append("""
                 <tr>
-                  <td style="padding:8px 10px;vertical-align:top;line-height:1.6;"><b style="font-size:13px;">%s</b> - %s%s</td>
-                  <td style="padding:8px 10px;vertical-align:top;line-height:1.6;"><b style="font-size:13px;">%s</b> - %s%s</td>
-                  <td style="padding:8px 10px;vertical-align:top;line-height:1.6;"><b>%s</b><br/><span style="font-size:9px;color:#555555;">%s</span></td>
-                  <td style="padding:8px 10px;vertical-align:top;line-height:1.6;"><b>%s</b><br/><b>%s</b></td>
-                  <td style="padding:8px 10px;vertical-align:top;line-height:1.6;"><b>%s</b><br/><b>%s</b></td>
-                  <td style="padding:8px 10px;vertical-align:top;line-height:1.6;">%s</td>
+                  <td style="padding:7px 10px;vertical-align:top;line-height:1.5;"><b style="font-size:13px;">%s</b> - %s%s</td>
+                  <td style="padding:7px 10px;vertical-align:top;line-height:1.5;"><b style="font-size:13px;">%s</b> - %s%s</td>
+                  <td style="padding:7px 10px;vertical-align:top;line-height:1.5;"><b>%s</b><br/><span style="font-size:9px;color:#555555;">%s</span></td>
+                  <td style="padding:7px 10px;vertical-align:top;line-height:1.5;"><b>%s</b><br/><b>%s</b></td>
+                  <td style="padding:7px 10px;vertical-align:top;line-height:1.5;"><b>%s</b><br/><b>%s</b></td>
+                  <td style="padding:7px 10px;vertical-align:top;line-height:1.5;">%s</td>
                 </tr>
                 <tr style="background-color:#ececec;font-size:10px;color:#222222;">
-                  <td colspan="2" style="padding:8px 10px;vertical-align:top;line-height:1.7;">
+                  <td colspan="2" style="padding:6px 10px;vertical-align:top;line-height:1.48;">
                     <div>Class: <b>%s</b></div>
                     <div>Cabin: %s</div>
-                    <div>Max baggage (4): %s</div>
+                    <div>Included baggage (4): %s</div>%s
                     <div>Fare basis: %s</div>
+                    <div>SkyBook package: <b>%s</b></div>
                   </td>
-                  <td colspan="2" style="padding:8px 10px;vertical-align:top;line-height:1.7;">
+                  <td colspan="2" style="padding:6px 10px;vertical-align:top;line-height:1.48;">
                     <div>Operated by: <b>%s</b></div>
                     <div>Marketed by: <b>%s</b></div>
                     <div>Booking status (1): OK</div>
                     <div>Seats: <b>%s</b></div>
                   </td>
-                  <td colspan="2" style="padding:8px 10px;vertical-align:top;line-height:1.7;">
+                  <td colspan="2" style="padding:6px 10px;vertical-align:top;line-height:1.48;">
                     <div>NVB (2): <b>%s</b></div>
                     <div>NVA (3): <b>%s</b></div>
                     <div>Duration: <b>%s</b></div>
@@ -491,8 +558,12 @@ public class TicketPdfTemplate {
                 escape(airlineName(s.getFlightNumber())),
                 dep != null ? HHMM.format(dep) : "-", dep != null ? ddMon(dep) : "-",
                 arr != null ? HHMM.format(arr) : "-", arr != null ? ddMon(arr) : "-",
-                dep != null ? HHMM.format(dep.minusMinutes(60)) : "-",
-                escape(classCode), escape(cabinLabel), baggageFor(firstClass(s)), escape(fareBasis),
+                // Check-in close is carrier-dependent: Emirates 90 minutes.
+                dep != null ? HHMM.format(dep.minusMinutes(checkinCloseMins(s.getFlightNumber()))) : "-",
+                escape(classCode), escape(cabinLabel), baggageFor(firstClass(s)),
+                purchasedBaggageLine(s, purchasedBags),
+                escape(fareBasis),
+                escape(nvl(firstFareType(s), "-")),
                 escape(airlineName(s.getFlightNumber()).toUpperCase()),
                 escape(airlineName(s.getFlightNumber()).toUpperCase()),
                 escape(seats),
@@ -507,6 +578,44 @@ public class TicketPdfTemplate {
      * this one lands at, within 24 hours. Anything else (a return days later,
      * a broken chain) is not a connection and prints nothing.
      */
+    /**
+     * The purchased-extra line under "Included baggage" - only when extras
+     * were bought. Weight-concept carriers (Emirates) show kilos plus the
+     * new total checked allowance; piece carriers show the bag count. Kilos
+     * assume the included 50/40/30/25 kg base by cabin.
+     */
+    private String purchasedBaggageLine(BookingEventSegment s, int purchasedBags) {
+        if (purchasedBags <= 0) {
+            return "";
+        }
+        boolean weight = s.getFlightNumber() != null && s.getFlightNumber().startsWith("EK");
+        if (!weight) {
+            return "\n                    <div>Purchased extra bags: <b>" + purchasedBags + "</b></div>";
+        }
+        int extraKg = purchasedBags * 5;
+        String cls = firstClass(s);
+        int includedKg = cls == null ? 25 : switch (cls) {
+            case "FIRST" -> 50;
+            case "BUSINESS" -> 40;
+            case "PREMIUM_ECONOMY" -> 30;
+            default -> 25;
+        };
+        return "\n                    <div>Purchased extra baggage: <b>" + extraKg + " kg</b>"
+                + " &#183; total checked <b>" + (includedKg + extraKg) + " kg</b></div>";
+    }
+
+    /** Same-airport hand-off within 24h = one direction, bags checked through. */
+    private static boolean isChainedConnection(BookingEventSegment leg, BookingEventSegment next) {
+        if (leg.getDestinationAirportCode() == null
+                || !leg.getDestinationAirportCode().equalsIgnoreCase(next.getOriginAirportCode())) {
+            return false;
+        }
+        LocalDateTime arr = parseEventTime(leg.getArrivalTime());
+        LocalDateTime dep = parseEventTime(next.getDepartureTime());
+        return arr != null && dep != null && dep.isAfter(arr)
+                && Duration.between(arr, dep).toMinutes() <= 24 * 60;
+    }
+
     private String connectionRow(BookingEventSegment leg, BookingEventSegment next) {
         String at = leg.getDestinationAirportCode();
         if (at == null || !at.equalsIgnoreCase(next.getOriginAirportCode())) {

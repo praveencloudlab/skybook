@@ -93,6 +93,14 @@ public class Booking extends Auditable {
     @Column(name = "tax_breakdown", length = 255)
     private String taxBreakdown;
 
+    /**
+     * The airline whose "plate" the tickets are issued on - the first
+     * marketing carrier of the journey, captured at draft. Drives the IATA
+     * ticket-stock prefix (EK 176, BA 125). Null on pre-V17 bookings.
+     */
+    @Column(name = "validating_airline", length = 2)
+    private String validatingAirline;
+
     @Column(length = 500)
     private String remarks;
 

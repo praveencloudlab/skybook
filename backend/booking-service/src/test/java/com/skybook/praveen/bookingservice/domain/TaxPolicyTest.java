@@ -20,13 +20,29 @@ class TaxPolicyTest {
 
     @Test
     void lhrChargesApdByCabinPlusServiceCharge() {
-        List<TaxPolicy.TaxLine> economy = policy.linesFor("LHR", "ECONOMY");
+        // 2025/26 rates: any departure before 1 Apr 2026.
+        java.time.LocalDate fy2025 = java.time.LocalDate.of(2026, 3, 1);
+        List<TaxPolicy.TaxLine> economy = policy.linesFor("LHR", "ECONOMY", fy2025);
         assertThat(economy).extracting(TaxPolicy.TaxLine::code).containsExactly("GB", "UB");
         assertThat(economy.get(0).amount()).isEqualByComparingTo("90.00");
 
-        List<TaxPolicy.TaxLine> first = policy.linesFor("LHR", "FIRST");
+        List<TaxPolicy.TaxLine> first = policy.linesFor("LHR", "FIRST", fy2025);
         assertThat(first.get(0).amount()).isEqualByComparingTo("216.00");
         assertThat(first.get(1).amount()).isEqualByComparingTo("29.10");
+    }
+
+    @Test
+    void apdRatesFollowTheDepartureDateAcrossTheFiscalBoundary() {
+        // Band B rose on 1 Apr 2026: £90->£102 economy, £216->£244 premium.
+        java.time.LocalDate lastOldDay = java.time.LocalDate.of(2026, 3, 31);
+        java.time.LocalDate firstNewDay = java.time.LocalDate.of(2026, 4, 1);
+
+        assertThat(policy.linesFor("LHR", "FIRST", lastOldDay).get(0).amount()).isEqualByComparingTo("216.00");
+        assertThat(policy.linesFor("LHR", "FIRST", firstNewDay).get(0).amount()).isEqualByComparingTo("244.00");
+        assertThat(policy.linesFor("LHR", "ECONOMY", lastOldDay).get(0).amount()).isEqualByComparingTo("90.00");
+        assertThat(policy.linesFor("LHR", "ECONOMY", firstNewDay).get(0).amount()).isEqualByComparingTo("102.00");
+        // The service charge is not APD and does not move with it.
+        assertThat(policy.linesFor("LHR", "FIRST", firstNewDay).get(1).amount()).isEqualByComparingTo("29.10");
     }
 
     @Test
@@ -39,16 +55,18 @@ class TaxPolicyTest {
 
     @Test
     void aThroughTicketViaDubaiPaysBothDepartures() {
-        // LHR->DXB->HYD, FIRST, one passenger: GB 216 + UB 29.10 + AE 16.30.
+        // LHR->DXB->HYD, FIRST, Aug 2026 departure (2026/27 APD):
+        // GB 244 + UB 29.10 + AE 16.30.
+        java.time.LocalDate aug2026 = java.time.LocalDate.of(2026, 8, 22);
         List<TaxPolicy.TaxLine> lines = new ArrayList<>();
-        lines.addAll(policy.linesFor("LHR", "FIRST"));
-        lines.addAll(policy.linesFor("DXB", "FIRST"));
+        lines.addAll(policy.linesFor("LHR", "FIRST", aug2026));
+        lines.addAll(policy.linesFor("DXB", "FIRST", aug2026));
         Map<String, BigDecimal> merged = TaxPolicy.merge(lines);
 
         assertThat(merged.keySet()).containsExactly("GB", "UB", "AE");
         assertThat(merged.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add))
-                .isEqualByComparingTo("261.40");
-        assertThat(TaxPolicy.serialize(merged)).isEqualTo("GB:216.00;UB:29.10;AE:16.30");
+                .isEqualByComparingTo("289.40");
+        assertThat(TaxPolicy.serialize(merged)).isEqualTo("GB:244.00;UB:29.10;AE:16.30");
     }
 
     @Test

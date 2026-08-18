@@ -326,14 +326,27 @@ class BookingServiceImplTest {
 
             CreateBookingRequest request = createRequest(List.of(
                     passengerDetail("12A", TravelClass.ECONOMY, FareType.FLEXI),   // 100.00
-                    passengerDetail("12B", TravelClass.BUSINESS, FareType.SAVER)   // 350 * 0.85 = 297.50
+                    passengerDetail("12B", TravelClass.BUSINESS, FareType.FLEXI)   // 350.00
             ));
 
             BookingResponse response = bookingService.createDraftBooking(request, oneWay(NEUTRAL_DEPARTURE), "owner@test.com", null, null);
 
             assertThat(response.passengers()).hasSize(2);
-            assertThat(response.totalFare()).isEqualByComparingTo("397.50");
+            assertThat(response.totalFare()).isEqualByComparingTo("450.00");
             assertThat(response.payment()).isNull();
+        }
+
+        @Test
+        void premiumCabinsDoNotSellTheSaverFare() {
+            // No airline sells a "Saver" First or Business ticket - the combo
+            // once printed Economy Saver's booking class on a First itinerary.
+            CreateBookingRequest request = createRequest(List.of(
+                    passengerDetail("1A", TravelClass.FIRST, FareType.SAVER)));
+
+            assertThatThrownBy(() -> bookingService.createDraftBooking(
+                    request, oneWay(NEUTRAL_DEPARTURE), "owner@test.com", null, null))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("does not sell the SAVER fare");
         }
 
         @Test

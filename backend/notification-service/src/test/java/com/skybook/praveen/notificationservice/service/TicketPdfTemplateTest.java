@@ -82,7 +82,7 @@ class TicketPdfTemplateTest {
         void carriesEveryStyleCBand() {
             String xhtml = template.render(ticket().build(), null);
 
-            assertThat(xhtml).contains("Going places together");
+            assertThat(xhtml).contains("Electronic Ticket &amp; Itinerary Receipt");
             assertThat(xhtml).contains("ELECTRONIC TICKET RECEIPT");
             assertThat(xhtml).contains("PASSENGER(S)");
             assertThat(xhtml).contains("FARE CALCULATION");
@@ -93,10 +93,10 @@ class TicketPdfTemplateTest {
         void theCarrierContactBlockIsAlwaysPresent() {
             String xhtml = template.render(ticket().build(), null);
 
-            assertThat(xhtml).contains("SkyBook Airways &#183; Contact");
+            assertThat(xhtml).contains("SkyBook &#183; Contact");
             assertThat(xhtml).contains("+44 20 7946 0958");
             assertThat(xhtml).contains("support@flyskybook.com");
-            assertThat(xhtml).contains("Registered office: SkyBook Airways Ltd");
+            assertThat(xhtml).contains("Registered office: SkyBook Ltd");
         }
 
         @Test

@@ -124,7 +124,20 @@ public class BookingServiceImpl implements BookingService {
                 // Idempotency (§3.3): a unique key here is what a retry replays.
                 .idempotencyKey(idempotencyKey)
                 .idempotencyFingerprint(idempotencyFingerprint)
+                // Ticket stock follows the first marketing carrier (EK -> 176).
+                .validatingAirline(validatingAirlineOf(journey))
                 .build();
+
+        // A cabin only sells the fare brands it really has (FareCalculator):
+        // a "Saver First" combination is a data error, not a product.
+        for (var detail : request.passengers()) {
+            if (detail.travelClass() != null && detail.fareType() != null
+                    && !FareCalculator.offeredFareTypes(detail.travelClass()).contains(detail.fareType())) {
+                throw new IllegalArgumentException(
+                        detail.travelClass() + " does not sell the " + detail.fareType()
+                        + " fare - choose FLEXI or PREMIUM");
+            }
+        }
 
         // ONE Passenger identity per traveller, shared by their row on every
         // segment - the person flies both directions; only the per-leg
@@ -227,7 +240,8 @@ public class BookingServiceImpl implements BookingService {
         for (JourneyLeg leg : journey) {
             for (PassengerBookingDetail detail : request.passengers()) {
                 taxLines.addAll(taxPolicy.linesFor(leg.originAirportCode(),
-                        detail.travelClass() != null ? detail.travelClass().name() : null));
+                        detail.travelClass() != null ? detail.travelClass().name() : null,
+                        leg.departureTime() != null ? leg.departureTime().toLocalDate() : null));
             }
         }
         Map<String, BigDecimal> mergedTaxes = TaxPolicy.merge(taxLines);
@@ -925,6 +939,27 @@ public class BookingServiceImpl implements BookingService {
      * nothing; the DETERMINISTIC number (125 + booking id + traveller index)
      * would re-derive identically anyway.
      */
+    /**
+     * IATA ticket-stock accounting prefixes by validating carrier. Real
+     * plates for the carriers SkyBook sells; anything unknown (or a pre-V17
+     * booking) issues on the legacy SkyBook stock 125.
+     */
+    private static final Map<String, String> TICKET_STOCK = Map.of(
+            "EK", "176", "BA", "125", "AI", "098", "6E", "312", "SG", "775", "EI", "053");
+
+    private static String validatingAirlineOf(List<JourneyLeg> journey) {
+        if (journey == null || journey.isEmpty() || journey.get(0).flightNumber() == null) {
+            return null;
+        }
+        String code = journey.get(0).flightNumber().replaceAll("[^A-Z0-9].*$", "");
+        return code.length() >= 2 ? code.substring(0, 2) : null;
+    }
+
+    private String ticketStockPrefix(Booking booking) {
+        return TICKET_STOCK.getOrDefault(
+                booking.getValidatingAirline() != null ? booking.getValidatingAirline() : "", "125");
+    }
+
     private void issueTicketsIfAbsent(Booking booking) {
         if (!booking.getTickets().isEmpty()) {
             return;
@@ -939,7 +974,7 @@ public class BookingServiceImpl implements BookingService {
             Ticket ticket = Ticket.builder()
                     .booking(booking)
                     .passenger(rows.get(0).getPassenger())
-                    .ticketNumber(String.format("125%08d%02d", booking.getId(), travellerIndex))
+                    .ticketNumber(String.format("%s%08d%02d", ticketStockPrefix(booking), booking.getId(), travellerIndex))
                     .status(TicketStatus.ISSUED)
                     .issuedAt(LocalDateTime.now())
                     .build();

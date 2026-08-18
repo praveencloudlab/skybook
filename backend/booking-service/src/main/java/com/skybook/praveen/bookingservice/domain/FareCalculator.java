@@ -59,6 +59,19 @@ public class FareCalculator {
         this.clock = clock;
     }
 
+    /**
+     * The fare brands a cabin actually sells. Premium cabins carry flexible
+     * brands only - no airline sells a "Saver" First ticket, and quoting one
+     * put SAVER on an Emirates First itinerary. Economy and Premium Economy
+     * keep the full ladder.
+     */
+    public static java.util.List<FareType> offeredFareTypes(TravelClass travelClass) {
+        if (travelClass == TravelClass.FIRST || travelClass == TravelClass.BUSINESS) {
+            return java.util.List.of(FareType.FLEXI, FareType.PREMIUM);
+        }
+        return java.util.List.of(FareType.values());
+    }
+
     public BigDecimal calculateFare(TravelClass travelClass, FareType fareType, LocalDateTime departureTime) {
 
         BigDecimal baseFare = BASE_FARE_BY_CLASS.get(travelClass);

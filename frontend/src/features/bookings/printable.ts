@@ -5,6 +5,21 @@ import { TRAVEL_CLASS_LABELS, type TravelClass } from '../../api/quotes';
 import { dayMonthYear, money, time, timeShift } from '../../lib/format';
 import { TAX_LABELS } from '../../lib/taxes';
 import { qrSvg } from '../../lib/qr';
+import {
+  BRAND,
+  CARRIER_CONTACT,
+  BRAND_LINKS,
+  CANCELLATION_POLICY,
+  CHECKIN_POLICY,
+  TICKET_VALIDITY_DAYS,
+  BAGGAGE_ALLOWANCES,
+  DEFAULT_BAGGAGE_ALLOWANCE,
+  bookingClassFor,
+  checkinCloseMinutesFor,
+  usesWeightConceptBaggage,
+  TICKET_THEME,
+  BOARDING_PASS_THEME,
+} from '../../constants';
 
 /**
  * Client-side "download" for the boarding pass and e-ticket (FRONTEND_MODULE.md
@@ -109,8 +124,8 @@ function cityFor(code: string): string {
 }
 
 export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrivalTime?: string): void {
-  const RED = '#e11b22';
-  const BLUE = '#cfe0f5';
+  const RED = BOARDING_PASS_THEME.red;
+  const BLUE = BOARDING_PASS_THEME.stripBlue;
   const TBA = 'TBA';
   const DASH = '&mdash;';
 
@@ -131,13 +146,16 @@ export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrival
     serverBoard && record && serverBoard < departTime
       ? serverBoard
       : record
-        ? timeShift(record.departureTime, -40)
+        ? timeShift(record.departureTime, -CHECKIN_POLICY.boardingMinutesBeforeDeparture)
         : serverBoard ?? DASH;
   const gateBy =
     serverBoard && record && serverBoard < departTime
-      ? timeShift(pass.boardingTime as string, -30)
+      ? timeShift(pass.boardingTime as string, -CHECKIN_POLICY.gateAdvisoryMinutesBeforeBoarding)
       : record
-        ? timeShift(record.departureTime, -70)
+        ? timeShift(
+            record.departureTime,
+            -(CHECKIN_POLICY.boardingMinutesBeforeDeparture + CHECKIN_POLICY.gateAdvisoryMinutesBeforeBoarding),
+          )
         : DASH;
   const gate = pass.gate ?? TBA;
   const group = pass.boardingGroup ?? DASH;
@@ -288,12 +306,6 @@ function addDaysMon(iso: string, days: number): string {
   return ddMon(dt.toISOString());
 }
 /** Default max baggage allowance per cabin (checked + cabin), shown on the ticket. */
-const BAGGAGE: Record<string, string> = {
-  ECONOMY: '25 kg checked + 7 kg cabin',
-  PREMIUM_ECONOMY: '30 kg checked + 7 kg cabin',
-  BUSINESS: '40 kg checked + 10 kg cabin',
-  FIRST: '50 kg checked + 10 kg cabin',
-};
 
 /**
  * Electronic ticket receipt (FRONTEND_MODULE.md Modules 10) - laid out like a
@@ -306,7 +318,7 @@ export function printETicket(
   flightsById: Record<number, Flight>,
   _currency = 'GBP',
 ): void {
-  const MAROON = '#5a1836';
+  const MAROON = TICKET_THEME.maroon;
   const p0 = booking.passengers[0];
   const paxLines = booking.passengers
     // One line per TRAVELLER, not per per-segment row.
@@ -322,9 +334,11 @@ export function printETicket(
     : `157 ${2100000000 + booking.id}`;
 
   const cabin = p0 ? TRAVEL_CLASS_LABELS[p0.travelClass].toUpperCase() : 'ECONOMY';
-  const fareBasis = p0 ? `${p0.travelClass[0]}${p0.fareType.slice(0, 3)}${booking.bookingReference}`.toUpperCase() : '';
-  const classCode = p0 ? p0.fareType[0] : '';
-  const baggage = (p0 && BAGGAGE[p0.travelClass]) || '25 kg checked + 7 kg cabin';
+  // Booking class (RBD) follows the CABIN, qualified by fare brand - the
+  // fare brand's first letter put Economy Saver's "S" on First itineraries.
+  const classCode = p0 ? bookingClassFor(p0.travelClass, p0.fareType) : '';
+  const fareBasis = p0 ? `${classCode}${p0.fareType.slice(0, 3)}${booking.bookingReference}`.toUpperCase() : '';
+  const baggage = (p0 && BAGGAGE_ALLOWANCES[p0.travelClass]) || DEFAULT_BAGGAGE_ALLOWANCE;
 
   // Every leg of the journey - a round trip prints BOTH directions, each as
   // its own coupon rows. Legacy bookings without segments fall back to the
@@ -346,7 +360,22 @@ export function printETicket(
     }
     return 'CONNECTING FLIGHT';
   };
-  const segmentRows = (flight: Flight, index: number, cancelled: boolean) => `
+  // The purchased-extra line under "Included baggage" - only when extras
+  // were bought. Weight-concept carriers (Emirates) show kilos plus the new
+  // total checked allowance; piece carriers show the bag count.
+  const purchasedBaggageLine = (flight: Flight, purchasedBags: number): string => {
+    if (purchasedBags <= 0) return '';
+    if (!usesWeightConceptBaggage(flight.flightNumber)) {
+      return `<div>Purchased extra bags: <b>${purchasedBags}</b></div>`;
+    }
+    const extraKg = purchasedBags * 5;
+    const includedKg = p0?.travelClass === 'FIRST' ? 50
+      : p0?.travelClass === 'BUSINESS' ? 40
+      : p0?.travelClass === 'PREMIUM_ECONOMY' ? 30 : 25;
+    return `<div>Purchased extra baggage: <b>${extraKg} kg</b> &middot; total checked <b>${includedKg + extraKg} kg</b></div>`;
+  };
+
+  const segmentRows = (flight: Flight, index: number, cancelled: boolean, purchasedBags: number) => `
       ${multi ? `
       <tr>
         <td colspan="6" style="padding:11px 14px;background:#f3eef1;color:${MAROON};font-weight:800;font-size:12px;letter-spacing:1px;">
@@ -366,14 +395,15 @@ export function printETicket(
         <td style="padding:10px 12px;vertical-align:top;line-height:1.7;"><b>${flight.flightNumber}</b><br><span style="font-size:11px;color:#555;">${airlineNameFor(flight.airlineCode ?? flight.flightNumber)}</span></td>
         <td style="padding:10px 12px;vertical-align:top;line-height:1.7;"><b>${time(flight.departureTime)}</b><br>${ddMon(flight.departureTime)}</td>
         <td style="padding:10px 12px;vertical-align:top;line-height:1.7;"><b>${time(flight.arrivalTime)}</b><br>${ddMon(flight.arrivalTime)}</td>
-        <td style="padding:10px 12px;vertical-align:top;line-height:1.7;">${timeShift(flight.departureTime, -60)}</td>
+        <td style="padding:10px 12px;vertical-align:top;line-height:1.7;">${timeShift(flight.departureTime, -checkinCloseMinutesFor(flight.flightNumber))}</td>
       </tr>
       <tr style="background:#ececec;font-size:12px;color:#222;${cancelled ? 'opacity:.55;' : ''}">
         <td colspan="2" style="padding:10px 12px;vertical-align:top;line-height:1.7;">
           <div>Class: <b>${classCode}</b></div>
           <div>Cabin: ${cabin}</div>
-          <div>Max baggage (4): ${baggage}</div>
+          <div>Included baggage (4): ${baggage}</div>${purchasedBaggageLine(flight, purchasedBags)}
           <div>Fare basis: ${fareBasis}</div>
+          <div>SkyBook package: <b>${p0?.fareType ?? '—'}</b></div>
         </td>
         <td colspan="2" style="padding:10px 12px;vertical-align:top;line-height:1.7;">
           <div>Operated by: <b>${airlineNameFor(flight.airlineCode ?? flight.flightNumber).toUpperCase()}</b></div>
@@ -387,7 +417,7 @@ export function printETicket(
         </td>
         <td colspan="2" style="padding:10px 12px;vertical-align:top;line-height:1.7;">
           <div>NVB (2): ${ddMon(flight.departureTime)}</div>
-          <div>NVA (3): ${addDaysMon(flight.departureTime, 120)}</div>
+          <div>NVA (3): ${addDaysMon(flight.departureTime, TICKET_VALIDITY_DAYS)}</div>
           <div>Duration: ${durationHM(flight.departureTime, flight.arrivalTime)}</div>
         </td>
       </tr>`;
@@ -408,13 +438,24 @@ export function printETicket(
       </tr>`;
   };
 
+  // Purchased extras ride the whole direction: rows carry them on the
+  // direction's first leg, and a chained connection inherits (bags are
+  // checked through) - mirrors the emailed PDF.
+  let carriedBags = 0;
   const segment = segs
     .map((seg, i) => {
       const flight = flightsById[seg.flightId];
       if (!flight) return '';
+      const prev = i > 0 ? flightsById[segs[i - 1].flightId] : undefined;
+      const ownBags = booking.passengers
+        .filter((p) => (p.segmentIndex ?? 0) === seg.segmentIndex)
+        .reduce((sum, p) => sum + (p.extraBags ?? 0), 0);
+      const chained = prev !== undefined && connectionRow(prev, flight) !== '';
+      const effectiveBags = ownBags > 0 ? ownBags : chained ? carriedBags : 0;
+      carriedBags = effectiveBags;
       const next = i + 1 < segs.length ? flightsById[segs[i + 1].flightId] : undefined;
       return (
-        segmentRows(flight, seg.segmentIndex, seg.status === 'CANCELLED') +
+        segmentRows(flight, seg.segmentIndex, seg.status === 'CANCELLED', effectiveBags) +
         (next ? connectionRow(flight, next) : '')
       );
     })
@@ -457,7 +498,7 @@ export function printETicket(
           <td style="padding:8px 11px;"><b>${t.lastName.toUpperCase()}/${t.firstName.toUpperCase()} ${titleOf(t)}</b> <span style="color:#64748b;">(${typeCode(t.passengerType)})</span></td>
           <td style="padding:8px 11px;font-family:'Courier New',monospace;"><b>${ticketText}</b></td>
           <td style="padding:8px 11px;font-family:'Courier New',monospace;"><b>${seatText}</b></td>
-          <td style="padding:8px 11px;">${t.travelClass[0]} &middot; <b>${t.fareType}</b>${active.length === 0 ? ' &middot; <b style="color:#b42318;">CANCELLED</b>' : ''}</td>
+          <td style="padding:8px 11px;">${t.travelClass.replace('_', ' ')} &middot; <b>${bookingClassFor(t.travelClass, t.fareType)}</b>${active.length === 0 ? ' &middot; <b style="color:#b42318;">CANCELLED</b>' : ''}</td>
           <td style="padding:8px 11px;text-align:right;font-family:'Courier New',monospace;"><b>${usd(farePaid)}</b></td>
         </tr>`;
     })
@@ -470,8 +511,8 @@ export function printETicket(
           <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;">NAME</th>
           <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;">E-TICKET</th>
           <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;">${multi ? 'SEATS OUT / RET' : 'SEAT'}</th>
-          <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;">CABIN &middot; FARE</th>
-          <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;text-align:right;">FARE PAID</th>
+          <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;">CABIN &middot; CLASS</th>
+          <th style="padding:6px 11px;border-bottom:2px solid ${MAROON};font-weight:800;text-align:right;">FARE + ADD-ONS</th>
         </tr>
         ${passengerRows}
       </table>`;
@@ -519,7 +560,11 @@ export function printETicket(
         <div style="font-family:'Courier New',monospace;font-size:13px;line-height:2.0;white-space:pre;overflow-x:auto;color:#1f2328;">${[
           fareLines,
           ledgerLine('SEATS', `${seatList}${seatsWaived ? ' (WAIVED)' : ''}`, usd(seatCharges)),
-          ledgerLine('BAGS', bagCount > 0 ? `${bagCount} EXTRA${multi ? ' X 2 FLIGHTS' : ''}` : 'NONE', usd(bagCharges)),
+          ledgerLine('BAGS', bagCount > 0
+            ? (usesWeightConceptBaggage(flightsById[segs[0].flightId]?.flightNumber)
+                ? `EXTRA BAGGAGE ${bagCount * 5} KG`
+                : `${bagCount} EXTRA${multi ? ' X 2 FLIGHTS' : ''}`)
+            : 'NONE', usd(bagCharges)),
           ...(booking.taxBreakdown
             ? booking.taxBreakdown.split(';').map((part, i) => {
                 const [code, amount] = part.split(':');
@@ -548,10 +593,10 @@ export function printETicket(
           <path d="M0,58 C230,86 470,20 900,52 L900,96 L0,96 Z" fill="#ffffff" opacity="0.10"/>
           <path d="M0,70 C260,40 540,92 900,44 L900,96 L0,96 Z" fill="#ffffff" opacity="0.07"/>
         </svg>
-        <div style="position:absolute;left:22px;top:26px;color:#fff;font-style:italic;font-weight:700;font-size:19px;">Going places together</div>
+        <div style="position:absolute;left:22px;top:26px;color:#fff;font-style:italic;font-weight:700;font-size:19px;">${BRAND.tagline}</div>
         <div style="position:absolute;right:22px;top:22px;display:flex;align-items:center;gap:12px;color:#fff;">
-          <span style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.15);font-size:9px;font-weight:700;line-height:1.1;text-align:center;">SKY<br>ALLIANCE</span>
-          <span style="font-size:26px;font-weight:800;letter-spacing:1px;">SkyBook &#9992;</span>
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.15);font-size:9px;font-weight:700;line-height:1.1;text-align:center;">${BRAND.alliance.replace(' ', '<br>')}</span>
+          <span style="font-size:26px;font-weight:800;letter-spacing:1px;">${BRAND.name} &#9992;</span>
         </div>
       </div>
 
@@ -572,7 +617,7 @@ export function printETicket(
             </div>
             <div style="margin-top:8px;font-size:12px;color:#475569;line-height:1.6;">
               <div><b style="color:#1a1a1a;">Itinerary Printing Office</b></div>
-              <div>SKYBOOK DIGITAL, DIGITAL OFFICE</div>
+              <div>${BRAND.printingOffice}</div>
               <div><b style="color:#1a1a1a;">Date of issue:</b> ${ddMon(booking.bookingDate)}</div>
             </div>
           </td>
@@ -620,33 +665,36 @@ export function printETicket(
               ${ruleSection('TICKET KEY', `<b>(1)</b> OK = Confirmed &nbsp; <b>(2)</b> NVB = Not valid before &nbsp;
                 <b>(3)</b> NVA = Not valid after &nbsp; <b>(4)</b> Each passenger can check in a specific amount of
                 baggage at no extra cost as indicated in the column baggage. For more information on baggage rules
-                and restrictions, please visit flyskybook.com/baggage.`, true)}
-              ${ruleSection('CHECK-IN AND BOARDING', `Online check-in opens 48 hours and closes 60 minutes before
-                departure; your boarding pass is emailed and available in Manage my trips. Airport counters close at
-                the time shown in the Last check-in column. The boarding gate closes 20 minutes before departure -
+                and restrictions, please visit ${BRAND_LINKS.baggage}.`, true)}
+              ${ruleSection('CHECK-IN AND BOARDING', `Online check-in opens ${CHECKIN_POLICY.opensHoursBeforeDeparture} hours
+                before departure and closes ${CHECKIN_POLICY.closesMinutesBeforeDeparture}-90 minutes before
+                departure depending on the operating carrier (Emirates: 90 minutes) - the exact cut-off is the
+                Last check-in column on page 1. Your boarding pass is emailed and available in Manage my trips. Airport counters close at
+                the time shown in the Last check-in column. The boarding gate closes ${CHECKIN_POLICY.gateClosesMinutesBeforeDeparture} minutes before departure -
                 passengers arriving after gate closure are recorded as no-shows and the fare is not refundable.
                 Carry the passport used at booking; it must be valid for the whole journey and match the name on
                 this ticket exactly.`)}
               ${ruleSection('BAGGAGE', `Your free allowance is printed against each flight on page 1. Extra checked
-                bags purchased for this booking appear on the BAGS line of the fare calculation and apply to every
+                baggage purchased for this booking appears on the BAGS line of the fare calculation and applies to every
                 flight in the same direction. On connecting flights issued on one ticket, bags are checked through
                 to the final destination - collect them only there. Dangerous goods (lithium batteries in checked
-                bags, aerosols, flammables, corrosives) must not be packed; full list at flyskybook.com/baggage.`)}
+                bags, aerosols, flammables, corrosives) must not be packed; full list at ${BRAND_LINKS.baggage}.`)}
             </td>
             <td style="width:50%;vertical-align:top;padding-left:14px;border-left:1px solid #e2e8f0;">
               ${ruleSection('FARES, CHANGES AND CANCELLATION', `Cancellation refunds follow the time of cancellation:
-                more than 72 hours before departure 100% of the time-tier value, 24-72 hours 50%, under 24 hours no
-                refund; online cancellation closes 2 hours before departure. Fare rules then apply per passenger:
-                SAVER fares carry a 30% cancellation fee, FLEXI fares are fully refundable, and PREMIUM fares include
-                free date changes plus refunds up to 6 hours before departure. Taxes are refunded in full whenever no
+                more than ${CANCELLATION_POLICY.fullRefundHours} hours before departure 100% of the time-tier value,
+                ${CANCELLATION_POLICY.halfRefundHours}-${CANCELLATION_POLICY.fullRefundHours} hours 50%, under ${CANCELLATION_POLICY.halfRefundHours} hours no
+                refund; online cancellation closes ${CANCELLATION_POLICY.onlineCloseHours} hours before departure. Fare rules then apply per passenger:
+                SAVER fares carry a ${CANCELLATION_POLICY.saverFeePercent}% cancellation fee, FLEXI fares are fully refundable, and PREMIUM fares include
+                free date changes plus refunds up to ${CANCELLATION_POLICY.premiumRefundHours} hours before departure. Taxes are refunded in full whenever no
                 flight has been flown. Name changes are not permitted - contact reservations to rebook.`, true)}
               ${ruleSection('TAXES, FEES AND CHARGES', `Taxes itemised on page 1 are levied per departure airport and
                 remitted to the relevant authority: UK Air Passenger Duty and Passenger Service Charge (London
                 departures), UAE Passenger Facility Charge (Dubai), India User Development Fee and K3 (Indian
                 airports), and an international service charge elsewhere. Government-imposed amounts may change
                 between booking and travel; any difference is collected or refunded before departure.`)}
-              ${ruleSection('CONDITIONS OF CARRIAGE AND LIABILITY', `Carriage is subject to the SkyBook Airways
-                Conditions of Carriage, available at flyskybook.com/conditions. For international carriage, liability
+              ${ruleSection('CONDITIONS OF CARRIAGE AND LIABILITY', `Carriage is subject to the OPERATING CARRIER'S
+                Conditions of Carriage; ${BRAND.displayName} provides the booking service (terms at ${BRAND_LINKS.conditions}. For international carriage, liability
                 for death or bodily injury, baggage destruction, loss or damage, and delay is governed by the
                 Montreal Convention (1999). Baggage claims must be filed in writing within 7 days of receipt of the
                 bags (21 days for delay). This receipt is your ticket record - keep it available throughout the
@@ -658,10 +706,10 @@ export function printETicket(
         <!-- Carrier contact block (fictional airline - drama-range phone
              number and invented address). -->
         <div style="margin-top:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;font-size:11px;color:#475569;line-height:1.9;">
-          <b style="color:#1a1a1a;">SkyBook Airways · Contact</b><br>
-          Reservations &amp; support (24/7): <b>+44 20 7946 0958</b> &nbsp;·&nbsp;
-          <b>support@flyskybook.com</b><br>
-          Registered office: SkyBook Airways Ltd, One Skyway House, 100 Aviation Way, London EC2X 9SB, United Kingdom &nbsp;·&nbsp; Company No. 01234567
+          <b style="color:#1a1a1a;">${BRAND.displayName} · Contact</b><br>
+          Reservations &amp; support (24/7): <b>${CARRIER_CONTACT.phone}</b> &nbsp;·&nbsp;
+          <b>${CARRIER_CONTACT.email}</b><br>
+          Registered office: ${CARRIER_CONTACT.registeredOffice} &nbsp;·&nbsp; Company No. ${CARRIER_CONTACT.companyNumber}
         </div>
       </div>
     </div>`;

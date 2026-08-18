@@ -164,12 +164,14 @@ public class BookingFacade {
         for (int i = 0; i < outboundLegs.size(); i++) {
             journey.add(new BookingService.JourneyLeg(
                     outboundLegs.get(i).id(), outboundLegs.get(i).originAirportCode(),
-                    outboundLegs.get(i).departureTime(), 0, i == 0));
+                    outboundLegs.get(i).departureTime(), 0, i == 0,
+                    outboundLegs.get(i).flightNumber()));
         }
         if (returnFlight != null) {
             journey.add(new BookingService.JourneyLeg(
                     returnFlight.id(), returnFlight.originAirportCode(),
-                    returnFlight.departureTime(), 1, true));
+                    returnFlight.departureTime(), 1, true,
+                    returnFlight.flightNumber()));
         }
 
         BookingResponse draft;
@@ -757,8 +759,10 @@ public class BookingFacade {
      * Fare options for a flight (§11): the ONLY place inventory's cabin
      * availability and FareCalculator's base fares are combined - neither
      * service ever computes the other's numbers. Cabins the aircraft doesn't
-     * have simply aren't quoted (§7); a flight without any seat inventory
-     * quotes every cabin with unknown (null) availability.
+     * have simply aren't quoted (§7). A flight without any seat inventory
+     * quotes ECONOMY alone with unknown (null) availability: every aircraft
+     * sells Economy, and quoting premium cabins for an unknown hull sold
+     * Business on regional turboprops that have no such seat.
      */
     public QuoteResponse quoteFares(Long flightId) {
 
@@ -772,9 +776,7 @@ public class BookingFacade {
                 .map(available -> available.stream()
                         .map(cabin -> cabinQuote(cabin.travelClass(), cabin.availableSeats(), flight.departureTime()))
                         .toList())
-                .orElseGet(() -> Arrays.stream(TravelClass.values())
-                        .map(travelClass -> cabinQuote(travelClass, null, flight.departureTime()))
-                        .toList());
+                .orElseGet(() -> List.of(cabinQuote(TravelClass.ECONOMY, null, flight.departureTime())));
 
         return new QuoteResponse(flightId, QUOTE_CURRENCY, cabins);
     }
@@ -782,7 +784,9 @@ public class BookingFacade {
     private QuoteResponse.CabinQuote cabinQuote(TravelClass travelClass, Integer availableSeats,
                                                 java.time.LocalDateTime departureTime) {
         Map<FareType, BigDecimal> baseFares = new EnumMap<>(FareType.class);
-        for (FareType fareType : FareType.values()) {
+        // Premium cabins sell flexible brands only (FareCalculator) - the
+        // fare grid shows a dash where a brand genuinely isn't sold.
+        for (FareType fareType : FareCalculator.offeredFareTypes(travelClass)) {
             baseFares.put(fareType, fareCalculator.calculateFare(travelClass, fareType, departureTime));
         }
         BigDecimal fromFare = baseFares.values().stream().min(BigDecimal::compareTo).orElseThrow();
