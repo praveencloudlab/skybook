@@ -9,8 +9,10 @@ import { Button } from '../../components/Button';
 import { price } from '../../lib/format';
 import type { PassengerDraft } from './PassengerForm';
 
-/** Flat price per extra checked bag - mirrors booking-service's EXTRA_BAG_FEE. */
-export const EXTRA_BAG_FEE = 40;
+import { EXTRA_BAG_FEE } from '../../constants';
+
+/** Re-exported so existing imports keep working; the value lives in constants/pricing. */
+export { EXTRA_BAG_FEE };
 
 /** Included allowance by cabin - the same table the e-ticket prints. */
 const INCLUDED_BAGGAGE: Record<TravelClass, { checked: string; cabin: string }> = {

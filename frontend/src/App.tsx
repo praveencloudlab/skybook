@@ -551,8 +551,23 @@ function BookingJourney() {
   // One-time hydration from a persisted draft (see JourneyDraft above) - but
   // an explicit deep-linked search (?from&to: landing hero, popular
   // destination cards) is a NEW search intent and beats any saved draft.
+  // UNLESS the deep link describes the draft's own journey: coming back from
+  // sign-in/registration (or browser history) can carry the original search
+  // URL, and treating that as a fresh search silently threw away the chosen
+  // flight and fare mid-booking.
   const [draft] = useState(() => {
-    if (searchParams.get('from') && searchParams.get('to')) {
+    const from = searchParams.get('from');
+    const to = searchParams.get('to');
+    if (from && to) {
+      const saved = loadJourneyDraft();
+      const date = searchParams.get('date');
+      const sameJourney = saved
+        && saved.flight.originAirportCode === from
+        && saved.flight.destinationAirportCode === to
+        && (!date || (saved.flight.departureTime ?? '').startsWith(date));
+      if (sameJourney) {
+        return saved;
+      }
       sessionStorage.removeItem(JOURNEY_KEY);
       return null;
     }
@@ -710,9 +725,9 @@ function BookingJourney() {
     flight && choice
       ? computeTaxes(
           [
-            flight.originAirportCode,
-            ...connection.map((leg) => leg.originAirportCode),
-            ...(returnFlight ? [returnFlight.originAirportCode] : []),
+            { airport: flight.originAirportCode, date: flight.departureTime },
+            ...connection.map((leg) => ({ airport: leg.originAirportCode, date: leg.departureTime })),
+            ...(returnFlight ? [{ airport: returnFlight.originAirportCode, date: returnFlight.departureTime }] : []),
           ],
           choice.cabin,
           paxCount,

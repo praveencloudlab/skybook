@@ -17,6 +17,7 @@ import { dayAndMonth, durationFromMinutes, money, time } from '../../lib/format'
 import { BoardingPassCard } from './BoardingPassCard';
 import { StatusBadge } from './StatusBadge';
 import { printETicket } from './printable';
+import { CANCELLATION_POLICY } from '../../constants';
 import { ModifyBookingDialog } from './ModifyBookingDialog';
 
 // Seeded fares are USD; the booking doesn't carry a currency of its own.
@@ -699,10 +700,10 @@ export function BookingDetailPage({
         <div className="mt-3 rounded-xl bg-slate-50 p-4 text-sm">
           <p className="font-medium text-slate-700">Cancellation &amp; refund rules</p>
           <ul className="mt-2 space-y-1 text-slate-600">
-            <li>• <span className="font-medium">More than 72h before departure</span> — full refund per your fare rules (Saver keeps its 30% fee; Flexi and Premium refund in full).</li>
-            <li>• <span className="font-medium">72h – 24h before departure</span> — 50% of the fare-rule refund.</li>
-            <li>• <span className="font-medium">Under 24h (same day)</span> — cancellation still frees your seat, but the fare is not refunded.</li>
-            <li>• <span className="font-medium">Last 2 hours before departure</span> — online cancellation is closed; the airport desk can still help.</li>
+            <li>• <span className="font-medium">More than {CANCELLATION_POLICY.fullRefundHours}h before departure</span> — full refund per your fare rules (Saver keeps its {CANCELLATION_POLICY.saverFeePercent}% fee; Flexi and Premium refund in full).</li>
+            <li>• <span className="font-medium">{CANCELLATION_POLICY.fullRefundHours}h – {CANCELLATION_POLICY.halfRefundHours}h before departure</span> — 50% of the fare-rule refund.</li>
+            <li>• <span className="font-medium">Under {CANCELLATION_POLICY.halfRefundHours}h (same day)</span> — cancellation still frees your seat, but the fare is not refunded.</li>
+            <li>• <span className="font-medium">Last {CANCELLATION_POLICY.onlineCloseHours} hours before departure</span> — online cancellation is closed; the airport desk can still help.</li>
             <li>• <span className="font-medium">Already checked in?</span> — you can still cancel the whole booking; issued boarding passes are voided and the seats released.</li>
             <li>• A refund due is returned automatically to the original payment method; check-in closes for every passenger.</li>
           </ul>

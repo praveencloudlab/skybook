@@ -20,11 +20,16 @@ export const TAX_LABELS: Record<string, string> = {
   XT: 'Intl airport charges',
 };
 
-function linesFor(airport: string, cabin: string): TaxLine[] {
+/** UK APD Band B rose with the 2026/27 fiscal year - selected by DEPARTURE date. */
+const APD_2026_27 = '2026-04-01';
+
+function linesFor(airport: string, cabin: string, departureDate?: string): TaxLine[] {
   const premiumCabin = cabin !== 'ECONOMY';
   if (airport === 'LHR') {
+    const when = departureDate ?? new Date().toISOString().slice(0, 10);
+    const newRate = when >= APD_2026_27;
     return [
-      { code: 'GB', label: TAX_LABELS.GB, amount: premiumCabin ? 216 : 90 },
+      { code: 'GB', label: TAX_LABELS.GB, amount: premiumCabin ? (newRate ? 244 : 216) : (newRate ? 102 : 90) },
       { code: 'UB', label: TAX_LABELS.UB, amount: 29.1 },
     ];
   }
@@ -37,11 +42,20 @@ function linesFor(airport: string, cabin: string): TaxLine[] {
   return [{ code: 'XT', label: TAX_LABELS.XT, amount: 11.2 }];
 }
 
+/** One departure of the journey: where it leaves from, and when (rate selection). */
+export interface Departure {
+  airport: string;
+  /** ISO date (yyyy-mm-dd) or full ISO timestamp; undefined = today's rates. */
+  date?: string;
+}
+
 /** Merged tax lines for a journey: every departure x every passenger. */
-export function computeTaxes(departureAirports: string[], cabin: string, paxCount: number): TaxLine[] {
+export function computeTaxes(departures: Array<string | Departure>, cabin: string, paxCount: number): TaxLine[] {
   const merged = new Map<string, TaxLine>();
-  for (const airport of departureAirports) {
-    for (const line of linesFor(airport.toUpperCase(), cabin)) {
+  for (const dep of departures) {
+    const airport = (typeof dep === 'string' ? dep : dep.airport).toUpperCase();
+    const date = typeof dep === 'string' ? undefined : dep.date?.slice(0, 10);
+    for (const line of linesFor(airport, cabin, date)) {
       const existing = merged.get(line.code);
       const amount = line.amount * paxCount;
       if (existing) {
