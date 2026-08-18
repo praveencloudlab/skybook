@@ -112,7 +112,7 @@ export function FareCalendar({
           </svg>
         </span>
         <span className="min-w-0">
-          <span className="block text-xs font-semibold text-slate-500">{label}</span>
+          <span className="block truncate text-xs font-semibold text-slate-500">{label}</span>
           <span className="tabular block truncate text-[15px] font-bold text-slate-900">
             {displayDate(value)}
           </span>

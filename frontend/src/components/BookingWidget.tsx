@@ -171,10 +171,14 @@ export function BookingWidget({
             // the flow (below), so a row gap would just reopen the hole it
             // used to sit in - the fields want to touch, the way they do in
             // every airline app.
+            // minmax(0,1fr), not bare 1fr: a grid item's implicit min-width
+            // is its content, so long labels ("Travelling when?", a spelled
+            // -out airport) made sibling tiles different widths. Zeroing the
+            // minimum makes every field column genuinely equal.
             'grid items-center gap-y-2 lg:gap-2 ' +
             (tripType === 'round'
-              ? 'lg:grid-cols-[1fr_auto_1fr_1fr_1fr_1fr_auto]'
-              : 'lg:grid-cols-[1fr_auto_1fr_1fr_1fr_auto]')
+              ? 'lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]'
+              : 'lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]')
           }
         >
           {/* From and To are one visual pair on a phone; the swap control
@@ -212,6 +216,10 @@ export function BookingWidget({
           />
 
           <FareCalendar
+            // Paired with Return, the long "Travelling when?" wrapped to two
+            // lines and gave the two date tiles different shapes - round
+            // trips label the pair the way airlines do: Depart / Return.
+            label={tripType === 'round' ? t('widget.depart') : undefined}
             origin={origin}
             destination={destination}
             cabin={cabin}
@@ -269,18 +277,20 @@ export function BookingWidget({
                     }
                     exclude={from}
                   />
-                  <label className="flex h-[52px] items-center gap-2 rounded-xl border border-slate-200 px-3">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Date</span>
-                    <input
-                      type="date"
-                      value={leg.date}
-                      min={minDate}
-                      onChange={(e) =>
-                        setExtraLegs((prev) => prev.map((l, j) => (j === i ? { ...l, date: e.target.value } : l)))
-                      }
-                      className="tabular w-full text-sm font-semibold text-slate-900 outline-none"
-                    />
-                  </label>
+                  {/* The same fare-calendar tile as the main row - a bare
+                      native date input here looked like a different product.
+                      Leg ordering is still enforced by multiValid; a date
+                      before the previous leg just keeps Search disabled. */}
+                  <FareCalendar
+                    label="Date"
+                    origin={from}
+                    destination={leg.destination}
+                    cabin={cabin}
+                    value={leg.date || minDate}
+                    onChange={(d) =>
+                      setExtraLegs((prev) => prev.map((l, j) => (j === i ? { ...l, date: d } : l)))
+                    }
+                  />
                   <button
                     type="button"
                     aria-label={`Remove leg ${i + 2}`}

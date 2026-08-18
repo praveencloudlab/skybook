@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authApi, PASSWORD_RULES, passwordPolicyMet } from '../../api/auth';
+import { session } from '../../lib/session';
 import { Button } from '../../components/Button';
 import { ErrorAlert } from '../../components/Alert';
 import { Field } from '../../components/Field';
@@ -45,7 +46,12 @@ export function RegisterPage() {
       // Straight in - making someone type the same credentials again
       // immediately after creating them is friction for no benefit.
       await authApi.login({ email, password });
-      navigate('/', { replace: true });
+      // Honour the same contract as SignInPage: someone sent here mid-booking
+      // (the auth gate's returnTo) resumes their journey - the persisted
+      // draft is still waiting at /search, and landing them on '/' instead
+      // invited a fresh search that wiped it.
+      const returnTo = session.takeReturnTo();
+      navigate(returnTo ?? '/', { replace: true });
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : null);
     } finally {

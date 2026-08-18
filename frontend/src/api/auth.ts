@@ -63,7 +63,12 @@ export const authApi = {
     // writes a persistent cookie (survives a browser restart, within the token's
     // own lifetime); when false, a session cookie the browser drops on close.
     const query = remember ? '?remember=true' : '';
-    await api.post<string>(`/api/auth/login${query}`, request);
+    // silent401: a 401 HERE means "wrong email or password", not "session
+    // expired". Without it the global handler yanked the visitor to /sign-in
+    // and overwrote the booking gate's returnTo with the full search URL -
+    // which reads as a new search and wiped the saved journey (the bug where
+    // registering mid-booking lost the chosen flight).
+    await api.post<string>(`/api/auth/login${query}`, request, { silent401: true });
     return authApi.me();
   },
 
