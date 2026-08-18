@@ -1,0 +1,331 @@
+[
+  {
+    "code": "LHR",
+    "city": "London Heathrow",
+    "name": "London Heathrow",
+    "lat": 51.47,
+    "lon": -0.454
+  },
+  {
+    "code": "LGW",
+    "city": "London Gatwick",
+    "name": "London Gatwick",
+    "lat": 51.148,
+    "lon": -0.19
+  },
+  {
+    "code": "STN",
+    "city": "London Stansted",
+    "name": "London Stansted",
+    "lat": 51.885,
+    "lon": 0.235
+  },
+  {
+    "code": "LTN",
+    "city": "London Luton",
+    "name": "London Luton",
+    "lat": 51.874,
+    "lon": -0.368
+  },
+  {
+    "code": "LCY",
+    "city": "London City",
+    "name": "London City",
+    "lat": 51.505,
+    "lon": 0.055
+  },
+  {
+    "code": "SEN",
+    "city": "London Southend",
+    "name": "London Southend",
+    "lat": 51.571,
+    "lon": 0.696
+  },
+  {
+    "code": "MAN",
+    "city": "Manchester",
+    "name": "Manchester",
+    "lat": 53.354,
+    "lon": -2.275
+  },
+  {
+    "code": "LPL",
+    "city": "Liverpool",
+    "name": "Liverpool John Lennon",
+    "lat": 53.334,
+    "lon": -2.85
+  },
+  {
+    "code": "BHX",
+    "city": "Birmingham",
+    "name": "Birmingham",
+    "lat": 52.454,
+    "lon": -1.748
+  },
+  {
+    "code": "EMA",
+    "city": "East Midlands",
+    "name": "East Midlands",
+    "lat": 52.831,
+    "lon": -1.328
+  },
+  {
+    "code": "NWI",
+    "city": "Norwich",
+    "name": "Norwich",
+    "lat": 52.676,
+    "lon": 1.283
+  },
+  {
+    "code": "LBA",
+    "city": "Leeds Bradford",
+    "name": "Leeds Bradford",
+    "lat": 53.866,
+    "lon": -1.661
+  },
+  {
+    "code": "NCL",
+    "city": "Newcastle",
+    "name": "Newcastle Intl",
+    "lat": 55.038,
+    "lon": -1.692
+  },
+  {
+    "code": "MME",
+    "city": "Teesside",
+    "name": "Teesside Intl",
+    "lat": 54.509,
+    "lon": -1.429
+  },
+  {
+    "code": "BOH",
+    "city": "Bournemouth",
+    "name": "Bournemouth",
+    "lat": 50.78,
+    "lon": -1.843
+  },
+  {
+    "code": "SOU",
+    "city": "Southampton",
+    "name": "Southampton",
+    "lat": 50.95,
+    "lon": -1.357
+  },
+  {
+    "code": "EXT",
+    "city": "Exeter",
+    "name": "Exeter",
+    "lat": 50.734,
+    "lon": -3.414
+  },
+  {
+    "code": "BRS",
+    "city": "Bristol",
+    "name": "Bristol",
+    "lat": 51.383,
+    "lon": -2.719
+  },
+  {
+    "code": "CWL",
+    "city": "Cardiff",
+    "name": "Cardiff",
+    "lat": 51.397,
+    "lon": -3.343
+  },
+  {
+    "code": "NQY",
+    "city": "Newquay",
+    "name": "Cornwall Airport Newquay",
+    "lat": 50.441,
+    "lon": -5.006
+  },
+  {
+    "code": "LEQ",
+    "city": "Land's End",
+    "name": "Land's End",
+    "lat": 50.103,
+    "lon": -5.67
+  },
+  {
+    "code": "ISC",
+    "city": "Isles of Scilly",
+    "name": "St Mary's",
+    "lat": 49.913,
+    "lon": -6.292
+  },
+  {
+    "code": "EDI",
+    "city": "Edinburgh",
+    "name": "Edinburgh",
+    "lat": 55.95,
+    "lon": -3.373
+  },
+  {
+    "code": "GLA",
+    "city": "Glasgow",
+    "name": "Glasgow",
+    "lat": 55.87,
+    "lon": -4.433
+  },
+  {
+    "code": "ABZ",
+    "city": "Aberdeen",
+    "name": "Aberdeen Intl",
+    "lat": 57.202,
+    "lon": -2.198
+  },
+  {
+    "code": "INV",
+    "city": "Inverness",
+    "name": "Inverness",
+    "lat": 57.543,
+    "lon": -4.048
+  },
+  {
+    "code": "DND",
+    "city": "Dundee",
+    "name": "Dundee",
+    "lat": 56.453,
+    "lon": -3.026
+  },
+  {
+    "code": "KOI",
+    "city": "Kirkwall",
+    "name": "Kirkwall",
+    "lat": 58.958,
+    "lon": -2.905
+  },
+  {
+    "code": "LSI",
+    "city": "Shetland",
+    "name": "Sumburgh",
+    "lat": 59.879,
+    "lon": -1.296
+  },
+  {
+    "code": "SYY",
+    "city": "Stornoway",
+    "name": "Stornoway",
+    "lat": 58.216,
+    "lon": -6.331
+  },
+  {
+    "code": "BEB",
+    "city": "Benbecula",
+    "name": "Benbecula",
+    "lat": 57.481,
+    "lon": -7.363
+  },
+  {
+    "code": "BRR",
+    "city": "Barra",
+    "name": "Barra",
+    "lat": 57.023,
+    "lon": -7.443
+  },
+  {
+    "code": "TRE",
+    "city": "Tiree",
+    "name": "Tiree",
+    "lat": 56.499,
+    "lon": -6.869
+  },
+  {
+    "code": "ILY",
+    "city": "Islay",
+    "name": "Islay",
+    "lat": 55.682,
+    "lon": -6.257
+  },
+  {
+    "code": "CAL",
+    "city": "Campbeltown",
+    "name": "Campbeltown",
+    "lat": 55.437,
+    "lon": -5.687
+  },
+  {
+    "code": "PPW",
+    "city": "Papa Westray",
+    "name": "Papa Westray",
+    "lat": 59.352,
+    "lon": -2.9
+  },
+  {
+    "code": "NRL",
+    "city": "North Ronaldsay",
+    "name": "North Ronaldsay",
+    "lat": 59.368,
+    "lon": -2.434
+  },
+  {
+    "code": "NDY",
+    "city": "Sanday",
+    "name": "Sanday",
+    "lat": 59.25,
+    "lon": -2.577
+  },
+  {
+    "code": "WRY",
+    "city": "Westray",
+    "name": "Westray",
+    "lat": 59.35,
+    "lon": -2.95
+  },
+  {
+    "code": "SOY",
+    "city": "Stronsay",
+    "name": "Stronsay",
+    "lat": 59.155,
+    "lon": -2.641
+  },
+  {
+    "code": "BFS",
+    "city": "Belfast Intl",
+    "name": "Belfast Intl",
+    "lat": 54.658,
+    "lon": -6.216
+  },
+  {
+    "code": "BHD",
+    "city": "Belfast City",
+    "name": "George Best Belfast City",
+    "lat": 54.618,
+    "lon": -5.872
+  },
+  {
+    "code": "LDY",
+    "city": "Derry",
+    "name": "City of Derry",
+    "lat": 55.043,
+    "lon": -7.161
+  },
+  {
+    "code": "JER",
+    "city": "Jersey",
+    "name": "Jersey",
+    "lat": 49.208,
+    "lon": -2.195
+  },
+  {
+    "code": "GCI",
+    "city": "Guernsey",
+    "name": "Guernsey",
+    "lat": 49.435,
+    "lon": -2.602
+  },
+  {
+    "code": "ACI",
+    "city": "Alderney",
+    "name": "Alderney",
+    "lat": 49.706,
+    "lon": -2.215
+  },
+  {
+    "code": "IOM",
+    "city": "Isle of Man",
+    "name": "Isle of Man (Ronaldsway)",
+    "lat": 54.083,
+    "lon": -4.624
+  }
+]

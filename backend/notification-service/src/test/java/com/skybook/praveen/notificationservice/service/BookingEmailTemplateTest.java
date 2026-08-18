@@ -246,9 +246,11 @@ class BookingEmailTemplateTest {
 
         @Test
         void anAirportOutsideTheLookupRendersWithoutACityLine() {
-            // EDI has no entry in AirportCityLookup - the line collapses to
-            // empty rather than printing "null".
-            String html = template.render(shortHaul().build());
+            // ZZZ has no entry in AirportCityLookup - the line collapses to
+            // empty rather than printing "null". (EDI used to be the unknown
+            // code here until the UK network gave every served airport a
+            // city entry - the fixture now needs a genuinely unassigned one.)
+            String html = template.render(shortHaul().destinationAirportCode("ZZZ").build());
 
             assertThat(html).contains("<div style=\"color:#57606a;font-size:12px;\"></div>");
             assertThat(html).doesNotContain("null");

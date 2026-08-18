@@ -1,0 +1,570 @@
+[
+  {
+    "code": "DEL",
+    "city": "Delhi",
+    "name": "Indira Gandhi Intl",
+    "lat": 28.556,
+    "lon": 77.1,
+    "tier": "M"
+  },
+  {
+    "code": "BOM",
+    "city": "Mumbai",
+    "name": "Chhatrapati Shivaji Maharaj Intl",
+    "lat": 19.089,
+    "lon": 72.868,
+    "tier": "M"
+  },
+  {
+    "code": "BLR",
+    "city": "Bengaluru",
+    "name": "Kempegowda Intl",
+    "lat": 13.199,
+    "lon": 77.706,
+    "tier": "M"
+  },
+  {
+    "code": "HYD",
+    "city": "Hyderabad",
+    "name": "Rajiv Gandhi Intl",
+    "lat": 17.24,
+    "lon": 78.429,
+    "tier": "M"
+  },
+  {
+    "code": "MAA",
+    "city": "Chennai",
+    "name": "Chennai Intl",
+    "lat": 12.99,
+    "lon": 80.169,
+    "tier": "M"
+  },
+  {
+    "code": "CCU",
+    "city": "Kolkata",
+    "name": "Netaji Subhas Chandra Bose Intl",
+    "lat": 22.655,
+    "lon": 88.447,
+    "tier": "M"
+  },
+  {
+    "code": "AMD",
+    "city": "Ahmedabad",
+    "name": "Sardar Vallabhbhai Patel Intl",
+    "lat": 23.077,
+    "lon": 72.635,
+    "tier": "J"
+  },
+  {
+    "code": "PNQ",
+    "city": "Pune",
+    "name": "Pune Airport",
+    "lat": 18.582,
+    "lon": 73.92,
+    "tier": "J"
+  },
+  {
+    "code": "GOI",
+    "city": "Goa Dabolim",
+    "name": "Dabolim Airport",
+    "lat": 15.381,
+    "lon": 73.831,
+    "tier": "J"
+  },
+  {
+    "code": "GOX",
+    "city": "Goa Mopa",
+    "name": "Manohar Intl",
+    "lat": 15.744,
+    "lon": 73.861,
+    "tier": "J"
+  },
+  {
+    "code": "COK",
+    "city": "Kochi",
+    "name": "Cochin Intl",
+    "lat": 10.152,
+    "lon": 76.393,
+    "tier": "J"
+  },
+  {
+    "code": "TRV",
+    "city": "Thiruvananthapuram",
+    "name": "Trivandrum Intl",
+    "lat": 8.482,
+    "lon": 76.92,
+    "tier": "J"
+  },
+  {
+    "code": "NAG",
+    "city": "Nagpur",
+    "name": "Dr. Babasaheb Ambedkar Intl",
+    "lat": 21.092,
+    "lon": 79.047,
+    "tier": "J"
+  },
+  {
+    "code": "JAI",
+    "city": "Jaipur",
+    "name": "Jaipur Intl",
+    "lat": 26.824,
+    "lon": 75.812,
+    "tier": "J"
+  },
+  {
+    "code": "LKO",
+    "city": "Lucknow",
+    "name": "Chaudhary Charan Singh Intl",
+    "lat": 26.761,
+    "lon": 80.889,
+    "tier": "J"
+  },
+  {
+    "code": "IXC",
+    "city": "Chandigarh",
+    "name": "Shaheed Bhagat Singh Intl",
+    "lat": 30.673,
+    "lon": 76.788,
+    "tier": "J"
+  },
+  {
+    "code": "ATQ",
+    "city": "Amritsar",
+    "name": "Sri Guru Ram Dass Jee Intl",
+    "lat": 31.71,
+    "lon": 74.797,
+    "tier": "J"
+  },
+  {
+    "code": "GAU",
+    "city": "Guwahati",
+    "name": "Lokpriya Gopinath Bordoloi Intl",
+    "lat": 26.106,
+    "lon": 91.586,
+    "tier": "J"
+  },
+  {
+    "code": "BBI",
+    "city": "Bhubaneswar",
+    "name": "Biju Patnaik Intl",
+    "lat": 20.244,
+    "lon": 85.818,
+    "tier": "J"
+  },
+  {
+    "code": "PAT",
+    "city": "Patna",
+    "name": "Jay Prakash Narayan Intl",
+    "lat": 25.591,
+    "lon": 85.088,
+    "tier": "J"
+  },
+  {
+    "code": "IDR",
+    "city": "Indore",
+    "name": "Devi Ahilya Bai Holkar",
+    "lat": 22.722,
+    "lon": 75.801,
+    "tier": "J"
+  },
+  {
+    "code": "BHO",
+    "city": "Bhopal",
+    "name": "Raja Bhoj",
+    "lat": 23.287,
+    "lon": 77.337,
+    "tier": "J"
+  },
+  {
+    "code": "RPR",
+    "city": "Raipur",
+    "name": "Swami Vivekananda",
+    "lat": 21.18,
+    "lon": 81.739,
+    "tier": "J"
+  },
+  {
+    "code": "VNS",
+    "city": "Varanasi",
+    "name": "Lal Bahadur Shastri Intl",
+    "lat": 25.452,
+    "lon": 82.859,
+    "tier": "J"
+  },
+  {
+    "code": "SXR",
+    "city": "Srinagar",
+    "name": "Sheikh ul-Alam Intl",
+    "lat": 33.987,
+    "lon": 74.774,
+    "tier": "J"
+  },
+  {
+    "code": "IXB",
+    "city": "Siliguri",
+    "name": "Bagdogra Airport",
+    "lat": 26.681,
+    "lon": 88.329,
+    "tier": "J"
+  },
+  {
+    "code": "CJB",
+    "city": "Coimbatore",
+    "name": "Coimbatore Intl",
+    "lat": 11.03,
+    "lon": 77.043,
+    "tier": "J"
+  },
+  {
+    "code": "CCJ",
+    "city": "Kozhikode",
+    "name": "Calicut Intl",
+    "lat": 11.137,
+    "lon": 75.955,
+    "tier": "J"
+  },
+  {
+    "code": "IXE",
+    "city": "Mangaluru",
+    "name": "Mangaluru Intl",
+    "lat": 13.171,
+    "lon": 74.89,
+    "tier": "J"
+  },
+  {
+    "code": "VTZ",
+    "city": "Visakhapatnam",
+    "name": "Alluri Sitarama Raju Intl (Bhogapuram)",
+    "lat": 18.033,
+    "lon": 83.489,
+    "tier": "J"
+  },
+  {
+    "code": "IXZ",
+    "city": "Port Blair",
+    "name": "Veer Savarkar Intl",
+    "lat": 11.641,
+    "lon": 92.73,
+    "tier": "J"
+  },
+  {
+    "code": "IXR",
+    "city": "Ranchi",
+    "name": "Birsa Munda",
+    "lat": 23.314,
+    "lon": 85.322,
+    "tier": "J"
+  },
+  {
+    "code": "DED",
+    "city": "Dehradun",
+    "name": "Jolly Grant",
+    "lat": 30.19,
+    "lon": 78.18,
+    "tier": "J"
+  },
+  {
+    "code": "UDR",
+    "city": "Udaipur",
+    "name": "Maharana Pratap",
+    "lat": 24.618,
+    "lon": 73.896,
+    "tier": "J"
+  },
+  {
+    "code": "JDH",
+    "city": "Jodhpur",
+    "name": "Jodhpur Airport",
+    "lat": 26.251,
+    "lon": 73.049,
+    "tier": "J"
+  },
+  {
+    "code": "STV",
+    "city": "Surat",
+    "name": "Surat Intl",
+    "lat": 21.114,
+    "lon": 72.742,
+    "tier": "J"
+  },
+  {
+    "code": "CNN",
+    "city": "Kannur",
+    "name": "Kannur Intl",
+    "lat": 11.918,
+    "lon": 75.547,
+    "tier": "R"
+  },
+  {
+    "code": "IXM",
+    "city": "Madurai",
+    "name": "Madurai Airport",
+    "lat": 9.834,
+    "lon": 78.093,
+    "tier": "R"
+  },
+  {
+    "code": "TRZ",
+    "city": "Tiruchirappalli",
+    "name": "Tiruchirappalli Intl",
+    "lat": 10.765,
+    "lon": 78.71,
+    "tier": "R"
+  },
+  {
+    "code": "TIR",
+    "city": "Tirupati",
+    "name": "Tirupati Airport",
+    "lat": 13.632,
+    "lon": 79.543,
+    "tier": "R"
+  },
+  {
+    "code": "VGA",
+    "city": "Vijayawada",
+    "name": "Vijayawada Intl",
+    "lat": 16.53,
+    "lon": 80.797,
+    "tier": "R"
+  },
+  {
+    "code": "RJA",
+    "city": "Rajahmundry",
+    "name": "Rajahmundry Airport",
+    "lat": 17.11,
+    "lon": 81.818,
+    "tier": "R"
+  },
+  {
+    "code": "IXU",
+    "city": "Aurangabad",
+    "name": "Aurangabad Airport",
+    "lat": 19.863,
+    "lon": 75.398,
+    "tier": "R"
+  },
+  {
+    "code": "JLR",
+    "city": "Jabalpur",
+    "name": "Jabalpur Airport",
+    "lat": 23.178,
+    "lon": 80.052,
+    "tier": "R"
+  },
+  {
+    "code": "JRG",
+    "city": "Jharsuguda",
+    "name": "Veer Surendra Sai",
+    "lat": 21.913,
+    "lon": 84.05,
+    "tier": "R"
+  },
+  {
+    "code": "GAY",
+    "city": "Gaya",
+    "name": "Gaya Intl",
+    "lat": 24.744,
+    "lon": 84.951,
+    "tier": "R"
+  },
+  {
+    "code": "IXD",
+    "city": "Prayagraj",
+    "name": "Prayagraj Airport",
+    "lat": 25.44,
+    "lon": 81.734,
+    "tier": "R"
+  },
+  {
+    "code": "GWL",
+    "city": "Gwalior",
+    "name": "Rajmata Vijaya Raje Scindia",
+    "lat": 26.293,
+    "lon": 78.228,
+    "tier": "R"
+  },
+  {
+    "code": "JGA",
+    "city": "Jamnagar",
+    "name": "Jamnagar Airport",
+    "lat": 22.465,
+    "lon": 70.011,
+    "tier": "R"
+  },
+  {
+    "code": "HSR",
+    "city": "Rajkot",
+    "name": "Rajkot Intl (Hirasar)",
+    "lat": 22.719,
+    "lon": 70.953,
+    "tier": "R"
+  },
+  {
+    "code": "BHJ",
+    "city": "Bhuj",
+    "name": "Bhuj Airport",
+    "lat": 23.288,
+    "lon": 69.67,
+    "tier": "R"
+  },
+  {
+    "code": "BDQ",
+    "city": "Vadodara",
+    "name": "Vadodara Airport",
+    "lat": 22.336,
+    "lon": 73.226,
+    "tier": "R"
+  },
+  {
+    "code": "KNU",
+    "city": "Kanpur",
+    "name": "Kanpur Airport",
+    "lat": 26.404,
+    "lon": 80.41,
+    "tier": "R"
+  },
+  {
+    "code": "GOP",
+    "city": "Gorakhpur",
+    "name": "Gorakhpur Airport",
+    "lat": 26.74,
+    "lon": 83.45,
+    "tier": "R"
+  },
+  {
+    "code": "DBR",
+    "city": "Darbhanga",
+    "name": "Darbhanga Airport",
+    "lat": 26.193,
+    "lon": 85.917,
+    "tier": "R"
+  },
+  {
+    "code": "IXJ",
+    "city": "Jammu",
+    "name": "Jammu Airport",
+    "lat": 32.689,
+    "lon": 74.838,
+    "tier": "R"
+  },
+  {
+    "code": "IXL",
+    "city": "Leh",
+    "name": "Kushok Bakula Rimpochee",
+    "lat": 34.136,
+    "lon": 77.546,
+    "tier": "R"
+  },
+  {
+    "code": "DHM",
+    "city": "Dharamshala",
+    "name": "Kangra Airport",
+    "lat": 32.165,
+    "lon": 76.263,
+    "tier": "R"
+  },
+  {
+    "code": "KUU",
+    "city": "Kullu",
+    "name": "Bhuntar Airport",
+    "lat": 31.877,
+    "lon": 77.154,
+    "tier": "R"
+  },
+  {
+    "code": "IMF",
+    "city": "Imphal",
+    "name": "Bir Tikendrajit Intl",
+    "lat": 24.76,
+    "lon": 93.897,
+    "tier": "R"
+  },
+  {
+    "code": "DIB",
+    "city": "Dibrugarh",
+    "name": "Dibrugarh Airport",
+    "lat": 27.484,
+    "lon": 95.017,
+    "tier": "R"
+  },
+  {
+    "code": "JRH",
+    "city": "Jorhat",
+    "name": "Jorhat Airport",
+    "lat": 26.732,
+    "lon": 94.176,
+    "tier": "R"
+  },
+  {
+    "code": "SHL",
+    "city": "Shillong",
+    "name": "Shillong Airport",
+    "lat": 25.703,
+    "lon": 91.979,
+    "tier": "R"
+  },
+  {
+    "code": "AJL",
+    "city": "Aizawl",
+    "name": "Lengpui Airport",
+    "lat": 23.84,
+    "lon": 92.62,
+    "tier": "R"
+  },
+  {
+    "code": "DMU",
+    "city": "Dimapur",
+    "name": "Dimapur Airport",
+    "lat": 25.884,
+    "lon": 93.771,
+    "tier": "R"
+  },
+  {
+    "code": "IXA",
+    "city": "Agartala",
+    "name": "Maharaja Bir Bikram",
+    "lat": 23.887,
+    "lon": 91.24,
+    "tier": "R"
+  },
+  {
+    "code": "IXS",
+    "city": "Silchar",
+    "name": "Silchar Airport",
+    "lat": 24.913,
+    "lon": 92.979,
+    "tier": "R"
+  },
+  {
+    "code": "HBX",
+    "city": "Hubballi",
+    "name": "Hubballi Airport",
+    "lat": 15.362,
+    "lon": 75.085,
+    "tier": "R"
+  },
+  {
+    "code": "MYQ",
+    "city": "Mysuru",
+    "name": "Mysuru Airport",
+    "lat": 12.23,
+    "lon": 76.656,
+    "tier": "R"
+  },
+  {
+    "code": "PGH",
+    "city": "Pantnagar",
+    "name": "Pantnagar Airport",
+    "lat": 29.033,
+    "lon": 79.474,
+    "tier": "R"
+  },
+  {
+    "code": "TEZ",
+    "city": "Tezpur",
+    "name": "Tezpur Airport",
+    "lat": 26.709,
+    "lon": 92.785,
+    "tier": "R"
+  }
+]

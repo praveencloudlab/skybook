@@ -50,6 +50,12 @@ echo "modern fleet + re-fleet (10_modern_fleet.sql, refleet.sh)"
 docker exec -i "$C" psql -U postgres -d skybook_inventory -v ON_ERROR_STOP=1 < "$DIR/10_modern_fleet.sql"
 bash "$DIR/refleet.sh" "$C"
 
+echo "india domestic network (seed_india.sh)"
+bash "$DIR/seed_india.sh" "$C"
+
+echo "uk domestic + crown dependency network (seed_uk.sh)"
+bash "$DIR/seed_uk.sh" "$C"
+
 # Arrival times: every seed script now AUTHORS arrivals destination-local
 # (the platform contract), so no correction pass is chained here any more.
 # The old chain (clear the flight_data_fixes marker, re-run

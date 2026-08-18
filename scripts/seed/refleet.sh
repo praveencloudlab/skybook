@@ -12,8 +12,13 @@ export MSYS_NO_PATHCONV=1
 echo "1/2  stage flight routes into skybook_inventory"
 docker exec "$C" psql -U postgres -d skybook_inventory -c \
   "DROP TABLE IF EXISTS tmp_refleet; CREATE TABLE tmp_refleet(flight_id bigint, origin varchar(3), dest varchar(3));"
+# India- and UK-network flights keep their own metal (honest cabins per
+# hull, seed_india.sh / seed_uk.sh) - re-fleeting a regional spoke onto a
+# wide-body would resell cabins those networks deliberately don't have.
 docker exec "$C" psql -U postgres -d skybook_flight -c \
-  "COPY (SELECT id, origin_airport_code, destination_airport_code FROM flights WHERE status = 'SCHEDULED') TO STDOUT" \
+  "COPY (SELECT id, origin_airport_code, destination_airport_code FROM flights
+         WHERE status = 'SCHEDULED'
+           AND (created_by IS NULL OR created_by NOT IN ('data-seed-india', 'data-seed-uk'))) TO STDOUT" \
 | docker exec -i "$C" psql -U postgres -d skybook_inventory -c "COPY tmp_refleet FROM STDIN"
 
 echo "2/2  re-fleet untouched inventories (09_refleet.sql)"

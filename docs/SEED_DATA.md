@@ -120,6 +120,55 @@ about 11k flights and 11k inventory rows in a couple of seconds.
 
 ---
 
+### India domestic network (seed_india.sh)
+
+Every Indian city with scheduled commercial service — 71 airports, 540 daily
+departures, a year from today (~198k flights). Generated from ONE table in
+`scripts/seed/gen_india_network.mjs` (edit that, re-run it, never the SQL):
+
+```bash
+node scripts/seed/gen_india_network.mjs   # regenerate 12/13/14_*.sql
+bash scripts/seed/seed_india.sh           # additive + idempotent
+```
+
+Carriers are 6E/AI/IX/QP/SG with realistic flight numbers, hub-and-spoke
+(metro trunks 3x daily, every other city to its nearest metros). Cabins are
+HONEST per hull: ATR 72s and every LCC narrow-body are all-economy; the only
+domestic Business is Air India's two-cabin A320neo on metro trunks — so a
+regional hop can never sell a cabin the aircraft doesn't have. The same
+airports table patches `AirportTimeZones`, notification's `AirportCityLookup`
+and the frontend `AIRPORTS` directory (all Asia/Kolkata — the UTC-fallback
+duration gotcha). `refleet.sh` deliberately skips `data-seed-india` flights so
+re-fleeting never puts a wide-body back on a spoke. `seed.sh` runs it last.
+
+---
+
+### UK domestic + Crown Dependency network (seed_uk.sh)
+
+Built from the CAA June 2026 Table 12.2 route observations (real demand
+weights) and a verified carrier/cabin reference — 47 airports, 128 routes,
+612 daily departures with frequencies DERIVED from monthly passenger
+volumes. Generated from one route table in `scripts/seed/gen_uk_network.mjs`:
+
+```bash
+node scripts/seed/gen_uk_network.mjs   # regenerate 15/16/17_*.sql
+bash scripts/seed/seed_uk.sh           # additive + idempotent
+```
+
+Cabin truth: BA's two-class A320 (Club Europe 12J+150Y) and CityFlyer E190
+(12J+88Y) are the ONLY UK domestic Business; easyJet/Loganair/Emerald/
+Ryanair UK/Aurigny/Skybus are all-economy, down to the 8-seat Islander on
+the Orkney inter-island PSO hops and the Twin Otters for Barra and Scilly.
+Verified corrections baked in: Gatwick–Glasgow is BA-coded but flown by an
+Emerald ATR 72 (NO Club Europe); Eastern Airways (ceased 27 Oct 2025) is
+absent. Route effective windows are honoured: Loganair Heathrow–Dundee ends
+23 Oct 2026 (Dundee base closure), Skybus Newquay–Scilly resumes 1 Sep 2026.
+Crown Dependency airports (Jersey/Guernsey/Alderney/IoM) are seeded as
+airports; they are not UK territory. `refleet.sh` skips `data-seed-uk`
+flights. `seed.sh` runs it after the India network.
+
+---
+
 ### How this data got here (context)
 
 The original flights were created earlier against a **native Windows Postgres**
