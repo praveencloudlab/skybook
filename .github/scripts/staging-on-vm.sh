@@ -55,6 +55,11 @@ export IMAGE_TAG="$TAG"
 # the rehearsal must not be one regression away from passing vacuously.
 bash .github/scripts/wait-healthy.sh skybook-staging 420 < /dev/null
 bash scripts/seed/seed.sh skybook-staging-postgres-1 < /dev/null
+# MAILPIT: the rehearsal's sink is remapped to 8125 (docker-compose.staging.yml)
+# because prod's mailpit owns 8025 on this host. The smoke's OTP redemption
+# must read the REHEARSAL's inbox - polling prod's found nothing, and the
+# first staging walk after the OTP feature failed exactly there.
+MAILPIT="http://127.0.0.1:8125" \
 bash .github/scripts/smoke.sh "http://127.0.0.1:${STAGING_GATEWAY_PORT:-8180}" \
                               "http://127.0.0.1:${STAGING_FRONTEND_PORT:-3900}"
 echo "staging: rehearsal PASSED on the production host"
