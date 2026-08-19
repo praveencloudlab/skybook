@@ -4,6 +4,7 @@ import { type Flight, type FlightStatus } from '../../api/flights';
 import type { Booking, BookingStatus } from '../../api/bookings';
 import { ErrorAlert } from '../../components/Alert';
 import { AirportField } from '../../components/AirportField';
+import { DateField } from '../../components/DateField';
 import { StatusBadge } from '../bookings/StatusBadge';
 import { ApiError } from '../../lib/errors';
 import { addDaysIso, dayAndMonth, money, time, todayIso } from '../../lib/format';
@@ -239,25 +240,21 @@ function Flights() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <form onSubmit={run} className="card grid flex-1 items-end gap-3 p-4 md:grid-cols-[1fr_1fr_auto_auto]">
-          <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
-          <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} />
-          <label className="text-sm">
-            <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Date</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-              className="tabular w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15" />
-          </label>
-          <button type="submit" disabled={busy || origin === destination}
-            className="h-[42px] rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white disabled:bg-slate-300">
-            {busy ? 'Searching…' : 'Find flights'}
-          </button>
-        </form>
+      {/* One card, one grid: the date is the same tile as From/To, and
+          + New flight lives in the row so nothing floats misaligned. */}
+      <form onSubmit={run} className="card grid items-center gap-3 p-4 md:grid-cols-[1fr_1fr_14rem_auto_auto]">
+        <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
+        <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} />
+        <DateField value={date} onChange={setDate} />
+        <button type="submit" disabled={busy || origin === destination}
+          className="h-[52px] rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white disabled:bg-slate-300">
+          {busy ? 'Searching…' : 'Find flights'}
+        </button>
         <button type="button" onClick={() => setCreating((v) => !v)}
-          className="h-[42px] rounded-xl border border-accent-500 px-5 text-sm font-bold text-accent-600 transition hover:bg-accent-500 hover:text-white">
+          className="h-[52px] rounded-xl border border-accent-500 px-5 text-sm font-bold text-accent-600 transition hover:bg-accent-500 hover:text-white">
           {creating ? 'Close' : '+ New flight'}
         </button>
-      </div>
+      </form>
 
       {creating ? <CreateFlightForm onCreated={() => void run()} /> : null}
 

@@ -4,6 +4,7 @@ import type { CheckIn } from '../../api/checkin';
 import type { Flight } from '../../api/flights';
 import { ErrorAlert } from '../../components/Alert';
 import { AirportField } from '../../components/AirportField';
+import { DateField } from '../../components/DateField';
 import { ApiError } from '../../lib/errors';
 import { addDaysIso, dayAndMonth, time, todayIso } from '../../lib/format';
 
@@ -92,16 +93,12 @@ export function GateOpsSection() {
 
   return (
     <div className="space-y-4">
-      <form onSubmit={findFlights} className="card grid items-end gap-3 p-4 md:grid-cols-[1fr_1fr_auto_auto]">
+      <form onSubmit={findFlights} className="card grid items-center gap-3 p-4 md:grid-cols-[1fr_1fr_14rem_auto]">
         <AirportField label="From" value={origin} onChange={setOrigin} exclude={destination} />
         <AirportField label="To" value={destination} onChange={setDestination} exclude={origin} />
-        <label className="text-sm">
-          <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Date</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-            className="tabular w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-500/15" />
-        </label>
+        <DateField value={date} onChange={setDate} />
         <button type="submit" disabled={busy || origin === destination}
-          className="h-[42px] rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white disabled:bg-slate-300">
+          className="h-[52px] rounded-xl bg-brand-600 px-5 text-sm font-semibold text-white disabled:bg-slate-300">
           {busy && !flight ? 'Loading…' : 'Load flights'}
         </button>
       </form>
