@@ -4,5 +4,7 @@ public enum EmailType {
 
     REGISTRATION_SUCCESS,
 
-    FORGOT_PASSWORD
+    FORGOT_PASSWORD,
+
+    EMAIL_VERIFICATION
 }

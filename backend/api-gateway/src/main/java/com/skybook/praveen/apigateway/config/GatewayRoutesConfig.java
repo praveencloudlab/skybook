@@ -53,6 +53,7 @@ public class GatewayRoutesConfig {
                                 // wildcard is deliberately never used, so
                                 // /api/auth/service-token stays off the edge.
                                 "/api/auth/forgot-password", "/api/auth/reset-password",
+                                "/api/auth/verify-email", "/api/auth/resend-verification",
                                 // Sign in with Google (SSO_MODULE.md §5): the OAuth
                                 // start + callback legs and provider discovery.
                                 // Exact paths for the same reason as everything

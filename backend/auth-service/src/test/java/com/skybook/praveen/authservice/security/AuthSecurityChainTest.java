@@ -131,6 +131,23 @@ class AuthSecurityChainTest {
         }
 
         @Test
+        void verifyEmailIsReachableWithoutAToken() throws Exception {
+            // The caller cannot sign in BECAUSE they are not verified yet.
+            mockMvc.perform(post("/api/auth/verify-email")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"email\":\"a@b.com\",\"otp\":\"123456\"}"))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        void resendVerificationIsReachableWithoutAToken() throws Exception {
+            mockMvc.perform(post("/api/auth/resend-verification")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"email\":\"a@b.com\"}"))
+                    .andExpect(status().isAccepted());
+        }
+
+        @Test
         void resetPasswordIsReachableWithoutAToken() throws Exception {
             mockMvc.perform(post("/api/auth/reset-password")
                             .contentType(MediaType.APPLICATION_JSON)

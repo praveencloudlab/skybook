@@ -55,6 +55,31 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, exception.getMessage(), request);
     }
 
+    /**
+     * Correct password, unverified email - 403. Distinct from the 401 above on
+     * purpose: the client routes this one to the code-entry step, and only the
+     * account's owner (who just proved the password) ever sees it.
+     */
+    @ExceptionHandler(EmailNotVerifiedException.class)
+    public ResponseEntity<ErrorResponse> handleEmailNotVerified(
+            EmailNotVerifiedException exception, HttpServletRequest request) {
+        return build(HttpStatus.FORBIDDEN, exception.getMessage(), request);
+    }
+
+    /** Unknown account, missing/expired code, or wrong digits - one generic 400. */
+    @ExceptionHandler(InvalidVerificationCodeException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidVerificationCode(
+            InvalidVerificationCodeException exception, HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, exception.getMessage(), request);
+    }
+
+    /** Guess cap exhausted on one code - 429, the fix is a fresh code. */
+    @ExceptionHandler(TooManyVerificationAttemptsException.class)
+    public ResponseEntity<ErrorResponse> handleTooManyVerificationAttempts(
+            TooManyVerificationAttemptsException exception, HttpServletRequest request) {
+        return build(HttpStatus.TOO_MANY_REQUESTS, exception.getMessage(), request);
+    }
+
     /** Bean-validation failures on @Valid request bodies -> 400 with field messages. */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationException(

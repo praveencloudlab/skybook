@@ -160,11 +160,12 @@ class EventEnumsTest {
     class EmailTypes {
 
         @Test
-        @DisplayName("holds exactly the two transactional mail types, in order")
+        @DisplayName("holds exactly the three transactional mail types, in order")
         void valuesAreExact() {
             assertThat(EmailType.values()).containsExactly(
                     EmailType.REGISTRATION_SUCCESS,
-                    EmailType.FORGOT_PASSWORD);
+                    EmailType.FORGOT_PASSWORD,
+                    EmailType.EMAIL_VERIFICATION);
         }
 
         @Test
@@ -204,7 +205,7 @@ class EventEnumsTest {
             assertThat(CheckInEventType.values()).hasSize(5);
             assertThat(PaymentEventType.values()).hasSize(5);
             assertThat(InventoryEventType.values()).hasSize(6);
-            assertThat(EmailType.values()).hasSize(2);
+            assertThat(EmailType.values()).hasSize(3);
         }
 
         @Test

@@ -77,8 +77,58 @@ public final class Identities {
                     .formatted(email, registration.statusCode(), registration.asString()));
         }
 
+        verifyEmail(email);
+
         String token = login(email, E2EConfig.USER_PASSWORD);
         return new E2EUser(email, E2EConfig.USER_PASSWORD, token);
+    }
+
+    /**
+     * Redeem the registration OTP the way a customer would: read the code off
+     * the environment's Mailpit sink (auth -> Kafka -> notification -> SMTP)
+     * and post it back. Exercises the real verification gate on every fresh
+     * account instead of bypassing it.
+     */
+    private static void verifyEmail(String email) {
+        java.util.regex.Pattern codePattern =
+                java.util.regex.Pattern.compile("verification code: (\\d{6})");
+        String otp = null;
+
+        for (int attempt = 0; attempt < 30 && otp == null; attempt++) {
+            Response search = RestAssured.given()
+                    .baseUri(E2EConfig.MAIL_URL)
+                    .queryParam("query", "to:" + email)
+                    .get("/api/v1/search");
+            if (search.statusCode() == 200) {
+                java.util.regex.Matcher matcher = codePattern.matcher(search.asString());
+                if (matcher.find()) {
+                    otp = matcher.group(1);
+                    break;
+                }
+            }
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted awaiting the verification email", e);
+            }
+        }
+        if (otp == null) {
+            throw new IllegalStateException(
+                    "Verification email for %s never reached Mailpit at %s"
+                            .formatted(email, E2EConfig.MAIL_URL));
+        }
+
+        Response verification = RestAssured.given()
+                .contentType("application/json")
+                .body("""
+                        {"email":"%s","otp":"%s"}""".formatted(email, otp))
+                .when()
+                .post("/api/auth/verify-email");
+        if (verification.statusCode() != 204) {
+            throw new IllegalStateException("Could not verify %s with code %s: %d %s"
+                    .formatted(email, otp, verification.statusCode(), verification.asString()));
+        }
     }
 
     private static String login(String email, String password) {

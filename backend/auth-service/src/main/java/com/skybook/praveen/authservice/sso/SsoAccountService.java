@@ -72,6 +72,15 @@ public class SsoAccountService {
         User user = userRepository.findByEmail(normalizedEmail)
                 .orElseGet(() -> provision(normalizedEmail, name));
 
+        // An existing password account still waiting on its OTP: Google just
+        // vouched for this exact address, which is the very proof the OTP
+        // exists to obtain. Marking it verified here also unblocks the
+        // password login path.
+        if (!user.isEmailVerified()) {
+            user.setEmailVerified(true);
+            user = userRepository.save(user);
+        }
+
         FederatedIdentity identity = new FederatedIdentity();
         identity.setUserId(user.getId());
         identity.setProvider(PROVIDER_GOOGLE);
@@ -107,6 +116,9 @@ public class SsoAccountService {
         // No password - this is the Google-only account shape (§4.3). The
         // supported path to a first password is forgot-password, which sets one.
         user.setRole(UserRole.USER);
+        // Born verified: Google only issues the id_token for an address it has
+        // itself verified, which is a stronger proof than our own OTP.
+        user.setEmailVerified(true);
 
         User saved;
         try {

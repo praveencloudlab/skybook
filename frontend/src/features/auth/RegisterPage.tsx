@@ -7,10 +7,16 @@ import { ErrorAlert } from '../../components/Alert';
 import { Field } from '../../components/Field';
 import { AuthLayout } from './AuthLayout';
 import { GoogleSignInButton } from './GoogleSignInButton';
+import { VerifyEmailForm } from './VerifyEmailForm';
 import { ApiError, fieldErrors } from '../../lib/errors';
 
 /**
  * Create an account (FRONTEND_MODULE.md §5, screen 1).
+ *
+ * <p>Two steps: the account form, then the emailed 6-digit code. The account
+ * exists after step one but cannot sign in until the code is redeemed - so the
+ * page holds the credentials in memory and signs in itself the moment
+ * verification lands, keeping "register mid-booking" a single interruption.
  *
  * <p>The password policy is shown live, before submit. The server's 400 is
  * accurate but late: being told "must contain a symbol" only after a round trip,
@@ -27,6 +33,7 @@ export function RegisterPage() {
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState<'form' | 'verify'>('form');
 
   const fields = error ? fieldErrors(error) : {};
   const policyMet = passwordPolicyMet(password);
@@ -43,20 +50,39 @@ export function RegisterPage() {
     setBusy(true);
     try {
       await authApi.register({ fullName, email, password });
-      // Straight in - making someone type the same credentials again
-      // immediately after creating them is friction for no benefit.
-      await authApi.login({ email, password });
-      // Honour the same contract as SignInPage: someone sent here mid-booking
-      // (the auth gate's returnTo) resumes their journey - the persisted
-      // draft is still waiting at /search, and landing them on '/' instead
-      // invited a fresh search that wiped it.
-      const returnTo = session.takeReturnTo();
-      navigate(returnTo ?? '/', { replace: true });
+      // The server has mailed a 6-digit code; login is refused until it is
+      // redeemed. Keep the credentials in memory so verification flows
+      // straight into a session without retyping anything.
+      setStep('verify');
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : null);
     } finally {
       setBusy(false);
     }
+  }
+
+  if (step === 'verify') {
+    return (
+      <AuthLayout
+        title="Verify your email"
+        subtitle="One step left - prove the inbox is yours."
+      >
+        <VerifyEmailForm
+          email={email}
+          onVerified={async () => {
+            // Straight in - making someone type the same credentials again
+            // immediately after creating them is friction for no benefit.
+            await authApi.login({ email, password });
+            // Honour the same contract as SignInPage: someone sent here
+            // mid-booking (the auth gate's returnTo) resumes their journey -
+            // the persisted draft is still waiting at /search, and landing
+            // them on '/' instead invited a fresh search that wiped it.
+            const returnTo = session.takeReturnTo();
+            navigate(returnTo ?? '/', { replace: true });
+          }}
+        />
+      </AuthLayout>
+    );
   }
 
   return (

@@ -46,6 +46,9 @@ class AdminBootstrapTest {
         user.setId(1L);
         user.setEmail(ADMIN_EMAIL);
         user.setRole(role);
+        // The steady state of a real admin row: V9 grandfathers pre-feature
+        // accounts and the bootstrap itself stamps this on promotion.
+        user.setEmailVerified(true);
         return user;
     }
 
@@ -74,6 +77,23 @@ class AdminBootstrapTest {
             adminBootstrap.promoteBootstrapAdmin();
 
             verify(userRepository, never()).save(any());
+        }
+
+        @Test
+        void marksThepromotedAccountVerifiedBecauseTheOperatorVouchedForIt() {
+            // CI registers the admin over the API and has no inbox to redeem an
+            // OTP from; pointing the bootstrap variable at the address IS the
+            // operator's vouch, so the bootstrap completes the verification.
+            configuredAdminEmail(ADMIN_EMAIL);
+            User existing = user(UserRole.USER);
+            existing.setEmailVerified(false);
+            when(userRepository.findByEmail(ADMIN_EMAIL)).thenReturn(Optional.of(existing));
+
+            adminBootstrap.promoteBootstrapAdmin();
+
+            assertThat(existing.getRole()).isEqualTo(UserRole.ADMIN);
+            assertThat(existing.isEmailVerified()).isTrue();
+            verify(userRepository).save(existing);
         }
 
         @Test

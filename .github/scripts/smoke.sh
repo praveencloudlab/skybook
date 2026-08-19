@@ -29,10 +29,23 @@ if [ "${COUNT:-0}" -lt 1 ]; then
 fi
 echo "smoke: ${COUNT} itinerary option(s) for LHR->DXB on $DATE"
 
-echo "smoke: register + login round trip"
+echo "smoke: register + OTP verify + login round trip"
 WHO="smoke-$RANDOM-$(date +%s)@skybook.ci"
+MAILPIT="${MAILPIT:-http://localhost:8025}"
 curl -sf -X POST "$GATEWAY/api/auth/register" -H 'Content-Type: application/json' \
   -d "{\"fullName\":\"Smoke Test\",\"email\":\"$WHO\",\"password\":\"SmokeLadder#2026x\"}" > /dev/null
+# Registration now gates login behind the emailed OTP - redeem it the way a
+# customer would, off the Mailpit sink the environment already runs.
+OTP=""
+for _ in $(seq 1 30); do
+  OTP=$(curl -sf "$MAILPIT/api/v1/search?query=to:$WHO" \
+    | grep -oE 'verification code: [0-9]{6}' | grep -oE '[0-9]{6}' | head -1 || true)
+  [ -n "$OTP" ] && break
+  sleep 2
+done
+[ -n "$OTP" ] || { echo "smoke: verification email never arrived"; exit 1; }
+curl -sf -X POST "$GATEWAY/api/auth/verify-email" -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$WHO\",\"otp\":\"$OTP\"}"
 TOKEN=$(curl -sf -X POST "$GATEWAY/api/auth/login" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$WHO\",\"password\":\"SmokeLadder#2026x\"}" )
 [ -n "$TOKEN" ] || { echo "smoke: login returned no token"; exit 1; }

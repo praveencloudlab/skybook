@@ -146,6 +146,13 @@ public class SecurityConfig {
                         // exists; reset-password succeeds only against a valid token.
                         .requestMatchers("/api/auth/forgot-password", "/api/auth/reset-password")
                         .permitAll()
+                        // Email verification is pre-authentication by the same
+                        // logic: the caller cannot sign in BECAUSE they are not
+                        // verified yet. verify-email succeeds only against the
+                        // emailed code; resend-verification never confirms
+                        // whether an account exists.
+                        .requestMatchers("/api/auth/verify-email", "/api/auth/resend-verification")
+                        .permitAll()
                         // SSO surface (SSO_MODULE.md §5): permitted STATICALLY,
                         // enabled or not, so both worlds present one security
                         // surface. When enabled, oauth2Login owns start+callback;

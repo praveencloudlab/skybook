@@ -34,8 +34,12 @@ public class AdminBootstrap {
         if (bootstrapAdminEmail != null && !bootstrapAdminEmail.isBlank()) {
             String email = bootstrapAdminEmail.trim().toLowerCase(Locale.ROOT);
             userRepository.findByEmail(email).ifPresentOrElse(user -> {
-                if (user.getRole() != UserRole.ADMIN) {
+                if (user.getRole() != UserRole.ADMIN || !user.isEmailVerified()) {
                     user.setRole(UserRole.ADMIN);
+                    // An ops-managed account: pointing this variable at it IS
+                    // the operator vouching for the address, so the OTP step
+                    // is redundant here (and CI admin bootstrap has no inbox).
+                    user.setEmailVerified(true);
                     userRepository.save(user);
                     log.info("Bootstrap: promoted {} to ADMIN", email);
                 }

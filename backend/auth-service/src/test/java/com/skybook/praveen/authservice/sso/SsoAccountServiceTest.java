@@ -56,6 +56,9 @@ class SsoAccountServiceTest {
         user.setEmail(EMAIL);
         user.setFullName("Bob Jones");
         user.setRole(UserRole.USER);
+        // The steady state of an established account (V9 grandfathers every
+        // pre-feature row); the unverified branch has its own test below.
+        user.setEmailVerified(true);
         return user;
     }
 
@@ -158,6 +161,25 @@ class SsoAccountServiceTest {
             // Linking is not registering - no welcome email for an account
             // that already exists.
             verifyNoInteractions(emailEventProducer);
+        }
+
+        @Test
+        void googleVouchingForTheAddressCompletesAPendingOtpVerification() {
+            // A password account still waiting on its emailed code: Google just
+            // verified the same address, which is the proof the OTP exists to
+            // obtain - so the account comes out verified and password login is
+            // unblocked too.
+            User pending = bob(7L);
+            pending.setEmailVerified(false);
+            when(federatedIdentityRepository.findByProviderAndSubject("google", SUB))
+                    .thenReturn(Optional.empty());
+            when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(pending));
+            when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+
+            User resolved = service.resolve(SUB, EMAIL, true, "Bob Jones");
+
+            assertThat(resolved.isEmailVerified()).isTrue();
+            verify(userRepository).save(pending);
         }
     }
 

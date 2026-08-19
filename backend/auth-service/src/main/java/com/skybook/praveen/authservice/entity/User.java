@@ -38,6 +38,12 @@ public class User {
     @Column(nullable = false, length = 20)
     private UserRole role = UserRole.USER;
 
+    // False until the account redeems the OTP mailed at registration; login is
+    // refused until then. SSO accounts are born true (Google already verified
+    // the address), and the V9 migration grandfathers every pre-feature row.
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
     // Passenger profile (FRONTEND_MODULE.md Module 14). All nullable - an account
     // carries none of this until the traveller fills it in.
     private String phone;

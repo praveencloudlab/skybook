@@ -5,6 +5,7 @@ import { Button } from '../../components/Button';
 import { Alert, ErrorAlert } from '../../components/Alert';
 import { Field } from '../../components/Field';
 import { GoogleSignInButton } from './GoogleSignInButton';
+import { VerifyEmailForm } from './VerifyEmailForm';
 import { ApiError } from '../../lib/errors';
 
 /**
@@ -29,6 +30,7 @@ export function SignInForm({ onSignedIn, showSso = false }: { onSignedIn: () => 
   const [remember, setRemember] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -38,10 +40,37 @@ export function SignInForm({ onSignedIn, showSso = false }: { onSignedIn: () => 
       await authApi.login({ email, password }, remember);
       onSignedIn();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause : null);
+      // 403 from login has exactly one meaning: right password, unverified
+      // email. The credentials are still in state, so route straight to the
+      // code-entry step and retry the same sign-in once the code lands.
+      if (cause instanceof ApiError && cause.kind === 'forbidden') {
+        setNeedsVerification(true);
+      } else {
+        setError(cause instanceof ApiError ? cause : null);
+      }
     } finally {
       setBusy(false);
     }
+  }
+
+  if (needsVerification) {
+    return (
+      <div className="space-y-5">
+        <Alert>
+          This account hasn't verified its email address yet. Enter the code we
+          emailed you - or request a fresh one below.
+        </Alert>
+        <VerifyEmailForm
+          email={email}
+          // The outstanding code may be days old; let them resend immediately.
+          initialCooldown={0}
+          onVerified={async () => {
+            await authApi.login({ email, password }, remember);
+            onSignedIn();
+          }}
+        />
+      </div>
+    );
   }
 
   return (

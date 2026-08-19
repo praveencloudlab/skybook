@@ -101,6 +101,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // no session precisely because they cannot sign in.
             new PathPatternParser().parse("/api/auth/forgot-password"),
             new PathPatternParser().parse("/api/auth/reset-password"),
+            // Email verification is pre-authentication by the same logic: the
+            // caller cannot sign in BECAUSE they have not verified yet.
+            new PathPatternParser().parse("/api/auth/verify-email"),
+            new PathPatternParser().parse("/api/auth/resend-verification"),
             // Guest-session issuance/end (GUEST_CHECKIN_MODULE.md §3): the
             // caller is here to GET a session, and ending one must work even
             // with the token inside the cookie already lapsed.

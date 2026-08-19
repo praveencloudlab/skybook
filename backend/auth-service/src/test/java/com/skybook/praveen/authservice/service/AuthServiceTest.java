@@ -2,13 +2,18 @@ package com.skybook.praveen.authservice.service;
 
 import com.skybook.praveen.authservice.dto.LoginRequest;
 import com.skybook.praveen.authservice.dto.RegisterRequest;
+import com.skybook.praveen.authservice.entity.EmailVerificationOtp;
 import com.skybook.praveen.authservice.entity.PasswordResetToken;
 import com.skybook.praveen.authservice.entity.User;
 import com.skybook.praveen.authservice.entity.UserRole;
 import com.skybook.praveen.authservice.exception.EmailAlreadyRegisteredException;
+import com.skybook.praveen.authservice.exception.EmailNotVerifiedException;
 import com.skybook.praveen.authservice.exception.InvalidCredentialsException;
 import com.skybook.praveen.authservice.exception.InvalidResetTokenException;
+import com.skybook.praveen.authservice.exception.InvalidVerificationCodeException;
+import com.skybook.praveen.authservice.exception.TooManyVerificationAttemptsException;
 import com.skybook.praveen.authservice.producer.EmailEventProducer;
+import com.skybook.praveen.authservice.repository.EmailVerificationOtpRepository;
 import com.skybook.praveen.authservice.repository.PasswordResetTokenRepository;
 import com.skybook.praveen.authservice.repository.UserRepository;
 import com.skybook.praveen.common.event.EmailEvent;
@@ -70,6 +75,8 @@ class AuthServiceTest {
     @Mock
     private PasswordResetTokenRepository passwordResetTokenRepository;
     @Mock
+    private EmailVerificationOtpRepository emailVerificationOtpRepository;
+    @Mock
     private EmailEventProducer emailEventProducer;
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -83,6 +90,9 @@ class AuthServiceTest {
     void applyDeployProperties() {
         ReflectionTestUtils.setField(authService, "publicBaseUrl", BASE_URL);
         ReflectionTestUtils.setField(authService, "resetTtlMinutes", RESET_TTL_MINUTES);
+        ReflectionTestUtils.setField(authService, "otpTtlMinutes", 10L);
+        ReflectionTestUtils.setField(authService, "otpMaxAttempts", 5);
+        ReflectionTestUtils.setField(authService, "otpResendCooldownSeconds", 60L);
     }
 
     private static User alice() {
@@ -92,7 +102,16 @@ class AuthServiceTest {
         user.setFullName("Alice Smith");
         user.setPassword(STORED_HASH);
         user.setRole(UserRole.USER);
+        user.setEmailVerified(true);
         return user;
+    }
+
+    /** Pull the 6-digit code back out of the captured verification email. */
+    private static String codeIn(EmailEvent event) {
+        java.util.regex.Matcher matcher =
+                java.util.regex.Pattern.compile("\\b(\\d{6})\\b").matcher(event.getBody());
+        assertThat(matcher.find()).as("verification email carries a 6-digit code").isTrue();
+        return matcher.group(1);
     }
 
     /** The same digest the service uses, so the test can assert on what is stored. */
@@ -118,15 +137,16 @@ class AuthServiceTest {
     class Register {
 
         @Test
-        void storesTheAccountWithANormalizedEmailAndAHashedPassword() {
-            when(userRepository.existsByEmail(ALICE)).thenReturn(false);
+        void storesTheAccountUnverifiedWithANormalizedEmailAndAHashedPassword() {
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.empty());
             when(passwordEncoder.encode(VALID_PASSWORD)).thenReturn(STORED_HASH);
             when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+            when(emailVerificationOtpRepository.findByUserId(any())).thenReturn(Optional.empty());
 
             String result = authService.register(
                     new RegisterRequest("Alice Smith", "  Alice@Example.COM  ", VALID_PASSWORD));
 
-            assertThat(result).isEqualTo("User registered successfully");
+            assertThat(result).isEqualTo("Verification code sent");
 
             ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
             verify(userRepository).save(saved.capture());
@@ -135,13 +155,16 @@ class AuthServiceTest {
             assertThat(saved.getValue().getPassword()).isEqualTo(STORED_HASH);
             assertThat(saved.getValue().getPassword()).isNotEqualTo(VALID_PASSWORD);
             assertThat(saved.getValue().getFullName()).isEqualTo("Alice Smith");
+            // Born unverified: sign-in stays refused until the code is redeemed.
+            assertThat(saved.getValue().isEmailVerified()).isFalse();
         }
 
         @Test
         void alwaysCreatesAPlainUserNeverAnAdmin() {
-            when(userRepository.existsByEmail(ALICE)).thenReturn(false);
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.empty());
             when(passwordEncoder.encode(VALID_PASSWORD)).thenReturn(STORED_HASH);
             when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+            when(emailVerificationOtpRepository.findByUserId(any())).thenReturn(Optional.empty());
 
             authService.register(new RegisterRequest("Alice Smith", ALICE, VALID_PASSWORD));
 
@@ -151,23 +174,32 @@ class AuthServiceTest {
         }
 
         @Test
-        void publishesAWelcomeEmailToTheAddressThatWasStored() {
-            when(userRepository.existsByEmail(ALICE)).thenReturn(false);
+        void mailsAVerificationCodeAndStoresOnlyItsHash() {
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.empty());
             when(passwordEncoder.encode(VALID_PASSWORD)).thenReturn(STORED_HASH);
             when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+            when(emailVerificationOtpRepository.findByUserId(any())).thenReturn(Optional.empty());
 
             authService.register(new RegisterRequest("Alice Smith", "Alice@Example.COM", VALID_PASSWORD));
 
             EmailEvent event = capturedEmail();
             assertThat(event.getTo()).isEqualTo(ALICE);
-            assertThat(event.getType()).isEqualTo(EmailType.REGISTRATION_SUCCESS);
-            assertThat(event.getBody()).contains("Alice Smith");
-            assertThat(event.getBody()).doesNotContain(STORED_HASH);
+            // The OTP mail, not the welcome mail - "welcome" waits for proof.
+            assertThat(event.getType()).isEqualTo(EmailType.EMAIL_VERIFICATION);
+            String code = codeIn(event);
+
+            ArgumentCaptor<EmailVerificationOtp> otp =
+                    ArgumentCaptor.forClass(EmailVerificationOtp.class);
+            verify(emailVerificationOtpRepository).save(otp.capture());
+            // Only the digest is persisted; the code itself lives in the email.
+            assertThat(otp.getValue().getOtpHash()).isEqualTo(sha256Hex(code));
+            assertThat(otp.getValue().getExpiresAt()).isAfter(Instant.now());
+            assertThat(otp.getValue().getAttempts()).isZero();
         }
 
         @Test
-        void refusesAnEmailThatIsAlreadyRegistered() {
-            when(userRepository.existsByEmail(ALICE)).thenReturn(true);
+        void refusesAnEmailThatIsAlreadyRegisteredAndVerified() {
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(alice()));
 
             assertThatThrownBy(() -> authService.register(
                     new RegisterRequest("Impostor", ALICE, VALID_PASSWORD)))
@@ -179,7 +211,7 @@ class AuthServiceTest {
 
         @Test
         void detectsADuplicateEvenWhenTheCaseDiffersFromTheStoredRow() {
-            when(userRepository.existsByEmail(ALICE)).thenReturn(true);
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(alice()));
 
             assertThatThrownBy(() -> authService.register(
                     new RegisterRequest("Impostor", "ALICE@EXAMPLE.COM", VALID_PASSWORD)))
@@ -187,10 +219,35 @@ class AuthServiceTest {
         }
 
         @Test
+        void letsANewRegistrantTakeOverAnUnverifiedAccount() {
+            // Nobody ever proved they own the address, so it is not claimed
+            // property: the newest registrant replaces name and password and
+            // gets a fresh code. Without this, one abandoned attempt would
+            // squat on the address forever.
+            User abandoned = alice();
+            abandoned.setEmailVerified(false);
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(abandoned));
+            when(passwordEncoder.encode(VALID_PASSWORD)).thenReturn(NEW_HASH);
+            when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+            when(emailVerificationOtpRepository.findByUserId(7L)).thenReturn(Optional.empty());
+
+            String result = authService.register(
+                    new RegisterRequest("Alice Rewritten", ALICE, VALID_PASSWORD));
+
+            assertThat(result).isEqualTo("Verification code sent");
+            ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+            verify(userRepository).save(saved.capture());
+            assertThat(saved.getValue().getFullName()).isEqualTo("Alice Rewritten");
+            assertThat(saved.getValue().getPassword()).isEqualTo(NEW_HASH);
+            assertThat(saved.getValue().isEmailVerified()).isFalse();
+            assertThat(capturedEmail().getType()).isEqualTo(EmailType.EMAIL_VERIFICATION);
+        }
+
+        @Test
         void turnsTheConcurrentDoubleRegisterRaceIntoTheSameConflict() {
-            // The existsByEmail pre-check passed but the unique index rejected the
+            // The findByEmail pre-check passed but the unique index rejected the
             // insert; the caller must see the ordinary 409, not a 500.
-            when(userRepository.existsByEmail(ALICE)).thenReturn(false);
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.empty());
             when(passwordEncoder.encode(VALID_PASSWORD)).thenReturn(STORED_HASH);
             when(userRepository.save(any(User.class)))
                     .thenThrow(new DataIntegrityViolationException("duplicate key"));
@@ -199,7 +256,7 @@ class AuthServiceTest {
                     new RegisterRequest("Alice Smith", ALICE, VALID_PASSWORD)))
                     .isInstanceOf(EmailAlreadyRegisteredException.class);
 
-            // No welcome email for an account that was never created.
+            // No email of any kind for an account that was never created.
             verifyNoInteractions(emailEventProducer);
         }
     }
@@ -313,6 +370,162 @@ class AuthServiceTest {
                     .isInstanceOf(InvalidCredentialsException.class);
 
             verifyNoInteractions(jwtService);
+        }
+
+        @Test
+        void refusesAnUnverifiedAccountEvenWithTheRightPassword() {
+            User unverified = alice();
+            unverified.setEmailVerified(false);
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(unverified));
+            when(passwordEncoder.matches(VALID_PASSWORD, STORED_HASH)).thenReturn(true);
+
+            // 403, not 401: the credentials are right, and only their owner
+            // ever reaches this branch - so it can safely say what is wrong.
+            assertThatThrownBy(() -> authService.login(new LoginRequest(ALICE, VALID_PASSWORD)))
+                    .isInstanceOf(EmailNotVerifiedException.class);
+
+            verifyNoInteractions(jwtService);
+        }
+    }
+
+    // ------------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("email verification")
+    class EmailVerification {
+
+        private static final String CODE = "482913";
+
+        private EmailVerificationOtp liveOtp() {
+            EmailVerificationOtp otp = new EmailVerificationOtp();
+            otp.setId(31L);
+            otp.setUserId(7L);
+            otp.setOtpHash(sha256Hex(CODE));
+            otp.setExpiresAt(Instant.now().plus(10, ChronoUnit.MINUTES));
+            otp.setAttempts(0);
+            otp.setLastSentAt(Instant.now().minus(2, ChronoUnit.MINUTES));
+            return otp;
+        }
+
+        private User unverifiedAlice() {
+            User user = alice();
+            user.setEmailVerified(false);
+            return user;
+        }
+
+        @Test
+        void theRightCodeActivatesTheAccountAndOnlyThenWelcomesIt() {
+            User user = unverifiedAlice();
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(user));
+            when(emailVerificationOtpRepository.findByUserId(7L)).thenReturn(Optional.of(liveOtp()));
+            when(userRepository.save(any(User.class))).thenAnswer(call -> call.getArgument(0));
+
+            authService.verifyEmail("  Alice@Example.COM  ", CODE);
+
+            assertThat(user.isEmailVerified()).isTrue();
+            // Single-use: the redeemed code dies with the redemption.
+            verify(emailVerificationOtpRepository).deleteByUserId(7L);
+            EmailEvent event = capturedEmail();
+            assertThat(event.getType()).isEqualTo(EmailType.REGISTRATION_SUCCESS);
+            assertThat(event.getTo()).isEqualTo(ALICE);
+        }
+
+        @Test
+        void theWrongCodeBurnsAnAttemptAndFailsGenerically() {
+            EmailVerificationOtp otp = liveOtp();
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(unverifiedAlice()));
+            when(emailVerificationOtpRepository.findByUserId(7L)).thenReturn(Optional.of(otp));
+
+            assertThatThrownBy(() -> authService.verifyEmail(ALICE, "000000"))
+                    .isInstanceOf(InvalidVerificationCodeException.class);
+
+            // The failed guess is spent - 6 digits survives 5 tries, not 5000.
+            assertThat(otp.getAttempts()).isEqualTo(1);
+            verify(emailVerificationOtpRepository).save(otp);
+            verifyNoInteractions(emailEventProducer);
+        }
+
+        @Test
+        void anExpiredCodeIsAsDeadAsAWrongOne() {
+            EmailVerificationOtp otp = liveOtp();
+            otp.setExpiresAt(Instant.now().minusSeconds(1));
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(unverifiedAlice()));
+            when(emailVerificationOtpRepository.findByUserId(7L)).thenReturn(Optional.of(otp));
+
+            assertThatThrownBy(() -> authService.verifyEmail(ALICE, CODE))
+                    .isInstanceOf(InvalidVerificationCodeException.class);
+        }
+
+        @Test
+        void theAttemptCapKillsTheCodeEvenWhenTheGuessIsFinallyRight() {
+            EmailVerificationOtp otp = liveOtp();
+            otp.setAttempts(5);
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(unverifiedAlice()));
+            when(emailVerificationOtpRepository.findByUserId(7L)).thenReturn(Optional.of(otp));
+
+            assertThatThrownBy(() -> authService.verifyEmail(ALICE, CODE))
+                    .isInstanceOf(TooManyVerificationAttemptsException.class);
+        }
+
+        @Test
+        void anUnknownAddressFailsExactlyLikeAWrongCode() {
+            when(userRepository.findByEmail("nobody@example.com")).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> authService.verifyEmail("nobody@example.com", CODE))
+                    .isInstanceOf(InvalidVerificationCodeException.class);
+        }
+
+        @Test
+        void reVerifyingAVerifiedAccountIsAQuietSuccess() {
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(alice()));
+
+            assertThatCode(() -> authService.verifyEmail(ALICE, CODE))
+                    .doesNotThrowAnyException();
+
+            verifyNoInteractions(emailVerificationOtpRepository);
+        }
+
+        @Test
+        void resendMailsAFreshCodeToAnUnverifiedAccount() {
+            EmailVerificationOtp otp = liveOtp();
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(unverifiedAlice()));
+            when(emailVerificationOtpRepository.findByUserId(7L)).thenReturn(Optional.of(otp));
+            when(emailVerificationOtpRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+
+            authService.resendVerification(ALICE);
+
+            EmailEvent event = capturedEmail();
+            assertThat(event.getType()).isEqualTo(EmailType.EMAIL_VERIFICATION);
+            // The old code is replaced, not joined: the row is reused and the
+            // new hash matches the new email's code.
+            assertThat(otp.getOtpHash()).isEqualTo(sha256Hex(codeIn(event)));
+            assertThat(otp.getAttempts()).isZero();
+        }
+
+        @Test
+        void resendInsideTheCooldownSendsNothing() {
+            EmailVerificationOtp otp = liveOtp();
+            otp.setLastSentAt(Instant.now().minusSeconds(5));
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(unverifiedAlice()));
+            when(emailVerificationOtpRepository.findByUserId(7L)).thenReturn(Optional.of(otp));
+
+            authService.resendVerification(ALICE);
+
+            verifyNoInteractions(emailEventProducer);
+            verify(emailVerificationOtpRepository, never()).save(any());
+        }
+
+        @Test
+        void resendForUnknownOrVerifiedAccountsIsAnIndistinguishableNoOp() {
+            when(userRepository.findByEmail("nobody@example.com")).thenReturn(Optional.empty());
+            when(userRepository.findByEmail(ALICE)).thenReturn(Optional.of(alice()));
+
+            assertThatCode(() -> {
+                authService.resendVerification("nobody@example.com");
+                authService.resendVerification(ALICE);
+            }).doesNotThrowAnyException();
+
+            verifyNoInteractions(emailEventProducer);
         }
     }
 

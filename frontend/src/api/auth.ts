@@ -41,9 +41,27 @@ export function passwordPolicyMet(password: string): boolean {
 }
 
 export const authApi = {
-  /** Returns the server's plain-text confirmation ("User registered successfully"). */
+  /**
+   * Returns the server's plain-text confirmation ("Verification code sent").
+   * Registration no longer signs you in: the account stays locked until the
+   * emailed 6-digit code is redeemed via {@link verifyEmail}.
+   */
   async register(request: RegisterRequest): Promise<string> {
     return api.post<string>('/api/auth/register', request);
+  },
+
+  /** Redeem the emailed 6-digit code. A 400 means wrong/expired; 429 means get a fresh one. */
+  async verifyEmail(email: string, otp: string): Promise<void> {
+    await api.post<void>('/api/auth/verify-email', { email, otp });
+  },
+
+  /**
+   * Ask for a fresh verification code. Same no-enumeration contract as
+   * forgotPassword: the server answers 202 either way, so a resolved promise
+   * just means "if that address has an unverified account, a code is coming".
+   */
+  async resendVerification(email: string): Promise<void> {
+    await api.post<void>('/api/auth/resend-verification', { email });
   },
 
   /**

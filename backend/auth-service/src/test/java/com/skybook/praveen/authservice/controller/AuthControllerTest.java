@@ -1,8 +1,11 @@
 package com.skybook.praveen.authservice.controller;
 
 import com.skybook.praveen.authservice.exception.EmailAlreadyRegisteredException;
+import com.skybook.praveen.authservice.exception.EmailNotVerifiedException;
 import com.skybook.praveen.authservice.exception.InvalidCredentialsException;
 import com.skybook.praveen.authservice.exception.InvalidResetTokenException;
+import com.skybook.praveen.authservice.exception.InvalidVerificationCodeException;
+import com.skybook.praveen.authservice.exception.TooManyVerificationAttemptsException;
 import com.skybook.praveen.authservice.security.JwtAuthenticationFilter;
 import com.skybook.praveen.authservice.security.SessionCookie;
 import com.skybook.praveen.authservice.service.AuthService;
@@ -21,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -155,6 +159,73 @@ class AuthControllerTest {
                         .content("{\"email\":\"a@b.com\",\"password\":\"whatever\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
+    void login_unverifiedEmailReturns403NotThe401() throws Exception {
+        // Distinct from bad credentials on purpose: the client routes 403 to
+        // the code-entry step, and only the password's owner ever reaches it.
+        when(authService.login(any())).thenThrow(new EmailNotVerifiedException());
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\",\"password\":\"whatever\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403));
+    }
+
+    // ---- email verification -------------------------------------------------
+
+    @Test
+    void verifyEmail_returns204AndDelegatesEmailAndCode() throws Exception {
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\",\"otp\":\"482913\"}"))
+                .andExpect(status().isNoContent());
+        verify(authService).verifyEmail("a@b.com", "482913");
+    }
+
+    @Test
+    void verifyEmail_rejectsANonSixDigitCodeBeforeTheServiceIsInvolved() throws Exception {
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\",\"otp\":\"12345\"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\",\"otp\":\"abcdef\"}"))
+                .andExpect(status().isBadRequest());
+        verify(authService, never()).verifyEmail(any(), any());
+    }
+
+    @Test
+    void verifyEmail_wrongCodeReturnsAGeneric400() throws Exception {
+        doThrow(new InvalidVerificationCodeException())
+                .when(authService).verifyEmail("a@b.com", "000000");
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\",\"otp\":\"000000\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void verifyEmail_attemptCapReturns429() throws Exception {
+        doThrow(new TooManyVerificationAttemptsException())
+                .when(authService).verifyEmail("a@b.com", "000000");
+        mockMvc.perform(post("/api/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\",\"otp\":\"000000\"}"))
+                .andExpect(status().isTooManyRequests());
+    }
+
+    @Test
+    void resendVerification_alwaysReturns202() throws Exception {
+        // No enumeration: the same answer whether or not the address exists.
+        mockMvc.perform(post("/api/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\"}"))
+                .andExpect(status().isAccepted());
+        verify(authService).resendVerification("a@b.com");
     }
 
     // ---- keep-me-signed-in flag reaches the cookie ---------------------------

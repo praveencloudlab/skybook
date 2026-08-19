@@ -4,7 +4,9 @@ import com.skybook.praveen.authservice.dto.CurrentUserResponse;
 import com.skybook.praveen.authservice.dto.ForgotPasswordRequest;
 import com.skybook.praveen.authservice.dto.LoginRequest;
 import com.skybook.praveen.authservice.dto.RegisterRequest;
+import com.skybook.praveen.authservice.dto.ResendVerificationRequest;
 import com.skybook.praveen.authservice.dto.ResetPasswordRequest;
+import com.skybook.praveen.authservice.dto.VerifyEmailRequest;
 import com.skybook.praveen.authservice.security.SessionCookie;
 import com.skybook.praveen.authservice.service.AuthService;
 import jakarta.validation.Valid;
@@ -33,6 +35,30 @@ public class AuthController {
     @PostMapping("/register")
     public ResponseEntity<String> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.ok(authService.register(request));
+    }
+
+    /**
+     * Redeem the emailed 6-digit code and activate the account. 204 on
+     * success (idempotent - re-verifying a verified account is quiet); a
+     * generic 400 for anything else, so the endpoint cannot be used to probe
+     * which addresses are registered.
+     */
+    @PostMapping("/verify-email")
+    public ResponseEntity<Void> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        authService.verifyEmail(request.email(), request.otp());
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Mail a fresh verification code. Always {@code 202 Accepted}, whether the
+     * address has an unverified account or not (no enumeration - the same
+     * contract as {@link #forgotPassword}). A public path: the caller cannot
+     * sign in precisely because they are not verified yet.
+     */
+    @PostMapping("/resend-verification")
+    public ResponseEntity<Void> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+        authService.resendVerification(request.email());
+        return ResponseEntity.accepted().build();
     }
 
     /**

@@ -20,9 +20,23 @@ ITIN=$(curl -sf "$GATEWAY/api/flights/itineraries?originAirportCode=LHR&destinat
 FLIGHT_ID=$(grep -oE '"id":[0-9]+' <<< "$ITIN" | head -1 | cut -d: -f2)
 echo "   flight id ${FLIGHT_ID} offered without a session"
 
-echo "2. account created and signed in (${WHO})"
+echo "2. account created, email verified via OTP, signed in (${WHO})"
+MAILPIT="${MAILPIT:-http://localhost:8025}"
 curl -sf -X POST "$GATEWAY/api/auth/register" -H 'Content-Type: application/json' \
   -d "{\"fullName\":\"UAT Acceptance\",\"email\":\"$WHO\",\"password\":\"$PW\"}" > /dev/null
+# The real flow, not a bypass: pull the 6-digit code off the bus-delivered
+# email (auth -> Kafka -> notification -> Mailpit) and redeem it.
+OTP=""
+for i in $(seq 1 30); do
+  OTP=$(curl -sf "$MAILPIT/api/v1/search?query=to:$WHO" \
+    | grep -oE 'verification code: [0-9]{6}' | grep -oE '[0-9]{6}' | head -1 || true)
+  [ -n "$OTP" ] && break
+  sleep 2
+done
+[ -n "$OTP" ] || { echo "   FAILED: verification email never arrived"; exit 1; }
+curl -sf -X POST "$GATEWAY/api/auth/verify-email" -H 'Content-Type: application/json' \
+  -d "{\"email\":\"$WHO\",\"otp\":\"$OTP\"}"
+echo "   OTP ${OTP} arrived after ${i} poll(s) and was redeemed"
 TOKEN=$(curl -sf -X POST "$GATEWAY/api/auth/login" -H 'Content-Type: application/json' \
   -d "{\"email\":\"$WHO\",\"password\":\"$PW\"}" )
 [ -n "$TOKEN" ] || { echo "   FAILED: no token"; exit 1; }
@@ -33,6 +47,7 @@ BOOKING=$(curl -sf -X POST "$GATEWAY/api/bookings" "${AUTH[@]}" -H 'Content-Type
   \"customerId\":9001,\"flightId\":${FLIGHT_ID},
   \"passengers\":[{\"title\":\"Ms\",\"firstName\":\"Uat\",\"lastName\":\"Acceptance\",\"dob\":\"1991-04-02\",
     \"nationality\":\"GBR\",\"passportNumber\":\"U${RANDOM}X\",\"passportExpiry\":\"2032-01-01\",
+    \"email\":\"$WHO\",
     \"travelClass\":\"ECONOMY\",\"fareType\":\"SAVER\"}],
   \"contact\":{\"contactName\":\"Uat Acceptance\",\"contactEmail\":\"$WHO\",\"contactPhone\":\"+44 7700 900123\"}}")
 BOOKING_ID=$(J "$BOOKING" id '[0-9]*')
