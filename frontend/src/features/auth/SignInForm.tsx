@@ -62,6 +62,9 @@ export function SignInForm({ onSignedIn, showSso = false }: { onSignedIn: () => 
         </Alert>
         <VerifyEmailForm
           email={email}
+          // Here "wrong email" means "I typed the wrong sign-in address" -
+          // back to the credentials form, fields intact.
+          onChangeEmail={() => setNeedsVerification(false)}
           // The outstanding code may be days old; let them resend immediately.
           initialCooldown={0}
           onVerified={async () => {

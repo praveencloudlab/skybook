@@ -69,6 +69,11 @@ export function RegisterPage() {
       >
         <VerifyEmailForm
           email={email}
+          // A typo'd address is otherwise a dead end. Back to the form with
+          // every field still filled (same component, state never unmounted);
+          // resubmitting re-registers, which the server permits while the
+          // address is unverified - the newest registrant takes it over.
+          onChangeEmail={() => setStep('form')}
           onVerified={async () => {
             // Straight in - making someone type the same credentials again
             // immediately after creating them is friction for no benefit.

@@ -15,11 +15,20 @@ import { ApiError } from '../../lib/errors';
 export function VerifyEmailForm({
   email,
   onVerified,
+  onChangeEmail,
   initialCooldown = 60,
 }: {
   email: string;
   /** Runs after the server accepts the code - typically sign in + navigate. */
   onVerified: () => Promise<void>;
+  /**
+   * "Wrong email?" escape hatch: the host takes the user back to where the
+   * address can be corrected (the registration form, with everything still
+   * filled in). A typo'd email is otherwise a dead end - the code went to an
+   * inbox that isn't theirs, and re-registering the unverified address is
+   * exactly what the server permits.
+   */
+  onChangeEmail?: () => void;
   /**
    * Seconds before "Send a new code" unlocks. 60 when a code was JUST sent
    * (registration); 0 when the outstanding code may be long stale (a sign-in
@@ -107,6 +116,19 @@ export function VerifyEmailForm({
           </button>
         )}
       </p>
+
+      {onChangeEmail ? (
+        <p className="text-center text-sm text-slate-600">
+          Wrong email?{' '}
+          <button
+            type="button"
+            onClick={onChangeEmail}
+            className="font-medium text-brand-700 hover:underline"
+          >
+            Enter a new email
+          </button>
+        </p>
+      ) : null}
     </form>
   );
 }
