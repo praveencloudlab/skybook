@@ -133,7 +133,7 @@ class BookingControllerTest {
                 List.of(new PassengerBookingDetail(
                         "Mr", "Ann", null, "Blake",
                         LocalDate.now().minusYears(34), "FEMALE", "GBR", "P1234567",
-                        LocalDate.now().plusYears(5), null, null,
+                        LocalDate.now().plusYears(5), "ann.blake@example.com", null,
                         TravelClass.ECONOMY, FareType.SAVER, "12A", null, null, 1, null)),
                 new BookingContactRequest("Praveen S", "praveen@example.com", "+447700900000"),
                 "window preferred");

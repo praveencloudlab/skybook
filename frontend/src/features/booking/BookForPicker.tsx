@@ -28,6 +28,7 @@ function profileToDraft(profile: Profile): PassengerDraft {
     nationality: profile.nationality ?? 'GBR',
     passportNumber: profile.passportNumber ?? '',
     passportExpiry: profile.passportExpiry ?? '',
+    email: profile.email ?? '',
   };
 }
 

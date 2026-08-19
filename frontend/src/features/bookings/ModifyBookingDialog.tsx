@@ -202,6 +202,10 @@ export function ModifyBookingDialog({
         nationality: p.nationality ?? '',
         passportNumber: p.passportNumber ?? '',
         passportExpiry: p.passportExpiry ?? '',
+        // The stored passenger rows predate per-passenger email being
+        // mandatory; the booking contact is the honest stand-in the server
+        // will accept for a date-change rebook.
+        email: booking.contact?.contactEmail ?? '',
         travelClass: p.travelClass,
         fareType: p.fareType,
         ...(bags[i] > 0 ? { extraBags: bags[i] } : {}),

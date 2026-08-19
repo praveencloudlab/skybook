@@ -92,8 +92,10 @@ public final class Journey {
         String passenger = """
                 {"title":"Mr","firstName":"E2E","lastName":"Passenger","dob":"1990-01-01",
                  "nationality":"IND","passportNumber":"P%s","passportExpiry":"2032-01-01",
+                 "email":"%s",
                  "travelClass":"ECONOMY","fareType":"SAVER"%s}"""
-                .formatted(E2EConfig.RUN_ID.substring(E2EConfig.RUN_ID.length() - 6), seatField);
+                .formatted(E2EConfig.RUN_ID.substring(E2EConfig.RUN_ID.length() - 6),
+                        user.email(), seatField);
 
         return RestAssured.given()
                 .header("Authorization", user.bearer())

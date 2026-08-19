@@ -46,6 +46,8 @@ public record PassengerBookingDetail(
         @Future(message = "Passport expiry must be in the future")
         LocalDate passportExpiry,
 
+        @NotBlank(message = "Passenger email is required")
+        @jakarta.validation.constraints.Email(message = "Passenger email must be a valid email address")
         String email,
 
         String phone,

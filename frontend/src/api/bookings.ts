@@ -32,7 +32,8 @@ export interface PassengerDetail {
   nationality: string;
   passportNumber: string;
   passportExpiry: string;
-  email?: string;
+  /** Mandatory per passenger - the server enforces @NotBlank @Email. */
+  email: string;
   phone?: string;
   travelClass: TravelClass;
   fareType: FareType;

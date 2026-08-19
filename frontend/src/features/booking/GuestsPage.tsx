@@ -86,6 +86,8 @@ export function GuestsPage({
       nationality: traveller.nationality ?? '',
       passportNumber: traveller.passportNumber ?? '',
       passportExpiry: traveller.passportExpiry ?? '',
+      // Saved travellers don't carry an email - keep whatever was typed.
+      email: guests[index].email,
     });
   }
 

@@ -43,6 +43,8 @@ export interface PassengerDraft {
   nationality: string;
   passportNumber: string;
   passportExpiry: string;
+  /** Per-passenger email - mandatory, so disruption notices reach every traveller. */
+  email: string;
 }
 
 export function emptyPassenger(): PassengerDraft {
@@ -54,6 +56,7 @@ export function emptyPassenger(): PassengerDraft {
     nationality: 'GBR',
     passportNumber: '',
     passportExpiry: '',
+    email: '',
   };
 }
 
@@ -75,6 +78,7 @@ export function toPassengerDetail(
     nationality: draft.nationality,
     passportNumber: draft.passportNumber.trim(),
     passportExpiry: draft.passportExpiry,
+    email: draft.email.trim(),
     travelClass: cabin,
     fareType: fare,
     // Omitted entirely when auto-assigning: sending null would be a different
@@ -121,6 +125,14 @@ export function validatePassenger(
   } else if (new Date(draft.passportExpiry) <= new Date()) {
     // Caught here rather than at the airport.
     errors.passportExpiry = 'Passport has expired';
+  }
+  // Mandatory per traveller, mirroring the server's @NotBlank @Email: the
+  // contact email covers the booking, but disruption notices are per person.
+  const email = draft.email.trim();
+  if (!email) {
+    errors.email = 'Email is required';
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = 'Enter a valid email address';
   }
   return errors;
 }
@@ -224,6 +236,16 @@ export function PassengerForm({
         onChange={(e) => set({ passportExpiry: e.target.value })}
         error={errors.passportExpiry}
         min={new Date().toISOString().slice(0, 10)}
+      />
+
+      <Field
+        label="Passenger email"
+        type="email"
+        value={draft.email}
+        onChange={(e) => set({ email: e.target.value })}
+        error={errors.email}
+        autoComplete="email"
+        hint="For this traveller's notices - delays, gate changes, boarding passes"
       />
     </div>
   );
