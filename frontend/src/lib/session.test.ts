@@ -67,4 +67,21 @@ describe('session', () => {
     // Consumed - otherwise a later sign-in would bounce somewhere unexpected.
     expect(session.takeReturnTo()).toBeNull();
   });
+
+  it('honours a remembered destination the signed-in account can use', () => {
+    expect(session.landingFor('/bookings/7', false)).toBe('/bookings/7');
+    expect(session.landingFor('/admin/flights', true)).toBe('/admin/flights');
+  });
+
+  it('drops a stale /admin destination for a passenger', () => {
+    // Seen live: an expired console session left "/admin" behind, and the
+    // next registration on that browser was steered into a 403.
+    expect(session.landingFor('/admin', false)).toBe('/');
+    expect(session.landingFor('/admin/bookings', false)).toBe('/');
+  });
+
+  it('falls back by role when nothing was remembered', () => {
+    expect(session.landingFor(null, false)).toBe('/');
+    expect(session.landingFor(null, true)).toBe('/admin');
+  });
 });

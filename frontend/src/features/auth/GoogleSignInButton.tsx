@@ -39,7 +39,12 @@ export function GoogleSignInButton({ remember = false }: { remember?: boolean })
   }
 
   function startGoogleSignIn() {
-    const returnTo = session.takeReturnTo() ?? '/';
+    // Roles aren't known yet (this runs pre-authentication), so a stale
+    // "/admin" destination is dropped outright: a Google sign-in resolves to
+    // a passenger account in every configuration this app ships, and the
+    // worst case for a real admin is landing home, one click from the console.
+    const remembered = session.takeReturnTo() ?? '/';
+    const returnTo = remembered.startsWith('/admin') ? '/' : remembered;
     const query = new URLSearchParams({ remember: String(remember), returnTo });
     // A navigation, not a fetch: the server answers with a 302 to Google, and
     // the browser must follow it out of the SPA entirely.

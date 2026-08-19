@@ -79,11 +79,11 @@ export function RegisterPage() {
             // immediately after creating them is friction for no benefit.
             await authApi.login({ email, password });
             // Honour the same contract as SignInPage: someone sent here
-            // mid-booking (the auth gate's returnTo) resumes their journey -
-            // the persisted draft is still waiting at /search, and landing
-            // them on '/' instead invited a fresh search that wiped it.
-            const returnTo = session.takeReturnTo();
-            navigate(returnTo ?? '/', { replace: true });
+            // mid-booking (the auth gate's returnTo) resumes their journey.
+            // landingFor guards the other direction: a fresh registration is
+            // never an ADMIN, so a stale "/admin" left by an expired console
+            // session must not steer it into a 403 (seen live).
+            navigate(session.landingFor(session.takeReturnTo(), false), { replace: true });
           }}
         />
       </AuthLayout>

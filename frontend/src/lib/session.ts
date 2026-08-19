@@ -80,6 +80,22 @@ export const session = {
     return value;
   },
 
+  /**
+   * Where to actually land after signing in, given who just signed in.
+   *
+   * A remembered destination is honoured only when the principal can use it:
+   * an expired console session leaves "/admin" behind, and the next sign-in
+   * on that browser may be a passenger - who must not be steered into a 403
+   * (seen live: a fresh registration "returned" to /admin and hit No access).
+   */
+  landingFor(returnTo: string | null, isAdmin: boolean): string {
+    if (returnTo && (isAdmin || !returnTo.startsWith('/admin'))) {
+      return returnTo;
+    }
+    // Admins live in the console; passengers on the home page.
+    return isAdmin ? '/admin' : '/';
+  },
+
   subscribe(listener: Listener): () => void {
     listeners.add(listener);
     return () => listeners.delete(listener);

@@ -55,15 +55,10 @@ export function SignInPage() {
         showSso
         onSignedIn={() => {
           // Back where they were interrupted - an expiry mid-journey should not
-          // cost someone their place. Otherwise admins land in the console
-          // (their whole job is there), passengers on the home page.
-          const returnTo = session.takeReturnTo();
-          if (returnTo) {
-            navigate(returnTo, { replace: true });
-            return;
-          }
+          // cost someone their place - but only somewhere THIS account can go
+          // (landingFor drops a stale /admin for a passenger).
           const isAdmin = session.current()?.roles.includes('ROLE_ADMIN') ?? false;
-          navigate(isAdmin ? '/admin' : '/', { replace: true });
+          navigate(session.landingFor(session.takeReturnTo(), isAdmin), { replace: true });
         }}
       />
     </AuthLayout>
