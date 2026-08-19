@@ -241,7 +241,8 @@ class TicketPdfTemplateTest {
         void terminalsRideTheItineraryRows() {
             String xhtml = template.render(roundTrip(), null);
 
-            assertThat(xhtml).contains("Terminal: <b>5</b>");
+            // The airport's proper name shares the terminal line.
+            assertThat(xhtml).contains("London Heathrow &#183; Terminal <b>5</b>");
         }
 
         @Test

@@ -490,6 +490,26 @@ public class TicketPdfTemplate {
     // itinerary
     // ------------------------------------------------------------------
 
+    /**
+     * The line under the CODE - CITY heading: the airport's proper name,
+     * with the terminal appended when known. Space-neutral - the name joins
+     * the line the terminal already occupied.
+     */
+    private static String airportInfoLine(String code, String terminal) {
+        String name = AirportCityLookup.nameFor(code);
+        if (name == null && terminal == null) {
+            return "";
+        }
+        if (name == null) {
+            return "<div style=\"color:#333333;\">Terminal: <b>" + escape(terminal) + "</b></div>";
+        }
+        String line = escape(name);
+        if (terminal != null) {
+            line += " &#183; Terminal <b>" + escape(terminal) + "</b>";
+        }
+        return "<div style=\"color:#333333;\">" + line + "</div>";
+    }
+
     /** Online/desk check-in close, minutes before departure - Emirates uses 90. */
     private static int checkinCloseMins(String flightNumber) {
         return flightNumber != null && flightNumber.startsWith("EK") ? 90 : 60;
@@ -551,9 +571,9 @@ public class TicketPdfTemplate {
                 </tr>
                 """.formatted(
                 escape(from), escape(city(from)),
-                s.getDepartureTerminal() != null ? "<div style=\"color:#333333;\">Terminal: <b>" + escape(s.getDepartureTerminal()) + "</b></div>" : "",
+                airportInfoLine(from, s.getDepartureTerminal()),
                 escape(to), escape(city(to)),
-                s.getArrivalTerminal() != null ? "<div style=\"color:#333333;\">Terminal: <b>" + escape(s.getArrivalTerminal()) + "</b></div>" : "",
+                airportInfoLine(to, s.getArrivalTerminal()),
                 escape(nvl(s.getFlightNumber(), "-")),
                 escape(airlineName(s.getFlightNumber())),
                 dep != null ? HHMM.format(dep) : "-", dep != null ? ddMon(dep) : "-",

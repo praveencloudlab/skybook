@@ -1,5 +1,5 @@
 import type { Booking } from '../../api/bookings';
-import { AIRPORTS, airlineNameFor, type Flight } from '../../api/flights';
+import { AIRPORTS, airlineNameFor, airportNameFor, type Flight } from '../../api/flights';
 import type { BoardingPass, CheckIn } from '../../api/checkin';
 import { TRAVEL_CLASS_LABELS, type TravelClass } from '../../api/quotes';
 import { dayMonthYear, money, time, timeShift } from '../../lib/format';
@@ -121,6 +121,17 @@ function barcodeSvg(text: string, height = 46): string {
 
 function cityFor(code: string): string {
   return AIRPORTS.find((a) => a.code === code)?.city ?? code;
+}
+
+/**
+ * The line under the CODE - CITY heading: the airport's proper name, with
+ * the terminal appended when known - space-neutral (mirrors the emailed PDF).
+ */
+function airportInfoLine(code: string, terminal?: string | null): string {
+  const name = airportNameFor(code);
+  if (!name && !terminal) return '';
+  if (!name) return `<div style="color:#333;">Terminal: <b>${terminal}</b></div>`;
+  return `<div style="color:#333;">${name}${terminal ? ` &middot; Terminal <b>${terminal}</b>` : ''}</div>`;
 }
 
 export function printBoardingPass(pass: BoardingPass, record?: CheckIn, _arrivalTime?: string): void {
@@ -386,11 +397,11 @@ export function printETicket(
       <tr${cancelled ? ' style="opacity:.55;"' : ''}>
         <td style="padding:10px 12px;vertical-align:top;line-height:1.7;">
           <div><b style="font-size:15px;">${flight.originAirportCode}</b> - ${cityFor(flight.originAirportCode).toUpperCase()}</div>
-          ${flight.departureTerminal ? `<div style="color:#333;">Terminal: <b>${flight.departureTerminal}</b></div>` : ''}
+          ${airportInfoLine(flight.originAirportCode, flight.departureTerminal)}
         </td>
         <td style="padding:10px 12px;vertical-align:top;line-height:1.7;">
           <div><b style="font-size:15px;">${flight.destinationAirportCode}</b> - ${cityFor(flight.destinationAirportCode).toUpperCase()}</div>
-          ${flight.arrivalTerminal ? `<div style="color:#333;">Terminal: <b>${flight.arrivalTerminal}</b></div>` : ''}
+          ${airportInfoLine(flight.destinationAirportCode, flight.arrivalTerminal)}
         </td>
         <td style="padding:10px 12px;vertical-align:top;line-height:1.7;"><b>${flight.flightNumber}</b><br><span style="font-size:11px;color:#555;">${airlineNameFor(flight.airlineCode ?? flight.flightNumber)}</span></td>
         <td style="padding:10px 12px;vertical-align:top;line-height:1.7;"><b>${time(flight.departureTime)}</b><br>${ddMon(flight.departureTime)}</td>
