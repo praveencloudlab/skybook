@@ -17,7 +17,10 @@ fs.mkdirSync(OUT, { recursive: true });
 
 const captured = [], skipped = [];
 const log = (...a) => console.log(...a);
-const FREEZE = '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}';
+// Transitions frozen for crisp frames, and the STICKY HEADER pinned static:
+// Playwright stitches full-page shots while scrolling, and a sticky header
+// repaints mid-image (it once landed in the middle of the check-in shots).
+const FREEZE = '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important} header{position:static!important}';
 
 const mk = (page) => ({
   shot: async (name, full = false) => {
@@ -209,6 +212,9 @@ const run = async () => {
     await fill('Date of birth', '1990-05-04');
     await fill('Passport number', 'X1234567');
     await fill('Passport expiry', isoInDays(1200));
+    // Mandatory since the per-passenger email revision ("Passenger email"
+    // label - distinct from the contact section's "Email address").
+    await fill('Passenger email', 'casestudy.demo@skybook.test');
     await fill('Contact phone', '+447700900123');
     for (const tel of await page.locator('input[type="tel"], input[name*="phone" i]').all()) {
       await tel.fill('+447700900123').catch(() => {});
@@ -321,8 +327,23 @@ const run = async () => {
     await click(page.getByRole('button', { name: /^check[- ]?in$/i }), 'check in');
     await page.waitForTimeout(2500);
     await shot('57_checkin_complete', true);
-    await click(page.getByRole('button', { name: /boarding pass|view pass|get pass/i }).or(page.getByRole('link', { name: /boarding pass/i })), 'boarding pass');
-    await shot('58_boarding_pass', true);
+    // The boarding pass is a DOWNLOAD (printable.ts), not a modal - shooting
+    // the page after the click just re-photographed the detail screen.
+    // Photograph the rendered document itself, like the e-ticket.
+    try {
+      const dl = page.waitForEvent('download', { timeout: 10000 });
+      await page.getByRole('button', { name: /boarding pass|view pass|get pass/i })
+        .or(page.getByRole('link', { name: /boarding pass/i })).first().click();
+      const download = await dl;
+      const file = (await import('path')).resolve(OUT, 'boardingpass_download.html');
+      await download.saveAs(file);
+      const doc = await newPage(ctx);
+      await doc.goto('file:///' + file.replace(/\\/g, '/'), { waitUntil: 'load' });
+      await doc.waitForTimeout(1200);
+      await doc.screenshot({ path: `${OUT}/58_boarding_pass.png`, fullPage: true });
+      captured.push('58_boarding_pass'); log('    captured 58_boarding_pass (rendered download)');
+      await doc.close();
+    } catch { skipped.push('boarding pass download render'); }
   });
 
   await section('profile + price alerts', async () => {
