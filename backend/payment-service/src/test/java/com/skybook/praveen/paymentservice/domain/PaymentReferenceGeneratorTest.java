@@ -34,11 +34,18 @@ class PaymentReferenceGeneratorTest {
 
     @Test
     void collisionsAreRareAcrossManyGenerations() {
-        // 32^6 = ~1.07 billion combinations - 10k draws must not collide.
+        // 32^6 = ~1.07 billion combinations. Collisions among 10k random
+        // draws are rare but NOT impossible: the birthday bound expects
+        // ~0.047 of them, so demanding zero fails a perfectly healthy
+        // generator about one run in 22 - which is exactly how this test
+        // sank an untouched CI run. Allowing 3 makes the pass deterministic
+        // in practice (P[more than 3] ~ 4e-7) while still failing loudly if
+        // the entropy ever degrades - a space 100x smaller expects ~5
+        // collisions per 10k and would trip this almost every run.
         Set<String> seen = new HashSet<>();
         for (int i = 0; i < 10_000; i++) {
             seen.add(generator.paymentReference());
         }
-        assertThat(seen).hasSize(10_000);
+        assertThat(seen.size()).isGreaterThanOrEqualTo(10_000 - 3);
     }
 }
