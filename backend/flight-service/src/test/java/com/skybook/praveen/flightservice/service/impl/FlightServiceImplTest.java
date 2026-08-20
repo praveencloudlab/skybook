@@ -817,9 +817,21 @@ class FlightServiceImplTest {
 
         private final LocalDate start = LocalDate.now().plusDays(2);
 
+        /** Departures out of the origin - direct legs and possible first legs. */
+        private void outboundContains(List<Flight> flights) {
+            when(flightRepository.findByOriginAirportCodeAndDepartureTimeBetween(
+                    any(), any(), any())).thenReturn(flights);
+        }
+
+        /** Arrivals into the destination - the possible onward legs. */
+        private void onwardContains(List<Flight> flights) {
+            when(flightRepository.findByDestinationAirportCodeAndDepartureTimeBetween(
+                    any(), any(), any())).thenReturn(flights);
+        }
+
         private void routeContains(List<Flight> flights) {
-            when(flightRepository.findByOriginAirportCodeAndDestinationAirportCodeAndDepartureTimeBetween(
-                    any(), any(), any(), any())).thenReturn(flights);
+            outboundContains(flights);
+            onwardContains(List.of());
         }
 
         @Test
@@ -879,8 +891,122 @@ class FlightServiceImplTest {
                     .hasMessage("endDate must not be before startDate");
 
             verify(flightRepository, never())
-                    .findByOriginAirportCodeAndDestinationAirportCodeAndDepartureTimeBetween(
-                            any(), any(), any(), any());
+                    .findByOriginAirportCodeAndDepartureTimeBetween(any(), any(), any());
+        }
+
+        // ---- connection days (the honest networks are route maps, not
+        // meshes - most tier-2 pairs are one-stop journeys via a hub, and
+        // the picker must light the days a search would satisfy) ----------
+
+        @Test
+        void aConnectionOnlyRouteLightsTheDayItsHubJourneyWorks() {
+            // IXE-CCU has no nonstop; IXE-BLR + BLR-CCU with a 73-minute
+            // same-carrier layover is exactly what /itineraries offers.
+            outboundContains(List.of(
+                    leg("IX1224", "IX", "IXE", "BLR", start.atTime(9, 12), start.atTime(10, 17))));
+            onwardContains(List.of(
+                    leg("IX771", "IX", "BLR", "CCU", start.atTime(11, 30), start.atTime(14, 5))));
+
+            List<RouteCalendarDayResponse> calendar =
+                    flightService.getRouteCalendar("IXE", "CCU", start, start.plusDays(3));
+
+            assertThat(calendar).singleElement().satisfies(day -> {
+                assertThat(day.date()).isEqualTo(start);
+                assertThat(day.flights()).isEqualTo(1);
+            });
+        }
+
+        @Test
+        void directAndConnectionOptionsSumOnTheSameDay() {
+            outboundContains(List.of(
+                    leg("BA1", "BA", "LHR", "JFK", start.atTime(9, 0), start.atTime(17, 0)),
+                    leg("BA7", "BA", "LHR", "DXB", start.atTime(8, 0), start.atTime(16, 0))));
+            onwardContains(List.of(
+                    leg("EK201", "EK", "DXB", "JFK", start.atTime(18, 0), start.plusDays(1).atTime(2, 0))));
+
+            List<RouteCalendarDayResponse> calendar =
+                    flightService.getRouteCalendar("LHR", "JFK", start, start.plusDays(1));
+
+            assertThat(calendar).singleElement()
+                    .satisfies(day -> assertThat(day.flights()).isEqualTo(2));
+        }
+
+        @Test
+        void aLayoverTooShortForASelfTransferDoesNotCount() {
+            // 50 minutes: enough for a protected same-carrier junction,
+            // not for collecting and re-checking bags across carriers.
+            outboundContains(List.of(
+                    leg("BA7", "BA", "LHR", "DXB", start.atTime(8, 0), start.atTime(16, 0))));
+            onwardContains(List.of(
+                    leg("EK201", "EK", "DXB", "JFK", start.atTime(16, 50), start.plusDays(1).atTime(1, 0))));
+
+            assertThat(flightService.getRouteCalendar("LHR", "JFK", start, start.plusDays(1)))
+                    .isEmpty();
+        }
+
+        @Test
+        void theSameCarrierJunctionIsProtectedAtFortyFiveMinutes() {
+            outboundContains(List.of(
+                    leg("EK2", "EK", "LHR", "DXB", start.atTime(8, 0), start.atTime(16, 0))));
+            onwardContains(List.of(
+                    leg("EK201", "EK", "DXB", "JFK", start.atTime(16, 50), start.plusDays(1).atTime(1, 0))));
+
+            assertThat(flightService.getRouteCalendar("LHR", "JFK", start, start.plusDays(1)))
+                    .singleElement()
+                    .satisfies(day -> assertThat(day.flights()).isEqualTo(1));
+        }
+
+        @Test
+        void beyondSevenHoursNobodyCallsItAConnection() {
+            outboundContains(List.of(
+                    leg("BA7", "BA", "LHR", "DXB", start.atTime(6, 0), start.atTime(14, 0))));
+            onwardContains(List.of(
+                    leg("EK201", "EK", "DXB", "JFK", start.atTime(21, 30), start.plusDays(1).atTime(6, 0))));
+
+            assertThat(flightService.getRouteCalendar("LHR", "JFK", start, start.plusDays(1)))
+                    .isEmpty();
+        }
+
+        @Test
+        void anOvernightFirstLegConnectsTheNextMorning() {
+            outboundContains(List.of(
+                    leg("BA7", "BA", "LHR", "DXB", start.atTime(22, 0), start.plusDays(1).atTime(6, 0))));
+            onwardContains(List.of(
+                    leg("EK201", "EK", "DXB", "JFK", start.plusDays(1).atTime(8, 0),
+                            start.plusDays(1).atTime(16, 0))));
+
+            List<RouteCalendarDayResponse> calendar =
+                    flightService.getRouteCalendar("LHR", "JFK", start, start.plusDays(1));
+
+            // The option lights the day the JOURNEY departs, not the day it connects.
+            assertThat(calendar).singleElement()
+                    .satisfies(day -> assertThat(day.date()).isEqualTo(start));
+        }
+
+        @Test
+        void aLegBackThroughTheOriginIsNotAConnection() {
+            // LHR-JFK "via" a leg that departs LHR itself is the direct in
+            // disguise; the onward filter must exclude the origin as a hub.
+            outboundContains(List.of(
+                    leg("BA7", "BA", "LHR", "DXB", start.atTime(8, 0), start.atTime(16, 0))));
+            onwardContains(List.of(
+                    leg("BA1", "BA", "LHR", "JFK", start.atTime(18, 0), start.plusDays(1).atTime(2, 0))));
+
+            assertThat(flightService.getRouteCalendar("LHR", "JFK", start, start.plusDays(1)))
+                    .isEmpty();
+        }
+
+        @Test
+        void aCancelledOnwardLegDoesNotMakeADayBookable() {
+            Flight cancelled = leg("EK201", "EK", "DXB", "JFK",
+                    start.atTime(18, 0), start.plusDays(1).atTime(2, 0));
+            cancelled.setStatus(FlightStatus.CANCELLED);
+            outboundContains(List.of(
+                    leg("BA7", "BA", "LHR", "DXB", start.atTime(8, 0), start.atTime(16, 0))));
+            onwardContains(List.of(cancelled));
+
+            assertThat(flightService.getRouteCalendar("LHR", "JFK", start, start.plusDays(1)))
+                    .isEmpty();
         }
 
         @Test
@@ -917,10 +1043,17 @@ class FlightServiceImplTest {
 
             ArgumentCaptor<LocalDateTime> from = ArgumentCaptor.forClass(LocalDateTime.class);
             ArgumentCaptor<LocalDateTime> to = ArgumentCaptor.forClass(LocalDateTime.class);
-            verify(flightRepository).findByOriginAirportCodeAndDestinationAirportCodeAndDepartureTimeBetween(
-                    eq("LHR"), eq("JFK"), from.capture(), to.capture());
+            verify(flightRepository).findByOriginAirportCodeAndDepartureTimeBetween(
+                    eq("LHR"), from.capture(), to.capture());
             assertThat(from.getValue()).isEqualTo(start.atStartOfDay());
             assertThat(to.getValue()).isEqualTo(start.plusDays(6).atStartOfDay().minusNanos(1));
+
+            // The onward window runs a day longer: an overnight first leg
+            // hands over to an onward departing the following day.
+            ArgumentCaptor<LocalDateTime> onwardTo = ArgumentCaptor.forClass(LocalDateTime.class);
+            verify(flightRepository).findByDestinationAirportCodeAndDepartureTimeBetween(
+                    eq("JFK"), any(), onwardTo.capture());
+            assertThat(onwardTo.getValue()).isEqualTo(start.plusDays(7).atStartOfDay());
         }
     }
 }

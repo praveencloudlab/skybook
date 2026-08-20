@@ -177,6 +177,15 @@ public class FlightServiceImpl implements FlightService {
                 .toList();
     }
 
+    // A same-carrier junction is a PROTECTED connection (the airline owns
+    // the transfer and checks bags through), so it needs less slack than a
+    // self-transfer where the passenger collects and re-checks bags. Shared
+    // by itineraries AND the route calendar - the calendar must light
+    // exactly the days a search would satisfy, so they must agree.
+    private static final long MIN_LAYOVER_SAME_CARRIER = 45;
+    private static final long MIN_LAYOVER_SELF_TRANSFER = 60;
+    private static final long MAX_LAYOVER_MINUTES = 420;  // 7h - beyond this nobody calls it a connection
+
     @Override
     public List<com.skybook.praveen.flightservice.dto.response.ItineraryResponse> getItineraries(
             String originAirportCode,
@@ -211,12 +220,9 @@ public class FlightServiceImpl implements FlightService {
             byOrigin.computeIfAbsent(f.getOriginAirportCode(), k -> new java.util.ArrayList<>()).add(f);
         }
 
-        // A same-carrier junction is a PROTECTED connection (the airline owns
-        // the transfer and checks bags through), so it needs less slack than a
-        // self-transfer where the passenger collects and re-checks bags.
-        long minLayoverSameCarrier = 45;
-        long minLayoverSelfTransfer = 60;
-        long maxLayover = 420;  // 7h - beyond this nobody calls it a connection
+        long minLayoverSameCarrier = MIN_LAYOVER_SAME_CARRIER;
+        long minLayoverSelfTransfer = MIN_LAYOVER_SELF_TRANSFER;
+        long maxLayover = MAX_LAYOVER_MINUTES;
         long maxTotal = 40L * 60;
 
         List<com.skybook.praveen.flightservice.dto.response.ItineraryResponse> results = new java.util.ArrayList<>();
@@ -310,22 +316,77 @@ public class FlightServiceImpl implements FlightService {
                 ? LocalDateTime.MIN
                 : LocalDateTime.now().plusMinutes(BOOKING_CUTOFF_MINUTES);
 
-        return flightRepository
-                .findByOriginAirportCodeAndDestinationAirportCodeAndDepartureTimeBetween(
-                        originAirportCode.toUpperCase(),
-                        destinationAirportCode.toUpperCase(),
+        String origin = originAirportCode.toUpperCase();
+        String destination = destinationAirportCode.toUpperCase();
+
+        // The calendar counts JOURNEY OPTIONS, not direct flights. The honest
+        // networks (India, UK) serve real route maps, so most city pairs are
+        // one-stop journeys via a hub - exactly what /itineraries composes.
+        // Counting only nonstops painted every day grey for those pairs while
+        // a search on the same day succeeded: the picker was contradicting
+        // the search it exists to feed. Direct legs and hub connections are
+        // counted with the itinerary composer's own layover rules, so a lit
+        // day is precisely a day a search will satisfy (to one stop; the
+        // rare pair reachable only with two stops still searches fine).
+        List<Flight> outbound = flightRepository
+                .findByOriginAirportCodeAndDepartureTimeBetween(
+                        origin,
                         startDate.atStartOfDay(),
                         endDate.plusDays(1).atStartOfDay().minusNanos(1))
                 .stream()
                 .filter(flight -> flight.getStatus() != FlightStatus.CANCELLED)
                 .filter(flight -> flight.getDepartureTime().isAfter(bookableFrom))
-                .collect(java.util.stream.Collectors.groupingBy(
-                        flight -> flight.getDepartureTime().toLocalDate(),
-                        java.util.TreeMap::new,
-                        java.util.stream.Collectors.counting()))
-                .entrySet()
+                .toList();
+
+        // Possible onward legs: everything INTO the destination departing in
+        // the window plus a day - an overnight first leg hands over to an
+        // onward that leaves the following morning. A leg departing the
+        // origin itself is excluded: that is the direct flight, not a hub.
+        java.util.Map<String, List<Flight>> onwardByHub = flightRepository
+                .findByDestinationAirportCodeAndDepartureTimeBetween(
+                        destination,
+                        startDate.atStartOfDay(),
+                        endDate.plusDays(2).atStartOfDay())
                 .stream()
-                .map(entry -> new RouteCalendarDayResponse(entry.getKey(), entry.getValue().intValue()))
+                .filter(flight -> flight.getStatus() != FlightStatus.CANCELLED)
+                .filter(flight -> flight.getDepartureTime().isAfter(bookableFrom))
+                .filter(flight -> !flight.getOriginAirportCode().equals(origin))
+                .sorted(java.util.Comparator.comparing(Flight::getDepartureTime))
+                .collect(java.util.stream.Collectors.groupingBy(Flight::getOriginAirportCode));
+
+        java.util.TreeMap<LocalDate, Integer> options = new java.util.TreeMap<>();
+        for (Flight first : outbound) {
+            LocalDate day = first.getDepartureTime().toLocalDate();
+            if (first.getDestinationAirportCode().equals(destination)) {
+                options.merge(day, 1, Integer::sum);
+                continue;
+            }
+            List<Flight> onward = onwardByHub.get(first.getDestinationAirportCode());
+            if (onward == null) {
+                continue;
+            }
+            int connections = 0;
+            for (Flight second : onward) {
+                long wait = java.time.Duration
+                        .between(first.getArrivalTime(), second.getDepartureTime()).toMinutes();
+                if (wait > MAX_LAYOVER_MINUTES) {
+                    break; // sorted by departure - every later leg waits longer
+                }
+                long minWait = first.getAirlineCode().equals(second.getAirlineCode())
+                        ? MIN_LAYOVER_SAME_CARRIER
+                        : MIN_LAYOVER_SELF_TRANSFER;
+                if (wait >= minWait) {
+                    connections++;
+                }
+            }
+            if (connections > 0) {
+                options.merge(day, connections, Integer::sum);
+            }
+        }
+
+        return options.entrySet()
+                .stream()
+                .map(entry -> new RouteCalendarDayResponse(entry.getKey(), entry.getValue()))
                 .toList();
     }
 
